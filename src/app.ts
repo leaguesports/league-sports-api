@@ -112,7 +112,7 @@ export function createApp(config: Config) {
       sameSite: "lax",
     });
 
-    return res.redirect("http://localhost:3001");
+    return res.redirect(config.FRONTEND_URL);
   });
 
   // Protected routes

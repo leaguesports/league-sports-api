@@ -1,0 +1,77 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum CommunityRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+model Player {
+  id String @id @default(uuid())
+
+  profile          Profile?
+  accounts         Account[]
+  communityMembers CommunityMember[]
+}
+
+model Account {
+  id           String   @id @default(uuid())
+  playerId     String
+  provider     String
+  providerId   String
+  accessToken  String
+  refreshToken String
+  expiresAt    DateTime
+
+  player Player @relation(fields: [playerId], references: [id])
+
+  @@unique([provider, providerId])
+  @@index([playerId])
+}
+
+model Profile {
+  id        String @id @default(uuid())
+  playerId  String @unique
+  firstName String
+  lastName  String
+
+  player Player @relation(fields: [playerId], references: [id])
+}
+
+model Community {
+  id          String @id @default(uuid())
+  name        String
+  description String
+
+  members CommunityMember[]
+
+  @@index([name])
+}
+
+model CommunityMember {
+  id          String        @id @default(uuid())
+  communityId String
+  playerId    String
+  role        CommunityRole
+  joinedAt    DateTime      @default(now())
+
+  community Community @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  player    Player    @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([communityId, playerId])
+  @@index([communityId])
+  @@index([playerId])
+}

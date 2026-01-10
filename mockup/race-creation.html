@@ -1,0 +1,1409 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Create Race | SimRig League</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=Rajdhani:wght@300;400;500;600;700&display=swap"
+        rel="stylesheet">
+    <style>
+        :root {
+            --bg-dark: #0a0a0f;
+            --bg-card: #12121a;
+            --bg-card-hover: #1a1a25;
+            --accent-primary: #ff3d3d;
+            --accent-secondary: #00d4ff;
+            --accent-glow: rgba(255, 61, 61, 0.4);
+            --text-primary: #ffffff;
+            --text-secondary: #8a8a9a;
+            --text-muted: #4a4a5a;
+            --border-subtle: rgba(255, 255, 255, 0.08);
+            --border-active: rgba(255, 61, 61, 0.5);
+            --success: #00ff88;
+            --carbon-pattern: repeating-linear-gradient(45deg,
+                    transparent,
+                    transparent 2px,
+                    rgba(255, 255, 255, 0.02) 2px,
+                    rgba(255, 255, 255, 0.02) 4px);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Rajdhani', sans-serif;
+            background: var(--bg-dark);
+            color: var(--text-primary);
+            min-height: 100vh;
+            background-image:
+                radial-gradient(ellipse at 20% 0%, rgba(255, 61, 61, 0.08) 0%, transparent 50%),
+                radial-gradient(ellipse at 80% 100%, rgba(0, 212, 255, 0.06) 0%, transparent 50%),
+                var(--carbon-pattern);
+        }
+
+        /* Header */
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1.5rem 3rem;
+            border-bottom: 1px solid var(--border-subtle);
+            background: rgba(10, 10, 15, 0.9);
+            backdrop-filter: blur(20px);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .logo {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1.5rem;
+            font-weight: 800;
+            letter-spacing: 3px;
+            background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .logo span {
+            font-weight: 400;
+            opacity: 0.7;
+        }
+
+        .user-badge {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.5rem 1rem;
+            background: var(--bg-card);
+            border-radius: 50px;
+            border: 1px solid var(--border-subtle);
+        }
+
+        .user-avatar {
+            width: 32px;
+            height: 32px;
+            background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 0.85rem;
+        }
+
+        .user-name {
+            font-weight: 600;
+            font-size: 0.95rem;
+        }
+
+        .user-credits {
+            font-size: 0.8rem;
+            color: var(--success);
+            font-weight: 600;
+        }
+
+        /* Main Container */
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 3rem 2rem;
+        }
+
+        .page-title {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            letter-spacing: 2px;
+        }
+
+        .page-subtitle {
+            color: var(--text-secondary);
+            font-size: 1.1rem;
+            margin-bottom: 3rem;
+            font-weight: 400;
+        }
+
+        /* Progress Steps */
+        .progress-bar {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 3rem;
+            position: relative;
+        }
+
+        .progress-bar::before {
+            content: '';
+            position: absolute;
+            top: 20px;
+            left: 10%;
+            right: 10%;
+            height: 2px;
+            background: var(--border-subtle);
+        }
+
+        .progress-step {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.75rem;
+            position: relative;
+            z-index: 1;
+        }
+
+        .step-number {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: var(--bg-card);
+            border: 2px solid var(--border-subtle);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Orbitron', sans-serif;
+            font-weight: 700;
+            font-size: 0.9rem;
+            transition: all 0.3s ease;
+        }
+
+        .progress-step.active .step-number {
+            background: var(--accent-primary);
+            border-color: var(--accent-primary);
+            box-shadow: 0 0 20px var(--accent-glow);
+        }
+
+        .progress-step.completed .step-number {
+            background: var(--success);
+            border-color: var(--success);
+        }
+
+        .step-label {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-weight: 600;
+        }
+
+        .progress-step.active .step-label {
+            color: var(--text-primary);
+        }
+
+        /* Form Sections */
+        .form-section {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 16px;
+            padding: 2rem;
+            margin-bottom: 1.5rem;
+            transition: all 0.3s ease;
+        }
+
+        .form-section:hover {
+            border-color: rgba(255, 255, 255, 0.12);
+            background: var(--bg-card-hover);
+        }
+
+        .section-header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .section-icon {
+            width: 44px;
+            height: 44px;
+            background: linear-gradient(135deg, rgba(255, 61, 61, 0.15), rgba(0, 212, 255, 0.1));
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.3rem;
+        }
+
+        .section-title {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1.2rem;
+            font-weight: 600;
+            letter-spacing: 1px;
+        }
+
+        /* Toggle Switch */
+        .toggle-group {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .toggle-option {
+            flex: 1;
+            padding: 1.25rem 1.5rem;
+            background: rgba(0, 0, 0, 0.3);
+            border: 2px solid var(--border-subtle);
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-align: center;
+        }
+
+        .toggle-option:hover {
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .toggle-option.selected {
+            border-color: var(--accent-primary);
+            background: rgba(255, 61, 61, 0.1);
+            box-shadow: 0 0 30px rgba(255, 61, 61, 0.15);
+        }
+
+        .toggle-option .icon {
+            font-size: 1.8rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .toggle-option .label {
+            font-weight: 600;
+            font-size: 1rem;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+
+        .toggle-option .desc {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin-top: 0.25rem;
+        }
+
+        /* Card Grid */
+        .card-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+            gap: 1rem;
+        }
+
+        .selection-card {
+            padding: 1.25rem;
+            background: rgba(0, 0, 0, 0.3);
+            border: 2px solid var(--border-subtle);
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-align: center;
+        }
+
+        .selection-card:hover {
+            border-color: rgba(255, 255, 255, 0.2);
+            transform: translateY(-2px);
+        }
+
+        .selection-card.selected {
+            border-color: var(--accent-secondary);
+            background: rgba(0, 212, 255, 0.08);
+            box-shadow: 0 0 25px rgba(0, 212, 255, 0.15);
+        }
+
+        .selection-card .card-icon {
+            font-size: 2rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .selection-card .card-title {
+            font-weight: 600;
+            font-size: 0.95rem;
+            letter-spacing: 0.5px;
+        }
+
+        .selection-card .card-meta {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            margin-top: 0.25rem;
+        }
+
+        /* Car Cards with Images */
+        .car-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 1.25rem;
+        }
+
+        .car-card {
+            background: rgba(0, 0, 0, 0.3);
+            border: 2px solid var(--border-subtle);
+            border-radius: 16px;
+            overflow: hidden;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .car-card:hover {
+            border-color: rgba(255, 255, 255, 0.2);
+            transform: translateY(-4px);
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+        }
+
+        .car-card.selected {
+            border-color: var(--accent-secondary);
+            box-shadow: 0 0 30px rgba(0, 212, 255, 0.2);
+        }
+
+        .car-card.selected::after {
+            content: '✓';
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            width: 28px;
+            height: 28px;
+            background: var(--accent-secondary);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 0.9rem;
+            color: var(--bg-dark);
+            z-index: 2;
+        }
+
+        .car-image {
+            width: 100%;
+            height: 160px;
+            object-fit: cover;
+            display: block;
+            transition: transform 0.4s ease;
+        }
+
+        .car-card:hover .car-image {
+            transform: scale(1.05);
+        }
+
+        .car-image-wrapper {
+            overflow: hidden;
+            position: relative;
+        }
+
+        .car-image-wrapper::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 60px;
+            background: linear-gradient(transparent, rgba(0, 0, 0, 0.8));
+        }
+
+        .car-info {
+            padding: 1.25rem;
+            position: relative;
+        }
+
+        .car-brand {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .car-brand-logo {
+            width: 24px;
+            height: 24px;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.9rem;
+        }
+
+        .car-brand-name {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-weight: 600;
+        }
+
+        .car-model {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1.15rem;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            margin-bottom: 0.75rem;
+        }
+
+        .car-specs {
+            display: flex;
+            gap: 1rem;
+        }
+
+        .car-spec {
+            display: flex;
+            align-items: center;
+            gap: 0.35rem;
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+
+        .car-spec-icon {
+            font-size: 0.9rem;
+        }
+
+        /* Members Input */
+        .members-section {
+            margin-top: 1.5rem;
+            padding-top: 1.5rem;
+            border-top: 1px solid var(--border-subtle);
+        }
+
+        .members-section.hidden {
+            display: none;
+        }
+
+        .members-label {
+            font-weight: 600;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .member-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            background: rgba(0, 212, 255, 0.15);
+            border: 1px solid rgba(0, 212, 255, 0.3);
+            border-radius: 50px;
+            margin-right: 0.5rem;
+            margin-bottom: 0.5rem;
+            font-size: 0.9rem;
+        }
+
+        .member-chip .remove {
+            cursor: pointer;
+            opacity: 0.6;
+            transition: opacity 0.2s;
+        }
+
+        .member-chip .remove:hover {
+            opacity: 1;
+        }
+
+        .add-member-input {
+            display: flex;
+            gap: 0.75rem;
+            margin-top: 1rem;
+        }
+
+        .add-member-input input {
+            flex: 1;
+            padding: 0.75rem 1rem;
+            background: rgba(0, 0, 0, 0.4);
+            border: 1px solid var(--border-subtle);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-family: inherit;
+            font-size: 0.95rem;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .add-member-input input:focus {
+            border-color: var(--accent-secondary);
+        }
+
+        .add-member-input input::placeholder {
+            color: var(--text-muted);
+        }
+
+        .btn-add {
+            padding: 0.75rem 1.25rem;
+            background: transparent;
+            border: 1px solid var(--accent-secondary);
+            color: var(--accent-secondary);
+            border-radius: 8px;
+            cursor: pointer;
+            font-family: inherit;
+            font-weight: 600;
+            font-size: 0.9rem;
+            transition: all 0.2s;
+        }
+
+        .btn-add:hover {
+            background: rgba(0, 212, 255, 0.1);
+        }
+
+        /* Race Format Builder */
+        .format-builder {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .session-row {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 1rem 1.25rem;
+            background: rgba(0, 0, 0, 0.3);
+            border: 2px solid var(--border-subtle);
+            border-radius: 12px;
+            transition: all 0.3s ease;
+        }
+
+        .session-row:hover {
+            border-color: rgba(255, 255, 255, 0.15);
+        }
+
+        .session-row.active {
+            border-color: var(--accent-secondary);
+            background: rgba(0, 212, 255, 0.05);
+        }
+
+        .session-toggle {
+            width: 48px;
+            height: 26px;
+            background: var(--border-subtle);
+            border-radius: 13px;
+            position: relative;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            flex-shrink: 0;
+        }
+
+        .session-toggle::after {
+            content: '';
+            position: absolute;
+            top: 3px;
+            left: 3px;
+            width: 20px;
+            height: 20px;
+            background: var(--text-secondary);
+            border-radius: 50%;
+            transition: all 0.3s ease;
+        }
+
+        .session-row.active .session-toggle {
+            background: var(--accent-secondary);
+        }
+
+        .session-row.active .session-toggle::after {
+            left: 25px;
+            background: white;
+        }
+
+        .session-icon {
+            width: 42px;
+            height: 42px;
+            background: linear-gradient(135deg, rgba(255, 61, 61, 0.12), rgba(0, 212, 255, 0.08));
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            flex-shrink: 0;
+        }
+
+        .session-row.active .session-icon {
+            background: linear-gradient(135deg, rgba(255, 61, 61, 0.2), rgba(0, 212, 255, 0.15));
+        }
+
+        .session-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .session-name {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1rem;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            margin-bottom: 0.15rem;
+        }
+
+        .session-desc {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+
+        .session-row:not(.active) .session-name,
+        .session-row:not(.active) .session-desc {
+            opacity: 0.5;
+        }
+
+        .session-duration {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            flex-shrink: 0;
+        }
+
+        .duration-control {
+            display: flex;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.4);
+            border-radius: 8px;
+            overflow: hidden;
+            border: 1px solid var(--border-subtle);
+        }
+
+        .duration-control button {
+            width: 36px;
+            height: 36px;
+            background: transparent;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 1.2rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .duration-control button:hover {
+            background: rgba(255, 255, 255, 0.08);
+            color: var(--text-primary);
+        }
+
+        .duration-control button:active {
+            background: rgba(255, 255, 255, 0.12);
+        }
+
+        .duration-control .duration-value {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1rem;
+            font-weight: 600;
+            min-width: 50px;
+            text-align: center;
+            padding: 0 0.25rem;
+            color: var(--accent-secondary);
+        }
+
+        .session-row:not(.active) .duration-control {
+            opacity: 0.3;
+            pointer-events: none;
+        }
+
+        .duration-unit {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        /* Format Summary */
+        .format-summary {
+            margin-top: 1.5rem;
+            padding: 1.25rem;
+            background: linear-gradient(135deg, rgba(255, 61, 61, 0.08), rgba(0, 212, 255, 0.06));
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .summary-label {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .summary-value {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1.5rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .summary-breakdown {
+            display: flex;
+            gap: 1.5rem;
+            align-items: center;
+        }
+
+        .breakdown-item {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        .breakdown-item .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+
+        .breakdown-item.practice .dot {
+            background: #ffd93d;
+        }
+
+        .breakdown-item.qualifying .dot {
+            background: #6bcb77;
+        }
+
+        .breakdown-item.race .dot {
+            background: var(--accent-primary);
+        }
+
+        /* Sim Rigs */
+        .rig-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1rem;
+        }
+
+        .rig-card {
+            padding: 1.5rem;
+            background: rgba(0, 0, 0, 0.3);
+            border: 2px solid var(--border-subtle);
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .rig-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary));
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .rig-card:hover {
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .rig-card.selected {
+            border-color: var(--success);
+            background: rgba(0, 255, 136, 0.05);
+        }
+
+        .rig-card.selected::before {
+            opacity: 1;
+            background: var(--success);
+        }
+
+        .rig-status {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 0.75rem;
+        }
+
+        .rig-name {
+            font-family: 'Orbitron', sans-serif;
+            font-weight: 600;
+            font-size: 1.1rem;
+        }
+
+        .rig-indicator {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: var(--success);
+            box-shadow: 0 0 10px var(--success);
+        }
+
+        .rig-indicator.busy {
+            background: var(--accent-primary);
+            box-shadow: 0 0 10px var(--accent-primary);
+        }
+
+        .rig-specs {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        .rig-checkbox {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            width: 24px;
+            height: 24px;
+            border: 2px solid var(--border-subtle);
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+        }
+
+        .rig-card.selected .rig-checkbox {
+            background: var(--success);
+            border-color: var(--success);
+        }
+
+        .rig-card.selected .rig-checkbox::after {
+            content: '✓';
+            color: var(--bg-dark);
+            font-weight: 700;
+            font-size: 0.9rem;
+        }
+
+        /* Action Buttons */
+        .actions {
+            display: flex;
+            gap: 1rem;
+            margin-top: 2rem;
+            padding-top: 2rem;
+            border-top: 1px solid var(--border-subtle);
+        }
+
+        .btn {
+            padding: 1rem 2.5rem;
+            border-radius: 10px;
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1rem;
+            font-weight: 600;
+            letter-spacing: 1px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+        }
+
+        .btn-secondary {
+            background: transparent;
+            border: 1px solid var(--border-subtle);
+            color: var(--text-secondary);
+        }
+
+        .btn-secondary:hover {
+            border-color: var(--text-secondary);
+            color: var(--text-primary);
+        }
+
+        .btn-primary {
+            flex: 1;
+            background: linear-gradient(135deg, var(--accent-primary), #ff6b6b);
+            border: none;
+            color: white;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .btn-primary::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+            transition: left 0.5s;
+        }
+
+        .btn-primary:hover::before {
+            left: 100%;
+        }
+
+        .btn-primary:hover {
+            box-shadow: 0 0 40px var(--accent-glow);
+            transform: translateY(-2px);
+        }
+
+        /* Racing stripe decoration */
+        .racing-stripe {
+            position: fixed;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 6px;
+            background: linear-gradient(180deg,
+                    var(--accent-primary) 0%,
+                    var(--accent-primary) 33%,
+                    var(--bg-dark) 33%,
+                    var(--bg-dark) 66%,
+                    var(--accent-primary) 66%);
+        }
+
+        /* Animations */
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.5;
+            }
+        }
+
+        .rig-indicator {
+            animation: pulse 2s infinite;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .header {
+                padding: 1rem 1.5rem;
+            }
+
+            .container {
+                padding: 2rem 1rem;
+            }
+
+            .page-title {
+                font-size: 1.8rem;
+            }
+
+            .card-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .rig-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .progress-step .step-label {
+                display: none;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="racing-stripe"></div>
+
+    <!-- Header -->
+    <header class="header">
+        <div class="logo">SIMRIG<span>LEAGUE</span></div>
+        <div class="user-badge">
+            <div class="user-avatar">B</div>
+            <div>
+                <div class="user-name">Brandon</div>
+                <div class="user-credits">30 min remaining</div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="container">
+        <h1 class="page-title">CREATE RACE</h1>
+        <p class="page-subtitle">Configure your race session and hit the track</p>
+
+        <!-- Progress Steps -->
+        <div class="progress-bar">
+            <div class="progress-step completed">
+                <div class="step-number">✓</div>
+                <span class="step-label">Visibility</span>
+            </div>
+            <div class="progress-step completed">
+                <div class="step-number">✓</div>
+                <span class="step-label">Track & Car</span>
+            </div>
+            <div class="progress-step active">
+                <div class="step-number">3</div>
+                <span class="step-label">Format</span>
+            </div>
+            <div class="progress-step">
+                <div class="step-number">4</div>
+                <span class="step-label">Rigs</span>
+            </div>
+            <div class="progress-step">
+                <div class="step-number">5</div>
+                <span class="step-label">Launch</span>
+            </div>
+        </div>
+
+        <!-- Race Visibility -->
+        <section class="form-section">
+            <div class="section-header">
+                <div class="section-icon">🔒</div>
+                <h2 class="section-title">RACE VISIBILITY</h2>
+            </div>
+
+            <div class="toggle-group">
+                <div class="toggle-option">
+                    <div class="icon">🌍</div>
+                    <div class="label">Public</div>
+                    <div class="desc">Anyone can join</div>
+                </div>
+                <div class="toggle-option selected">
+                    <div class="icon">🔐</div>
+                    <div class="label">Private</div>
+                    <div class="desc">Invite only</div>
+                </div>
+            </div>
+
+            <div class="members-section">
+                <div class="members-label">
+                    👥 Invited Members
+                </div>
+                <div class="members-list">
+                    <span class="member-chip">
+                        Alex R. <span class="remove">×</span>
+                    </span>
+                    <span class="member-chip">
+                        Marcus T. <span class="remove">×</span>
+                    </span>
+                </div>
+                <div class="add-member-input">
+                    <input type="text" placeholder="Enter username or email...">
+                    <button class="btn-add">+ Add</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Track Selection -->
+        <section class="form-section">
+            <div class="section-header">
+                <div class="section-icon">🏁</div>
+                <h2 class="section-title">SELECT TRACK</h2>
+            </div>
+
+            <div class="card-grid">
+                <div class="selection-card">
+                    <div class="card-icon">🇮🇹</div>
+                    <div class="card-title">Monza</div>
+                    <div class="card-meta">5.793 km</div>
+                </div>
+                <div class="selection-card selected">
+                    <div class="card-icon">🇧🇪</div>
+                    <div class="card-title">Spa</div>
+                    <div class="card-meta">7.004 km</div>
+                </div>
+                <div class="selection-card">
+                    <div class="card-icon">🇬🇧</div>
+                    <div class="card-title">Silverstone</div>
+                    <div class="card-meta">5.891 km</div>
+                </div>
+                <div class="selection-card">
+                    <div class="card-icon">🇯🇵</div>
+                    <div class="card-title">Suzuka</div>
+                    <div class="card-meta">5.807 km</div>
+                </div>
+                <div class="selection-card">
+                    <div class="card-icon">🇦🇹</div>
+                    <div class="card-title">Red Bull Ring</div>
+                    <div class="card-meta">4.318 km</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Car Selection -->
+        <section class="form-section">
+            <div class="section-header">
+                <div class="section-icon">🏎️</div>
+                <h2 class="section-title">SELECT CAR</h2>
+            </div>
+
+            <div class="car-grid">
+                <!-- Porsche 911 GT3 RS -->
+                <div class="car-card selected">
+                    <div class="car-image-wrapper">
+                        <img src="https://images.unsplash.com/photo-1614162692292-7ac56d7f373e?w=600&h=400&fit=crop&auto=format"
+                            alt="Porsche 911 GT3 RS" class="car-image"
+                            onerror="this.src='https://images.unsplash.com/photo-1503376780353-7e6692767b70?w=600&h=400&fit=crop&auto=format'">
+                    </div>
+                    <div class="car-info">
+                        <div class="car-brand">
+                            <div class="car-brand-logo">🔴</div>
+                            <span class="car-brand-name">Porsche</span>
+                        </div>
+                        <div class="car-model">911 GT3 RS</div>
+                        <div class="car-specs">
+                            <div class="car-spec">
+                                <span class="car-spec-icon">⚡</span>
+                                <span>518 HP</span>
+                            </div>
+                            <div class="car-spec">
+                                <span class="car-spec-icon">🏆</span>
+                                <span>GT3 Class</span>
+                            </div>
+                            <div class="car-spec">
+                                <span class="car-spec-icon">⚙️</span>
+                                <span>PDK</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Ferrari 488 GT3 -->
+                <div class="car-card">
+                    <div class="car-image-wrapper">
+                        <img src="https://images.unsplash.com/photo-1592198084033-aade902d1aae?w=600&h=400&fit=crop&auto=format"
+                            alt="Ferrari 488 GT3" class="car-image"
+                            onerror="this.src='https://images.unsplash.com/photo-1583121274602-3e2820c69888?w=600&h=400&fit=crop&auto=format'">
+                    </div>
+                    <div class="car-info">
+                        <div class="car-brand">
+                            <div class="car-brand-logo">🟡</div>
+                            <span class="car-brand-name">Ferrari</span>
+                        </div>
+                        <div class="car-model">488 GT3</div>
+                        <div class="car-specs">
+                            <div class="car-spec">
+                                <span class="car-spec-icon">⚡</span>
+                                <span>550 HP</span>
+                            </div>
+                            <div class="car-spec">
+                                <span class="car-spec-icon">🏆</span>
+                                <span>GT3 Class</span>
+                            </div>
+                            <div class="car-spec">
+                                <span class="car-spec-icon">⚙️</span>
+                                <span>Sequential</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Race Format -->
+        <section class="form-section">
+            <div class="section-header">
+                <div class="section-icon">📋</div>
+                <h2 class="section-title">RACE FORMAT</h2>
+            </div>
+
+            <div class="format-builder">
+                <!-- Practice Session -->
+                <div class="session-row active" data-session="practice">
+                    <div class="session-toggle"></div>
+                    <div class="session-icon">🔧</div>
+                    <div class="session-info">
+                        <div class="session-name">Practice</div>
+                        <div class="session-desc">Learn the track, test setups</div>
+                    </div>
+                    <div class="session-duration">
+                        <div class="duration-control">
+                            <button class="decrement">−</button>
+                            <span class="duration-value" data-value="5">5</span>
+                            <button class="increment">+</button>
+                        </div>
+                        <span class="duration-unit">min</span>
+                    </div>
+                </div>
+
+                <!-- Qualifying Session -->
+                <div class="session-row active" data-session="qualifying">
+                    <div class="session-toggle"></div>
+                    <div class="session-icon">⚡</div>
+                    <div class="session-info">
+                        <div class="session-name">Qualifying</div>
+                        <div class="session-desc">Set your fastest lap for grid position</div>
+                    </div>
+                    <div class="session-duration">
+                        <div class="duration-control">
+                            <button class="decrement">−</button>
+                            <span class="duration-value" data-value="5">5</span>
+                            <button class="increment">+</button>
+                        </div>
+                        <span class="duration-unit">min</span>
+                    </div>
+                </div>
+
+                <!-- Race Session -->
+                <div class="session-row active" data-session="race">
+                    <div class="session-toggle"></div>
+                    <div class="session-icon">🏁</div>
+                    <div class="session-info">
+                        <div class="session-name">Race</div>
+                        <div class="session-desc">Main event — compete for victory</div>
+                    </div>
+                    <div class="session-duration">
+                        <div class="duration-control">
+                            <button class="decrement">−</button>
+                            <span class="duration-value" data-value="10">10</span>
+                            <button class="increment">+</button>
+                        </div>
+                        <span class="duration-unit">min</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Format Summary -->
+            <div class="format-summary">
+                <div>
+                    <div class="summary-label">Total Session Time</div>
+                    <div class="summary-value" id="total-time">20 Minutes</div>
+                </div>
+                <div class="summary-breakdown">
+                    <div class="breakdown-item practice">
+                        <span class="dot"></span>
+                        <span>Practice 5m</span>
+                    </div>
+                    <div class="breakdown-item qualifying">
+                        <span class="dot"></span>
+                        <span>Quali 5m</span>
+                    </div>
+                    <div class="breakdown-item race">
+                        <span class="dot"></span>
+                        <span>Race 10m</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Sim Rigs Selection -->
+        <section class="form-section">
+            <div class="section-header">
+                <div class="section-icon">🎮</div>
+                <h2 class="section-title">SELECT SIM RIGS</h2>
+            </div>
+
+            <div class="rig-grid">
+                <div class="rig-card selected">
+                    <div class="rig-checkbox"></div>
+                    <div class="rig-status">
+                        <span class="rig-name">Sim Rig One</span>
+                        <span class="rig-indicator"></span>
+                    </div>
+                    <div class="rig-specs">Direct Drive • Triple Screen • Available</div>
+                </div>
+                <div class="rig-card selected">
+                    <div class="rig-checkbox"></div>
+                    <div class="rig-status">
+                        <span class="rig-name">Sim Rig Two</span>
+                        <span class="rig-indicator"></span>
+                    </div>
+                    <div class="rig-specs">Direct Drive • VR Ready • Available</div>
+                </div>
+                <div class="rig-card">
+                    <div class="rig-checkbox"></div>
+                    <div class="rig-status">
+                        <span class="rig-name">Sim Rig Three</span>
+                        <span class="rig-indicator busy"></span>
+                    </div>
+                    <div class="rig-specs">Belt Drive • Single Screen • In Use</div>
+                </div>
+                <div class="rig-card">
+                    <div class="rig-checkbox"></div>
+                    <div class="rig-status">
+                        <span class="rig-name">Sim Rig Four</span>
+                        <span class="rig-indicator"></span>
+                    </div>
+                    <div class="rig-specs">Direct Drive • Ultra-wide • Available</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Actions -->
+        <div class="actions">
+            <button class="btn btn-secondary">Cancel</button>
+            <button class="btn btn-primary">🏁 Start Race</button>
+        </div>
+    </main>
+
+    <script>
+        // Interactive elements
+        document.querySelectorAll('.toggle-option').forEach(option => {
+            option.addEventListener('click', () => {
+                document.querySelectorAll('.toggle-option').forEach(o => o.classList.remove('selected'));
+                option.classList.add('selected');
+
+                // Toggle members section visibility
+                const isPrivate = option.querySelector('.label').textContent === 'Private';
+                document.querySelector('.members-section').classList.toggle('hidden', !isPrivate);
+            });
+        });
+
+        document.querySelectorAll('.selection-card').forEach(card => {
+            card.addEventListener('click', () => {
+                const parent = card.closest('.card-grid');
+                parent.querySelectorAll('.selection-card').forEach(c => c.classList.remove('selected'));
+                card.classList.add('selected');
+            });
+        });
+
+        document.querySelectorAll('.car-card').forEach(card => {
+            card.addEventListener('click', () => {
+                document.querySelectorAll('.car-card').forEach(c => c.classList.remove('selected'));
+                card.classList.add('selected');
+            });
+        });
+
+        // Session toggles
+        document.querySelectorAll('.session-toggle').forEach(toggle => {
+            toggle.addEventListener('click', () => {
+                const row = toggle.closest('.session-row');
+                row.classList.toggle('active');
+                updateFormatSummary();
+            });
+        });
+
+        // Duration controls
+        document.querySelectorAll('.duration-control button').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const control = btn.closest('.duration-control');
+                const valueEl = control.querySelector('.duration-value');
+                let value = parseInt(valueEl.dataset.value);
+
+                if (btn.classList.contains('increment')) {
+                    value = Math.min(value + 5, 60);
+                } else {
+                    value = Math.max(value - 5, 5);
+                }
+
+                valueEl.dataset.value = value;
+                valueEl.textContent = value;
+                updateFormatSummary();
+            });
+        });
+
+        function updateFormatSummary() {
+            let total = 0;
+            const breakdown = [];
+
+            document.querySelectorAll('.session-row').forEach(row => {
+                const sessionType = row.dataset.session;
+                const isActive = row.classList.contains('active');
+                const duration = parseInt(row.querySelector('.duration-value').dataset.value);
+
+                const breakdownItem = document.querySelector(`.breakdown-item.${sessionType}`);
+
+                if (isActive) {
+                    total += duration;
+                    breakdownItem.style.display = 'flex';
+                    const label = sessionType === 'qualifying' ? 'Quali' :
+                        sessionType.charAt(0).toUpperCase() + sessionType.slice(1);
+                    breakdownItem.querySelector('span:last-child').textContent = `${label} ${duration}m`;
+                } else {
+                    breakdownItem.style.display = 'none';
+                }
+            });
+
+            document.getElementById('total-time').textContent = `${total} Minutes`;
+        }
+
+        document.querySelectorAll('.rig-card').forEach(card => {
+            card.addEventListener('click', () => {
+                card.classList.toggle('selected');
+            });
+        });
+
+        document.querySelectorAll('.member-chip .remove').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.target.closest('.member-chip').remove();
+            });
+        });
+    </script>
+</body>
+
+</html>

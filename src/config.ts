@@ -11,6 +11,7 @@ const configSchema = z.object({
   GOOGLE_REDIRECT_URI: z.string(),
   // JWT
   JWT_SECRET: z.string(),
+  FRONTEND_URL: z.string(),
 });
 
 export type Config = z.infer<typeof configSchema>;
@@ -26,6 +27,7 @@ export function getConfig(): Config {
       GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET,
       GOOGLE_REDIRECT_URI: process.env.GOOGLE_REDIRECT_URI,
       JWT_SECRET: process.env.JWT_SECRET,
+      FRONTEND_URL: process.env.FRONTEND_URL,
     });
   } catch (error) {
     console.error(error);

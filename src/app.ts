@@ -21,7 +21,7 @@ export function createApp(config: Config) {
   app.use(cookieParser());
   app.use(
     cors({
-      origin: "http://localhost:3001",
+      origin: config.FRONTEND_URL,
       credentials: true,
     })
   );

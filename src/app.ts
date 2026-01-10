@@ -89,11 +89,12 @@ export function createApp(config: Config) {
 
       const token = jwt.sign({ userId: player.id }, config.JWT_SECRET);
 
+      const isProduction = config.NODE_ENV === "production";
       res.cookie("token", token, {
         httpOnly: true,
-        secure: false,
+        secure: isProduction,
         maxAge: 1000 * 60 * 60 * 24 * 30, // 30 days
-        sameSite: "lax",
+        sameSite: isProduction ? "none" : "lax",
       });
     }
 
@@ -105,11 +106,12 @@ export function createApp(config: Config) {
 
     const token = jwt.sign({ userId: player.id }, config.JWT_SECRET);
 
+    const isProduction = config.NODE_ENV === "production";
     res.cookie("token", token, {
       httpOnly: true,
-      secure: false,
+      secure: isProduction,
       maxAge: 1000 * 60 * 60 * 24 * 30, // 30 days
-      sameSite: "lax",
+      sameSite: isProduction ? "none" : "lax",
     });
 
     return res.redirect(config.FRONTEND_URL);
@@ -131,7 +133,12 @@ export function createApp(config: Config) {
   });
 
   app.post("/api/auth/logout", async (req, res) => {
-    res.clearCookie("token");
+    const isProduction = config.NODE_ENV === "production";
+    res.clearCookie("token", {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: isProduction ? "none" : "lax",
+    });
     return res.status(204).send();
   });
 

@@ -5,6 +5,7 @@ import { z } from "zod";
 const configSchema = z.object({
   PORT: z.number().default(3000),
   DATABASE_URL: z.string(),
+  NODE_ENV: z.enum(["development", "production"]).default("development"),
   // Google OAuth2
   GOOGLE_CLIENT_ID: z.string(),
   GOOGLE_CLIENT_SECRET: z.string(),
@@ -23,6 +24,7 @@ export function getConfig(): Config {
     return configSchema.parse({
       PORT: process.env.PORT ? parseInt(process.env.PORT) : 3000,
       DATABASE_URL: process.env.DATABASE_URL,
+      NODE_ENV: process.env.NODE_ENV || "development",
       GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID,
       GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET,
       GOOGLE_REDIRECT_URI: process.env.GOOGLE_REDIRECT_URI,

@@ -117,6 +117,16 @@ export function createApp(config: Config) {
     return res.redirect(config.FRONTEND_URL);
   });
 
+  app.post("/api/waitlist", async (req, res) => {
+    const { email, name, data } = req.body;
+
+    const waitList = await prisma.waitList.create({
+      data: { email, name, data },
+    });
+
+    return res.status(201).json(waitList);
+  });
+
   // Protected routes
   app.use(authorizationMiddleware);
 
@@ -187,27 +197,6 @@ export function createApp(config: Config) {
     return res.status(201).json(community);
   });
 
-  app.post("/api/sessions", async (req, res) => {
-    const { userId } = authenticationTokenParser(req.cookies.token);
-
-    const player = await playerService.getPlayerById(userId);
-
-    if (!player) {
-      return res.status(401).json({ error: "Unauthorized" });
-    }
-
-    if (playerSessions.has(player.id)) {
-      return res.status(400).json({ error: "Player already has a session" });
-    }
-
-    const sessionId = randomUUID();
-
-    sessions.set(sessionId, {});
-    playerSessions.set(player.id, sessionId);
-
-    return res.status(201).json({ sessionId });
-  });
-
   app.get("/api/sessions", async (req, res) => {
     const { userId } = authenticationTokenParser(req.cookies.token);
 
@@ -234,6 +223,27 @@ export function createApp(config: Config) {
     }
 
     return res.status(200).json(session);
+  });
+
+  app.post("/api/sessions", async (req, res) => {
+    const { userId } = authenticationTokenParser(req.cookies.token);
+
+    const player = await playerService.getPlayerById(userId);
+
+    if (!player) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    if (playerSessions.has(player.id)) {
+      return res.status(400).json({ error: "Player already has a session" });
+    }
+
+    const sessionId = randomUUID();
+
+    sessions.set(sessionId, {});
+    playerSessions.set(player.id, sessionId);
+
+    return res.status(201).json({ sessionId });
   });
 
   app.post("/api/sessions/:sessionId/events", async (req, res) => {

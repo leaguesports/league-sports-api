@@ -75,3 +75,11 @@ model CommunityMember {
   @@index([communityId])
   @@index([playerId])
 }
+
+model WaitList {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  name      String
+  data      Json
+  createdAt DateTime @default(now())
+}

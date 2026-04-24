@@ -8,13 +8,13 @@ export class PlayerService {
   }
 
   async createPlayer() {
-    return this.prisma.player.create({
+    return this.prisma.user.create({
       data: {},
     });
   }
 
   async getPlayerById(id: string) {
-    return this.prisma.player.findUnique({
+    return this.prisma.user.findUnique({
       where: { id },
     });
   }

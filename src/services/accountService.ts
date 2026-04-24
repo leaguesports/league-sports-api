@@ -8,16 +8,16 @@ export class AccountService {
   }
 
   async createAccount(
-    playerId: string,
+    userId: string,
     provider: string,
     providerId: string,
     accessToken: string,
     refreshToken: string,
-    expiresAt: Date
+    expiresAt: Date,
   ) {
     return this.prisma.account.create({
       data: {
-        playerId,
+        userId,
         provider,
         providerId,
         accessToken,
@@ -29,7 +29,7 @@ export class AccountService {
 
   async getAccountByProviderAndProviderId(
     provider: string,
-    providerId: string
+    providerId: string,
   ) {
     return this.prisma.account.findUnique({
       where: {

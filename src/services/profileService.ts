@@ -7,9 +7,9 @@ export class ProfileService {
     this.prisma = prisma;
   }
 
-  async createProfile(playerId: string, firstName: string, lastName: string) {
+  async createProfile(userId: string, firstName: string, lastName: string) {
     return this.prisma.profile.create({
-      data: { playerId, firstName, lastName },
+      data: { userId, firstName, lastName },
     });
   }
 }

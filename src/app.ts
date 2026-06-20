@@ -12,6 +12,7 @@ import { GoogleUserService } from "./services/googleUserService";
 import { PlayerService } from "./services/playerService";
 import { ProfileService } from "./services/profileService";
 import { makeAuthenticationTokenParser } from "./util/jwtParser";
+import { getAuthCookieOptions, getClearAuthCookieOptions } from "./util/authCookie";
 import { tryParseUserId } from "./util/tryParseUserId";
 import { VenueService } from "./services/venueService";
 import {
@@ -87,11 +88,18 @@ function handlePoolError(error: unknown, res: express.Response) {
 
 export async function createApp(config: Config) {
   const app = express();
+  app.set("trust proxy", 1);
   app.use(express.json());
   app.use(cookieParser());
   app.use(
     cors({
-      origin: config.FRONTEND_URL,
+      origin: (origin, callback) => {
+        if (!origin || config.CORS_ORIGINS.includes(origin)) {
+          callback(null, origin ?? config.FRONTEND_URL);
+        } else {
+          callback(new Error(`CORS blocked for origin: ${origin}`));
+        }
+      },
       credentials: true,
     }),
   );
@@ -222,34 +230,11 @@ export async function createApp(config: Config) {
         userInfo.name,
         userInfo.family_name,
       );
-
-      const token = jwt.sign({ userId: player.id }, config.JWT_SECRET);
-
-      const isProduction = config.NODE_ENV === "production";
-      res.cookie("token", token, {
-        httpOnly: true,
-        secure: isProduction,
-        maxAge: 1000 * 60 * 60 * 24 * 30, // 30 days
-        sameSite: isProduction ? "none" : "lax",
-      });
     }
 
-    const player = await playerService.getPlayerById(account.userId);
+    const token = jwt.sign({ userId: account.userId }, config.JWT_SECRET);
 
-    if (!player) {
-      return res.status(404).json({ error: "Player not found" });
-    }
-
-    const token = jwt.sign({ userId: userInfo.id }, config.JWT_SECRET);
-
-    const isProduction = config.NODE_ENV === "production";
-
-    res.cookie("token", token, {
-      httpOnly: true,
-      secure: isProduction,
-      maxAge: 1000 * 60 * 60 * 24 * 30, // 30 days
-      sameSite: isProduction ? "none" : "lax",
-    });
+    res.cookie("token", token, getAuthCookieOptions(config));
 
     return res.redirect(config.FRONTEND_URL);
   });
@@ -291,13 +276,7 @@ export async function createApp(config: Config) {
   });
 
   app.post("/api/auth/logout", async (req, res) => {
-    const isProduction = config.NODE_ENV === "production";
-
-    res.clearCookie("token", {
-      httpOnly: true,
-      secure: isProduction,
-      sameSite: isProduction ? "none" : "lax",
-    });
+    res.clearCookie("token", getClearAuthCookieOptions(config));
 
     return res.status(204).send();
   });

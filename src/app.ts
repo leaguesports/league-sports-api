@@ -22,7 +22,7 @@ import {
   PoolPredictionClosedError,
   PoolService,
 } from "./services/poolService";
-import { PoolScoringRule } from "./generated/prisma/client";
+import { PoolScoringRule, PredictionWinnerSide } from "./generated/prisma/client";
 import z from "zod";
 
 const createFixtureSchema = z.object({
@@ -52,11 +52,25 @@ const joinPoolSchema = z.object({
   displayName: z.string().min(1),
 });
 
-const submitPredictionSchema = z.object({
-  poolMemberId: z.string().uuid(),
-  predictedHomeScore: z.number().int().min(0),
-  predictedAwayScore: z.number().int().min(0),
-});
+const submitPredictionSchema = z.discriminatedUnion("predictionType", [
+  z.object({
+    poolMemberId: z.string().uuid(),
+    predictionType: z.literal("EXACT_SCORE"),
+    predictedHomeScore: z.number().int().min(0),
+    predictedAwayScore: z.number().int().min(0),
+  }),
+  z.object({
+    poolMemberId: z.string().uuid(),
+    predictionType: z.literal("TOTAL_SCORE"),
+    predictedTotalScore: z.number().int().min(0),
+  }),
+  z.object({
+    poolMemberId: z.string().uuid(),
+    predictionType: z.literal("MARGIN"),
+    predictedWinnerSide: z.nativeEnum(PredictionWinnerSide),
+    predictedMargin: z.number().int().min(0).optional(),
+  }),
+]);
 
 const submitFinalResultSchema = z.object({
   homeScore: z.number().int().min(0),
@@ -183,9 +197,7 @@ export async function createApp(config: Config) {
     try {
       const prediction = await poolService.submitPrediction({
         inviteCode: req.params.inviteCode,
-        poolMemberId: parsedBody.data.poolMemberId,
-        predictedHomeScore: parsedBody.data.predictedHomeScore,
-        predictedAwayScore: parsedBody.data.predictedAwayScore,
+        ...parsedBody.data,
       });
       return res.status(200).json(prediction);
     } catch (error) {

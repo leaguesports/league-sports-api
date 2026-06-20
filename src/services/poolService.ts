@@ -1,8 +1,11 @@
 import {
   FixtureStatus,
   PoolScoringRule,
+  PredictionType,
+  PredictionWinnerSide,
   PrismaClient,
 } from "../generated/prisma/client";
+import { formatPredictionForApi } from "../util/formatPrediction";
 import { generateBookingCode } from "../util/generateBookingCode";
 import { scorePrediction } from "../util/scorePrediction";
 
@@ -29,12 +32,33 @@ type JoinPoolParams = {
   userId?: string;
 };
 
-type SubmitPredictionParams = {
+type SubmitExactScorePredictionParams = {
   inviteCode: string;
   poolMemberId: string;
+  predictionType: "EXACT_SCORE";
   predictedHomeScore: number;
   predictedAwayScore: number;
 };
+
+type SubmitTotalScorePredictionParams = {
+  inviteCode: string;
+  poolMemberId: string;
+  predictionType: "TOTAL_SCORE";
+  predictedTotalScore: number;
+};
+
+type SubmitMarginPredictionParams = {
+  inviteCode: string;
+  poolMemberId: string;
+  predictionType: "MARGIN";
+  predictedWinnerSide: PredictionWinnerSide;
+  predictedMargin?: number;
+};
+
+export type SubmitPredictionParams =
+  | SubmitExactScorePredictionParams
+  | SubmitTotalScorePredictionParams
+  | SubmitMarginPredictionParams;
 
 type SubmitFinalResultParams = {
   inviteCode: string;
@@ -219,18 +243,16 @@ export class PoolService {
       throw new PoolMemberNotFoundError();
     }
 
+    const predictionData = this.buildPredictionData(params);
+
     return this.prisma.prediction.upsert({
       where: { poolMemberId: member.id },
       create: {
         poolId: pool.id,
         poolMemberId: member.id,
-        predictedHomeScore: params.predictedHomeScore,
-        predictedAwayScore: params.predictedAwayScore,
+        ...predictionData,
       },
-      update: {
-        predictedHomeScore: params.predictedHomeScore,
-        predictedAwayScore: params.predictedAwayScore,
-      },
+      update: predictionData,
     });
   }
 
@@ -252,6 +274,10 @@ export class PoolService {
 
     const revealPredictions = this.shouldRevealPredictions(pool.fixture);
     const hasResults = pool.fixture.status === FixtureStatus.FINISHED;
+    const fixtureTeams = {
+      homeTeamName: pool.fixture.homeTeamName,
+      awayTeamName: pool.fixture.awayTeamName,
+    };
 
     return {
       pool: {
@@ -261,25 +287,27 @@ export class PoolService {
         scoringRule: pool.scoringRule,
       },
       fixture: pool.fixture,
-      members: pool.members.map((member, index) => ({
-        rank: index + 1,
-        id: member.id,
-        displayName: member.displayName,
-        totalPoints: member.totalPoints,
-        prediction: member.predictions[0]
-          ? {
-              predictedHomeScore: revealPredictions
-                ? member.predictions[0].predictedHomeScore
-                : null,
-              predictedAwayScore: revealPredictions
-                ? member.predictions[0].predictedAwayScore
-                : null,
-              pointsEarned: hasResults
-                ? member.predictions[0].pointsEarned
-                : null,
-            }
-          : null,
-      })),
+      members: pool.members.map((member, index) => {
+        const prediction = member.predictions[0];
+        const formatted = formatPredictionForApi(
+          prediction,
+          fixtureTeams,
+          revealPredictions,
+        );
+
+        return {
+          rank: index + 1,
+          id: member.id,
+          displayName: member.displayName,
+          totalPoints: member.totalPoints,
+          prediction: formatted
+            ? {
+                ...formatted,
+                pointsEarned: hasResults ? formatted.pointsEarned : null,
+              }
+            : null,
+        };
+      }),
       winner: hasResults ? this.getWinners(pool.members) : [],
     };
   }
@@ -321,8 +349,7 @@ export class PoolService {
 
         for (const prediction of poolOnFixture.predictions) {
           const points = scorePrediction(
-            prediction.predictedHomeScore,
-            prediction.predictedAwayScore,
+            prediction,
             homeScore,
             awayScore,
             poolOnFixture.scoringRule,
@@ -342,6 +369,57 @@ export class PoolService {
     });
 
     return this.getLeaderboard(params.inviteCode);
+  }
+
+  private buildPredictionData(params: SubmitPredictionParams) {
+    switch (params.predictionType) {
+      case PredictionType.EXACT_SCORE:
+        return {
+          predictionType: PredictionType.EXACT_SCORE,
+          predictedHomeScore: params.predictedHomeScore,
+          predictedAwayScore: params.predictedAwayScore,
+          predictedTotalScore: null,
+          predictedWinnerSide: null,
+          predictedMargin: null,
+        };
+      case PredictionType.TOTAL_SCORE:
+        return {
+          predictionType: PredictionType.TOTAL_SCORE,
+          predictedHomeScore: null,
+          predictedAwayScore: null,
+          predictedTotalScore: params.predictedTotalScore,
+          predictedWinnerSide: null,
+          predictedMargin: null,
+        };
+      case PredictionType.MARGIN:
+        if (params.predictedWinnerSide === PredictionWinnerSide.DRAW) {
+          return {
+            predictionType: PredictionType.MARGIN,
+            predictedHomeScore: null,
+            predictedAwayScore: null,
+            predictedTotalScore: null,
+            predictedWinnerSide: PredictionWinnerSide.DRAW,
+            predictedMargin: 0,
+          };
+        }
+
+        if (params.predictedMargin === undefined) {
+          throw new PoolInvalidRequestError(
+            "predictedMargin is required for home or away margin predictions",
+          );
+        }
+
+        return {
+          predictionType: PredictionType.MARGIN,
+          predictedHomeScore: null,
+          predictedAwayScore: null,
+          predictedTotalScore: null,
+          predictedWinnerSide: params.predictedWinnerSide,
+          predictedMargin: params.predictedMargin,
+        };
+      default:
+        throw new PoolInvalidRequestError("Invalid prediction type");
+    }
   }
 
   private async generateUniqueInviteCode(): Promise<string> {
@@ -405,14 +483,22 @@ export class PoolService {
         joinedAt: Date;
         userId: string | null;
         predictions: Array<{
-          predictedHomeScore: number;
-          predictedAwayScore: number;
+          predictionType: PredictionType;
+          predictedHomeScore: number | null;
+          predictedAwayScore: number | null;
+          predictedTotalScore: number | null;
+          predictedWinnerSide: PredictionWinnerSide | null;
+          predictedMargin: number | null;
           pointsEarned: number | null;
         }>;
       }>;
     },
   ) {
     const revealPredictions = this.shouldRevealPredictions(pool.fixture);
+    const fixtureTeams = {
+      homeTeamName: pool.fixture.homeTeamName,
+      awayTeamName: pool.fixture.awayTeamName,
+    };
 
     return {
       id: pool.id,
@@ -429,19 +515,11 @@ export class PoolService {
         totalPoints: member.totalPoints,
         joinedAt: member.joinedAt,
         isGuest: member.userId === null,
-        prediction: member.predictions[0]
-          ? {
-              predictedHomeScore: revealPredictions
-                ? member.predictions[0].predictedHomeScore
-                : null,
-              predictedAwayScore: revealPredictions
-                ? member.predictions[0].predictedAwayScore
-                : null,
-              pointsEarned: revealPredictions
-                ? member.predictions[0].pointsEarned
-                : null,
-            }
-          : null,
+        prediction: formatPredictionForApi(
+          member.predictions[0],
+          fixtureTeams,
+          revealPredictions,
+        ),
       })),
       predictionsOpen: this.isPredictionOpen(pool.fixture),
     };

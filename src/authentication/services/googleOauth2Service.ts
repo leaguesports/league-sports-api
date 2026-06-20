@@ -24,12 +24,15 @@ export class GoogleOauth2Service {
     this.redirectUri = redirectUri;
   }
 
-  getAuthenticationUrl(): string {
+  getAuthenticationUrl(state?: string): string {
     const url = new URL(BASE_AUTH_URL);
     url.searchParams.set("client_id", this.clientId);
     url.searchParams.set("redirect_uri", this.redirectUri);
     url.searchParams.set("scope", "email profile");
     url.searchParams.set("response_type", "code");
+    if (state) {
+      url.searchParams.set("state", state);
+    }
     return url.toString();
   }
 

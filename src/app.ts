@@ -4,7 +4,7 @@ import express from "express";
 import jwt from "jsonwebtoken";
 
 import { GoogleOauth2Service } from "./authentication/services/googleOauth2Service";
-import { Config } from "./config";
+import { Config, expandOriginVariants } from "./config";
 import { makeAuthorizationMiddleware } from "./core/middleware/authorization";
 import { createPrismaClient } from "./lib/prisma";
 import { AccountService } from "./services/accountService";
@@ -13,11 +13,9 @@ import { PlayerService } from "./services/playerService";
 import { ProfileService } from "./services/profileService";
 import { makeAuthenticationTokenParser } from "./util/jwtParser";
 import { getAuthCookieOptions, getClearAuthCookieOptions } from "./util/authCookie";
-import { tryParseUserId } from "./util/tryParseUserId";
 import { VenueService } from "./services/venueService";
 import {
   FixtureNotFoundError,
-  PoolForbiddenError,
   PoolInvalidRequestError,
   PoolMemberNotFoundError,
   PoolNotFoundError,
@@ -38,6 +36,7 @@ const createFixtureSchema = z.object({
 const createPoolSchema = z
   .object({
     name: z.string().min(1),
+    hostDisplayName: z.string().min(1),
     scoringRule: z.nativeEnum(PoolScoringRule).optional(),
     fixtureId: z.string().uuid().optional(),
     fixture: createFixtureSchema.optional(),
@@ -54,7 +53,7 @@ const joinPoolSchema = z.object({
 });
 
 const submitPredictionSchema = z.object({
-  poolMemberId: z.string().uuid().optional(),
+  poolMemberId: z.string().uuid(),
   predictedHomeScore: z.number().int().min(0),
   predictedAwayScore: z.number().int().min(0),
 });
@@ -71,9 +70,6 @@ function handlePoolError(error: unknown, res: express.Response) {
   if (error instanceof FixtureNotFoundError) {
     return res.status(404).json({ error: error.message });
   }
-  if (error instanceof PoolForbiddenError) {
-    return res.status(403).json({ error: error.message });
-  }
   if (error instanceof PoolMemberNotFoundError) {
     return res.status(404).json({ error: error.message });
   }
@@ -84,6 +80,24 @@ function handlePoolError(error: unknown, res: express.Response) {
     return res.status(400).json({ error: error.message });
   }
   throw error;
+}
+
+function getSafeReturnTo(state: unknown, config: Config): string {
+  if (typeof state !== "string" || !state.startsWith("http")) {
+    return config.FRONTEND_URL;
+  }
+
+  try {
+    const target = new URL(state);
+    const allowedOrigins = new Set(expandOriginVariants(config.FRONTEND_URL));
+    if (allowedOrigins.has(`${target.protocol}//${target.host}`)) {
+      return state;
+    }
+  } catch {
+    // ignore invalid URLs
+  }
+
+  return config.FRONTEND_URL;
 }
 
 export async function createApp(config: Config) {
@@ -149,13 +163,10 @@ export async function createApp(config: Config) {
       return res.status(400).json({ error: "Invalid request body" });
     }
 
-    const userId = tryParseUserId(req, authenticationTokenParser);
-
     try {
       const member = await poolService.joinPool({
         inviteCode: req.params.inviteCode,
         displayName: parsedBody.data.displayName,
-        userId,
       });
       return res.status(201).json(member);
     } catch (error) {
@@ -169,19 +180,10 @@ export async function createApp(config: Config) {
       return res.status(400).json({ error: "Invalid request body" });
     }
 
-    const userId = tryParseUserId(req, authenticationTokenParser);
-
-    if (!parsedBody.data.poolMemberId && !userId) {
-      return res.status(400).json({
-        error: "poolMemberId is required for guest predictions",
-      });
-    }
-
     try {
       const prediction = await poolService.submitPrediction({
         inviteCode: req.params.inviteCode,
         poolMemberId: parsedBody.data.poolMemberId,
-        userId,
         predictedHomeScore: parsedBody.data.predictedHomeScore,
         predictedAwayScore: parsedBody.data.predictedAwayScore,
       });
@@ -191,8 +193,49 @@ export async function createApp(config: Config) {
     }
   });
 
+  app.post("/api/pools", async (req, res) => {
+    const parsedBody = createPoolSchema.safeParse(req.body);
+    if (!parsedBody.success) {
+      return res.status(400).json({ error: "Invalid request body" });
+    }
+
+    try {
+      const pool = await poolService.createPool({
+        hostDisplayName: parsedBody.data.hostDisplayName,
+        name: parsedBody.data.name,
+        scoringRule: parsedBody.data.scoringRule,
+        fixtureId: parsedBody.data.fixtureId,
+        fixture: parsedBody.data.fixture,
+      });
+      return res.status(201).json(pool);
+    } catch (error) {
+      return handlePoolError(error, res);
+    }
+  });
+
+  app.post("/api/pools/by-code/:inviteCode/result", async (req, res) => {
+    const parsedBody = submitFinalResultSchema.safeParse(req.body);
+    if (!parsedBody.success) {
+      return res.status(400).json({ error: "Invalid request body" });
+    }
+
+    try {
+      const leaderboard = await poolService.submitFinalResult({
+        inviteCode: req.params.inviteCode,
+        homeScore: parsedBody.data.homeScore,
+        awayScore: parsedBody.data.awayScore,
+      });
+
+      return res.status(200).json(leaderboard);
+    } catch (error) {
+      return handlePoolError(error, res);
+    }
+  });
+
   app.get("/api/auth/providers/google/signin", async (req, res) => {
-    const authenticationUrl = googleOauth2Service.getAuthenticationUrl();
+    const returnTo =
+      typeof req.query.returnTo === "string" ? req.query.returnTo : undefined;
+    const authenticationUrl = googleOauth2Service.getAuthenticationUrl(returnTo);
     res.redirect(authenticationUrl);
   });
 
@@ -236,32 +279,10 @@ export async function createApp(config: Config) {
 
     res.cookie("token", token, getAuthCookieOptions(config));
 
-    return res.redirect(config.FRONTEND_URL);
+    return res.redirect(getSafeReturnTo(req.query.state, config));
   });
 
   app.use(authorizationMiddleware);
-
-  app.post("/api/pools", async (req, res) => {
-    const { userId } = authenticationTokenParser(req.cookies.token);
-
-    const parsedBody = createPoolSchema.safeParse(req.body);
-    if (!parsedBody.success) {
-      return res.status(400).json({ error: "Invalid request body" });
-    }
-
-    try {
-      const pool = await poolService.createPool({
-        userId,
-        name: parsedBody.data.name,
-        scoringRule: parsedBody.data.scoringRule,
-        fixtureId: parsedBody.data.fixtureId,
-        fixture: parsedBody.data.fixture,
-      });
-      return res.status(201).json(pool);
-    } catch (error) {
-      return handlePoolError(error, res);
-    }
-  });
 
   app.get("/api/auth/me", async (req, res) => {
     const { userId } = authenticationTokenParser(req.cookies.token);
@@ -312,28 +333,6 @@ export async function createApp(config: Config) {
     await venueService.removeFavouriteVenue(userId, venueId);
 
     return res.status(204).send();
-  });
-
-  app.post("/api/pools/by-code/:inviteCode/result", async (req, res) => {
-    const { userId } = authenticationTokenParser(req.cookies.token);
-
-    const parsedBody = submitFinalResultSchema.safeParse(req.body);
-    if (!parsedBody.success) {
-      return res.status(400).json({ error: "Invalid request body" });
-    }
-
-    try {
-      const leaderboard = await poolService.submitFinalResult({
-        inviteCode: req.params.inviteCode,
-        userId,
-        homeScore: parsedBody.data.homeScore,
-        awayScore: parsedBody.data.awayScore,
-      });
-
-      return res.status(200).json(leaderboard);
-    } catch (error) {
-      return handlePoolError(error, res);
-    }
   });
 
   app.listen(config.PORT, () => {

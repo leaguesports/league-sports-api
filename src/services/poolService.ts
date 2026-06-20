@@ -15,11 +15,12 @@ type CreateFixtureParams = {
 };
 
 type CreatePoolParams = {
-  userId: string;
+  hostDisplayName: string;
   name: string;
   scoringRule?: PoolScoringRule;
   fixtureId?: string;
   fixture?: CreateFixtureParams;
+  userId?: string;
 };
 
 type JoinPoolParams = {
@@ -30,15 +31,13 @@ type JoinPoolParams = {
 
 type SubmitPredictionParams = {
   inviteCode: string;
-  poolMemberId?: string;
-  userId?: string;
+  poolMemberId: string;
   predictedHomeScore: number;
   predictedAwayScore: number;
 };
 
 type SubmitFinalResultParams = {
   inviteCode: string;
-  userId: string;
   homeScore: number;
   awayScore: number;
 };
@@ -46,12 +45,6 @@ type SubmitFinalResultParams = {
 export class PoolNotFoundError extends Error {
   constructor() {
     super("Pool not found");
-  }
-}
-
-export class PoolForbiddenError extends Error {
-  constructor(message = "Only the pool creator can submit the final score") {
-    super(message);
   }
 }
 
@@ -97,13 +90,17 @@ export class PoolService {
       );
     }
 
-    const profile = await this.prisma.profile.findUnique({
-      where: { userId: params.userId },
-    });
+    const profile = params.userId
+      ? await this.prisma.profile.findUnique({
+          where: { userId: params.userId },
+        })
+      : null;
 
-    const hostDisplayName = profile
-      ? `${profile.firstName} ${profile.lastName}`.trim() || "Host"
-      : "Host";
+    const hostDisplayName =
+      params.hostDisplayName.trim() ||
+      (profile
+        ? `${profile.firstName} ${profile.lastName}`.trim() || "Host"
+        : "Host");
 
     const inviteCode = await this.generateUniqueInviteCode();
 
@@ -129,7 +126,7 @@ export class PoolService {
           name: params.name,
           inviteCode,
           fixtureId: fixtureId!,
-          createdByUserId: params.userId,
+          createdByUserId: params.userId ?? null,
           scoringRule:
             params.scoringRule ??
             PoolScoringRule.EXACT_SCORE_THREE_CORRECT_RESULT_ONE,
@@ -139,7 +136,7 @@ export class PoolService {
       await tx.poolMember.create({
         data: {
           poolId: createdPool.id,
-          userId: params.userId,
+          userId: params.userId ?? null,
           displayName: hostDisplayName,
         },
       });
@@ -215,19 +212,11 @@ export class PoolService {
       throw new PoolPredictionClosedError();
     }
 
-    const member = await this.resolvePoolMember(pool.id, params);
+    const member = await this.prisma.poolMember.findFirst({
+      where: { id: params.poolMemberId, poolId: pool.id },
+    });
     if (!member) {
       throw new PoolMemberNotFoundError();
-    }
-
-    if (
-      member.userId &&
-      params.userId &&
-      member.userId !== params.userId
-    ) {
-      throw new PoolForbiddenError(
-        "You cannot submit a prediction for another member",
-      );
     }
 
     return this.prisma.prediction.upsert({
@@ -305,10 +294,6 @@ export class PoolService {
       throw new PoolNotFoundError();
     }
 
-    if (pool.createdByUserId !== params.userId) {
-      throw new PoolForbiddenError();
-    }
-
     const fixtureId = pool.fixtureId;
     const { homeScore, awayScore } = params;
 
@@ -319,7 +304,6 @@ export class PoolService {
           homeScore,
           awayScore,
           status: FixtureStatus.FINISHED,
-          resultSubmittedByUserId: params.userId,
           resultSubmittedAt: new Date(),
         },
       });
@@ -358,27 +342,6 @@ export class PoolService {
     });
 
     return this.getLeaderboard(params.inviteCode);
-  }
-
-  private async resolvePoolMember(
-    poolId: string,
-    params: SubmitPredictionParams,
-  ) {
-    if (params.poolMemberId) {
-      return this.prisma.poolMember.findFirst({
-        where: { id: params.poolMemberId, poolId },
-      });
-    }
-
-    if (params.userId) {
-      return this.prisma.poolMember.findUnique({
-        where: {
-          poolId_userId: { poolId, userId: params.userId },
-        },
-      });
-    }
-
-    return null;
   }
 
   private async generateUniqueInviteCode(): Promise<string> {
@@ -422,7 +385,7 @@ export class PoolService {
       inviteCode: string;
       scoringRule: PoolScoringRule;
       createdAt: Date;
-      createdByUserId: string;
+      createdByUserId: string | null;
       fixture: {
         id: string;
         title: string;

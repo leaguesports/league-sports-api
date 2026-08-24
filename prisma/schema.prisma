@@ -13,45 +13,11 @@ datasource db {
   provider = "postgresql"
 }
 
-enum EventType {
-  WATCH @map("watch")
-  PLAY  @map("play")
-}
-
-enum FixtureStatus {
-  SCHEDULED
-  LIVE
-  FINISHED
-  POSTPONED
-  CANCELLED
-}
-
-enum PoolScoringRule {
-  EXACT_SCORE_THREE_CORRECT_RESULT_ONE
-  CORRECT_RESULT_ONLY
-}
-
-enum PredictionType {
-  EXACT_SCORE
-  TOTAL_SCORE
-  MARGIN
-}
-
-enum PredictionWinnerSide {
-  HOME
-  AWAY
-  DRAW
-}
-
 model User {
   id String @id @default(uuid())
 
   profile        Profile?
   accounts       Account[]
-  favouritVenues FavouritVenues[]
-  poolsCreated            Pool[]
-  poolMembers             PoolMember[]
-  fixturesResultSubmitted Fixture[] @relation("FixtureResultSubmitter")
 }
 
 model Account {
@@ -79,113 +45,7 @@ model Profile {
   user User @relation(fields: [userId], references: [id])
 }
 
-model WaitList {
-  id        String   @id @default(uuid())
-  email     String   @unique
-  name      String
-  data      Json
-  createdAt DateTime @default(now())
-}
-
 model Venue {
   id    String @id @default(uuid())
-  cmsId String @unique
   name  String
-
-  favouritesCount Int @default(0)
-
-  favourites FavouritVenues[]
-
-  @@index([cmsId])
-}
-
-model FavouritVenues {
-  id      String @id @default(uuid())
-  userId  String
-  venueId String
-
-  user  User  @relation(fields: [userId], references: [id])
-  venue Venue @relation(fields: [venueId], references: [id])
-
-  @@unique([userId, venueId])
-  @@index([userId])
-  @@index([venueId])
-}
-
-model Fixture {
-  id           String        @id @default(uuid())
-  title        String
-  sport        String
-  homeTeamName String
-  awayTeamName String
-  homeScore    Int?
-  awayScore    Int?
-  matchDate    DateTime
-  status                  FixtureStatus @default(SCHEDULED)
-  resultSubmittedByUserId String?
-  resultSubmittedAt       DateTime?
-  createdAt               DateTime      @default(now())
-  updatedAt               DateTime      @updatedAt
-
-  pools             Pool[]
-  resultSubmittedBy User?  @relation("FixtureResultSubmitter", fields: [resultSubmittedByUserId], references: [id])
-
-  @@index([matchDate])
-  @@index([status])
-}
-
-model Pool {
-  id              String          @id @default(uuid())
-  fixtureId       String
-  name            String
-  inviteCode      String          @unique
-  createdByUserId String?
-  scoringRule     PoolScoringRule @default(EXACT_SCORE_THREE_CORRECT_RESULT_ONE)
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
-
-  fixture     Fixture      @relation(fields: [fixtureId], references: [id])
-  createdBy   User?        @relation(fields: [createdByUserId], references: [id])
-  members     PoolMember[]
-  predictions Prediction[]
-
-  @@index([fixtureId])
-  @@index([createdByUserId])
-}
-
-model PoolMember {
-  id          String   @id @default(uuid())
-  poolId      String
-  userId      String?
-  displayName String
-  totalPoints Int      @default(0)
-  joinedAt    DateTime @default(now())
-
-  pool        Pool         @relation(fields: [poolId], references: [id], onDelete: Cascade)
-  user        User?        @relation(fields: [userId], references: [id])
-  predictions Prediction[]
-
-  @@unique([poolId, userId])
-  @@index([poolId])
-}
-
-model Prediction {
-  id                 String                @id @default(uuid())
-  poolId             String
-  poolMemberId       String
-  predictionType     PredictionType        @default(EXACT_SCORE)
-  predictedHomeScore Int?
-  predictedAwayScore Int?
-  predictedTotalScore Int?
-  predictedWinnerSide PredictionWinnerSide?
-  predictedMargin    Int?
-  pointsEarned       Int?
-  createdAt          DateTime              @default(now())
-  updatedAt          DateTime              @updatedAt
-
-  pool       Pool       @relation(fields: [poolId], references: [id], onDelete: Cascade)
-  poolMember PoolMember @relation(fields: [poolMemberId], references: [id], onDelete: Cascade)
-
-  @@unique([poolMemberId])
-  @@index([poolId])
 }

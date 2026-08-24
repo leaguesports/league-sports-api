@@ -32,8 +32,8 @@
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^22.10.2",
     "@types/pg": "^8.16.0",
-    "nodemon": "^3.1.9",
     "jest": "^29.7.0",
+    "nodemon": "^3.1.9",
     "ts-jest": "^29.2.5",
     "ts-node": "^10.9.2",
     "typescript": "^5.7.2"

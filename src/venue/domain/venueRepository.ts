@@ -8,6 +8,7 @@ export type EnsurePolicy = {
 export interface VenueRepository {
   findById(id: string): Promise<Venue | null>;
   findByCmsId(cmsId: CmsId): Promise<Venue | null>;
+  findByCmsIds(cmsIds: CmsId[]): Promise<Venue[]>;
   ensureFromCms(
     draft: Venue,
     policy: EnsurePolicy,

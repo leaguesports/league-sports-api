@@ -20,6 +20,12 @@ function createPrismaMap() {
         }
         return null;
       }),
+      findMany: jest.fn(
+        async ({ where }: { where: { cmsId?: { in: string[] } } }) => {
+          const values = where.cmsId?.in ?? [];
+          return [...rows.values()].filter((row) => values.includes(row.cmsId));
+        },
+      ),
       upsert: jest.fn(
         async ({
           where,
@@ -73,5 +79,41 @@ describe(PrismaVenueRepository, () => {
     expect(second.created).toBe(false);
     expect(second.venue.id).toBe(first.venue.id);
     expect(second.venue.name.value).toBe("Grand Prix Arena");
+  });
+
+  test("findByCmsIds loads unique cmsIds in one query", async () => {
+    const prisma = createPrismaMap();
+    const repository = new PrismaVenueRepository(
+      prisma as unknown as PrismaClient,
+    );
+
+    await repository.ensureFromCms(
+      Venue.registerFromCms(
+        CmsId.from("sanity-1"),
+        VenueName.from("Grand Prix Arena"),
+        Slug.from("grand-prix-arena"),
+      ),
+      { refreshDetails: false },
+    );
+    await repository.ensureFromCms(
+      Venue.registerFromCms(
+        CmsId.from("sanity-2"),
+        VenueName.from("Other Club"),
+        Slug.from("other-club"),
+      ),
+      { refreshDetails: false },
+    );
+
+    const found = await repository.findByCmsIds([
+      CmsId.from("sanity-1"),
+      CmsId.from("sanity-2"),
+      CmsId.from("sanity-1"),
+    ]);
+
+    expect(prisma.venue.findMany).toHaveBeenCalledTimes(1);
+    expect(found.map((venue) => venue.cmsId.value).sort()).toEqual([
+      "sanity-1",
+      "sanity-2",
+    ]);
   });
 });

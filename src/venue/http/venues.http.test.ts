@@ -179,6 +179,7 @@ describe("venues HTTP", () => {
       venueRepository: {
         findById: async () => null,
         findByCmsId: async () => null,
+        findByCmsIds: async () => [],
         ensureFromCms: async () => {
           throw new VenuePersistenceError();
         },

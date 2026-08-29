@@ -36,6 +36,24 @@ export class PrismaVenueRepository implements VenueRepository {
     }
   }
 
+  async findByCmsIds(cmsIds: CmsId[]): Promise<Venue[]> {
+    const values = [
+      ...new Set(cmsIds.map((cmsId) => cmsId.value).filter(Boolean)),
+    ];
+    if (values.length === 0) {
+      return [];
+    }
+
+    try {
+      const rows = await this.prisma.venue.findMany({
+        where: { cmsId: { in: values } },
+      });
+      return rows.map(toDomain);
+    } catch (error) {
+      throw wrapPersistenceError(error);
+    }
+  }
+
   async ensureFromCms(
     draft: Venue,
     policy: EnsurePolicy,

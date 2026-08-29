@@ -12,6 +12,7 @@ import {
   ListLockedMatchesByVenue,
 } from "./listLockedMatches";
 import { LockMatch } from "./lockMatch";
+import { toHistoryItem } from "./matchHistoryItem";
 
 const guests = {
   teamA: [
@@ -214,5 +215,84 @@ describe("match application", () => {
     expect(playerHistory.map((item) => item.id)).toEqual([newer.id, older.id]);
     expect(venueHistory.map((item) => item.id)).toEqual([newer.id, older.id]);
     expect(playerHistory.some((item) => item.id === otherCourt.id)).toBe(false);
+  });
+
+  test("player history batches unique venue cmsIds", async () => {
+    const venues = new InMemoryVenueRepository();
+    const matches = new InMemoryMatchRepository();
+    await seedVenue(venues);
+    await venues.ensureFromCms(
+      Venue.registerFromCms(
+        CmsId.from("sanity-court-2"),
+        VenueName.from("Other Club"),
+        Slug.from("other-club"),
+      ),
+      { refreshDetails: false },
+    );
+
+    const create = new CreateMatch(matches, venues);
+    const lock = new LockMatch(matches);
+    const atCourt1 = await create.execute({
+      venueCmsId: "sanity-court-1",
+      startsAt: "2026-08-01T10:00:00.000Z",
+      ruleset: "golden_point",
+      pairings: guests,
+    });
+    const atCourt2 = await create.execute({
+      venueCmsId: "sanity-court-2",
+      startsAt: "2026-08-20T10:00:00.000Z",
+      ruleset: "golden_point",
+      pairings: guests,
+    });
+    await lock.execute({ matchId: atCourt1.id, score: scoreA, winner: "A" });
+    await lock.execute({ matchId: atCourt2.id, score: scoreA, winner: "A" });
+
+    const findByCmsId = jest.spyOn(venues, "findByCmsId");
+    const findByCmsIds = jest.spyOn(venues, "findByCmsIds");
+
+    const history = await new ListLockedMatchesByPlayer(matches, venues).execute(
+      "user-riley",
+    );
+
+    expect(history.map((item) => item.venueCmsId).sort()).toEqual([
+      "sanity-court-1",
+      "sanity-court-2",
+    ]);
+    expect(findByCmsIds).toHaveBeenCalledTimes(1);
+    expect(findByCmsIds.mock.calls[0][0].map((cmsId) => cmsId.value).sort()).toEqual(
+      ["sanity-court-1", "sanity-court-2"],
+    );
+    expect(findByCmsId).not.toHaveBeenCalled();
+  });
+
+  test("history items do not invent a winner", () => {
+    const item = toHistoryItem(
+      {
+        id: "match-1",
+        venueCmsId: "sanity-court-1",
+        startsAt: "2026-08-29T10:00:00.000Z",
+        ruleset: "golden_point",
+        status: "locked",
+        servingTeam: "A",
+        pairings: {
+          teamA: [
+            { slot: "A1", userId: null, displayName: "Alex", isGuest: true },
+            { slot: "A2", userId: null, displayName: "Sam", isGuest: true },
+          ],
+          teamB: [
+            { slot: "B1", userId: null, displayName: "Jordan", isGuest: true },
+            { slot: "B2", userId: "user-riley", displayName: "Riley", isGuest: false },
+          ],
+        },
+        score: scoreA,
+        winner: null,
+        lockedAt: "2026-08-29T11:00:00.000Z",
+      },
+      { name: "Padel Club", slug: "padel-club" },
+      [],
+    );
+
+    expect(item.winner).toBeNull();
+    expect(item.score).toEqual(scoreA);
   });
 });

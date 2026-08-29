@@ -19,6 +19,24 @@ export class InMemoryVenueRepository implements VenueRepository {
     return clone(this.byId.get(id) ?? null);
   }
 
+  async findByCmsIds(cmsIds: CmsId[]): Promise<Venue[]> {
+    const venues: Venue[] = [];
+
+    for (const cmsId of uniqueCmsIds(cmsIds)) {
+      const id = this.idByCmsId.get(cmsId.value);
+      if (!id) {
+        continue;
+      }
+
+      const venue = clone(this.byId.get(id) ?? null);
+      if (venue) {
+        venues.push(venue);
+      }
+    }
+
+    return venues;
+  }
+
   async ensureFromCms(
     draft: Venue,
     policy: EnsurePolicy,
@@ -42,6 +60,10 @@ export class InMemoryVenueRepository implements VenueRepository {
     this.idByCmsId.set(draft.cmsId.value, draft.id);
     return { venue: clone(draft)!, created: true };
   }
+}
+
+function uniqueCmsIds(cmsIds: CmsId[]): CmsId[] {
+  return [...new Map(cmsIds.map((cmsId) => [cmsId.value, cmsId])).values()];
 }
 
 function clone(venue: Venue | null): Venue | null {

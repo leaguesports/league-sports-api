@@ -288,28 +288,35 @@ describe("matches HTTP", () => {
   });
 
   test("lock maps persistence failures instead of returning 200", async () => {
+    const created = await fetch(`${server.url}/api/matches`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(createBody),
+    });
+    const { id } = (await created.json()) as { id: string };
+
     await server.close();
     await app.locals.prisma?.$disconnect();
     app = await createApp(config, {
       venueRepository: venues,
       matchRepository: {
-        findById: async () => null,
-        create: async () => {
-          throw new MatchPersistenceError();
-        },
+        findById: (matchId) => matches.findById(matchId),
+        create: (match) => matches.create(match),
         persistLock: async () => {
           throw new MatchPersistenceError();
         },
-        listLockedByPlayerUserId: async () => [],
-        listLockedByVenueCmsId: async () => [],
+        listLockedByPlayerUserId: (userId) =>
+          matches.listLockedByPlayerUserId(userId),
+        listLockedByVenueCmsId: (cmsId) =>
+          matches.listLockedByVenueCmsId(cmsId),
       },
     });
     server = await listen(app);
 
-    const response = await fetch(`${server.url}/api/matches`, {
+    const response = await fetch(`${server.url}/api/matches/${id}/lock`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(createBody),
+      body: JSON.stringify({ score: scoreA, winner: "A" }),
     });
 
     expect(response.status).toBe(503);

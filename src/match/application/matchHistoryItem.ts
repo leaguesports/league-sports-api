@@ -12,8 +12,8 @@ export type MatchHistoryItem = {
   venueSlug: string | null;
   pairings: PairingsSnapshot;
   opponents: MatchPlayerSnapshot[] | PairingsSnapshot;
-  score: MatchScoreSnapshot;
-  winner: TeamId;
+  score: MatchScoreSnapshot | null;
+  winner: TeamId | null;
 };
 
 export function toHistoryItem(
@@ -29,7 +29,7 @@ export function toHistoryItem(
     venueSlug: venue?.slug ?? null,
     pairings: snapshot.pairings,
     opponents,
-    score: snapshot.score ?? { sets: [] },
-    winner: snapshot.winner ?? "A",
+    score: snapshot.score,
+    winner: snapshot.winner,
   };
 }

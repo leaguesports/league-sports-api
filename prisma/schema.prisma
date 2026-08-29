@@ -47,5 +47,7 @@ model Profile {
 
 model Venue {
   id    String @id @default(uuid())
+  cmsId String @unique
   name  String
+  slug  String
 }

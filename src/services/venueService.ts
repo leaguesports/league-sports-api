@@ -3,6 +3,7 @@ import { PrismaClient } from "../generated/prisma/client";
 type CreateVenueParams = {
   cmsId: string;
   name: string;
+  slug: string;
 };
 
 export class VenueService {
@@ -21,6 +22,17 @@ export class VenueService {
   async createVenue(params: CreateVenueParams) {
     return this.prisma.venue.create({
       data: params,
+    });
+  }
+
+  async upsertVenueByCmsId(params: CreateVenueParams) {
+    return this.prisma.venue.upsert({
+      where: { cmsId: params.cmsId },
+      create: params,
+      update: {
+        name: params.name,
+        slug: params.slug,
+      },
     });
   }
 }

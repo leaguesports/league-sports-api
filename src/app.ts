@@ -49,6 +49,36 @@ export async function createApp(config: Config) {
   const accountService = new AccountService(prisma);
   const playerService = new PlayerService(prisma);
   const profileService = new ProfileService(prisma);
+  const venueService = new VenueService(prisma);
+
+  app.get("/api/venues/:cmsId", async (req, res) => {
+    const { cmsId } = req.params;
+    const name =
+      typeof req.query.name === "string"
+        ? req.query.name
+        : typeof req.body?.name === "string"
+          ? req.body.name
+          : undefined;
+    const slug =
+      typeof req.query.slug === "string"
+        ? req.query.slug
+        : typeof req.body?.slug === "string"
+          ? req.body.slug
+          : undefined;
+
+    if (!cmsId || !name || !slug) {
+      return res.status(400).json({ error: "cmsId, name, and slug are required" });
+    }
+
+    const venue = await venueService.upsertVenueByCmsId({ cmsId, name, slug });
+
+    return res.status(200).json({
+      id: venue.id,
+      cmsId: venue.cmsId,
+      name: venue.name,
+      slug: venue.slug,
+    });
+  });
 
   app.get("/api/auth/providers/google/signin", async (req, res) => {
     const returnTo =

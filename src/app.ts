@@ -5,18 +5,29 @@ import jwt from "jsonwebtoken";
 
 import { GoogleOauth2Service } from "./authentication/services/googleOauth2Service";
 import { Config } from "./config";
+import { makeOptionalAuthentication } from "./core/http/optionalAuthentication";
 import { makeAuthorizationMiddleware } from "./core/middleware/authorization";
 import { createPrismaClient } from "./lib/prisma";
 import { AccountService } from "./services/accountService";
 import { GoogleUserService } from "./services/googleUserService";
 import { PlayerService } from "./services/playerService";
 import { ProfileService } from "./services/profileService";
-import { VenueService } from "./services/venueService";
+import { EnsureVenueFromCms } from "./venue/application/ensureVenueFromCms";
+import { GetVenueByCmsId } from "./venue/application/getVenueByCmsId";
+import { VenueRepository } from "./venue/domain/venueRepository";
+import { createVenueController } from "./venue/http/venueController";
+import { PrismaVenueRepository } from "./venue/infrastructure/prismaVenueRepository";
 import { getAuthCookieOptions, getClearAuthCookieOptions } from "./util/authCookie";
 import { makeAuthenticationTokenParser } from "./util/jwtParser";
 
+export type CreateAppDependencies = {
+  venueRepository?: VenueRepository;
+};
 
-export async function createApp(config: Config) {
+export async function createApp(
+  config: Config,
+  dependencies: CreateAppDependencies = {},
+) {
   const app = express();
   app.set("trust proxy", 1);
   app.use(express.json());
@@ -38,6 +49,7 @@ export async function createApp(config: Config) {
   const authenticationTokenParser = makeAuthenticationTokenParser(config);
 
   const prisma = createPrismaClient(config);
+  app.locals.prisma = prisma;
 
   const googleOauth2Service = new GoogleOauth2Service(
     config.GOOGLE_CLIENT_ID,
@@ -49,35 +61,20 @@ export async function createApp(config: Config) {
   const accountService = new AccountService(prisma);
   const playerService = new PlayerService(prisma);
   const profileService = new ProfileService(prisma);
-  const venueService = new VenueService(prisma);
 
-  app.get("/api/venues/:cmsId", async (req, res) => {
-    const { cmsId } = req.params;
-    const name =
-      typeof req.query.name === "string"
-        ? req.query.name
-        : typeof req.body?.name === "string"
-          ? req.body.name
-          : undefined;
-    const slug =
-      typeof req.query.slug === "string"
-        ? req.query.slug
-        : typeof req.body?.slug === "string"
-          ? req.body.slug
-          : undefined;
+  const venueRepository =
+    dependencies.venueRepository ?? new PrismaVenueRepository(prisma);
+  const venueController = createVenueController({
+    getVenueByCmsId: new GetVenueByCmsId(venueRepository),
+    ensureVenueFromCms: new EnsureVenueFromCms(venueRepository),
+    hasAuthenticatedCaller: makeOptionalAuthentication(config),
+  });
 
-    if (!cmsId || !name || !slug) {
-      return res.status(400).json({ error: "cmsId, name, and slug are required" });
-    }
-
-    const venue = await venueService.upsertVenueByCmsId({ cmsId, name, slug });
-
-    return res.status(200).json({
-      id: venue.id,
-      cmsId: venue.cmsId,
-      name: venue.name,
-      slug: venue.slug,
-    });
+  app.get("/api/venues/:cmsId", (req, res) => {
+    void venueController.getByCmsId(req, res);
+  });
+  app.put("/api/venues/:cmsId", (req, res) => {
+    void venueController.ensureFromCms(req, res);
   });
 
   app.get("/api/auth/providers/google/signin", async (req, res) => {
@@ -150,7 +147,21 @@ export async function createApp(config: Config) {
     return res.status(204).send();
   });
 
-  app.listen(config.PORT, () => {
-    console.log("Server is running on port 3000");
-  });
+  app.use(
+    (
+      error: unknown,
+      _req: express.Request,
+      res: express.Response,
+      _next: express.NextFunction,
+    ) => {
+      if (res.headersSent) {
+        return;
+      }
+
+      console.error(error);
+      res.status(500).json({ error: "Internal server error" });
+    },
+  );
+
+  return app;
 }

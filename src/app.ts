@@ -12,6 +12,16 @@ import { AccountService } from "./services/accountService";
 import { GoogleUserService } from "./services/googleUserService";
 import { PlayerService } from "./services/playerService";
 import { ProfileService } from "./services/profileService";
+import { CreateMatch } from "./match/application/createMatch";
+import { GetMatchById } from "./match/application/getMatchById";
+import {
+  ListLockedMatchesByPlayer,
+  ListLockedMatchesByVenue,
+} from "./match/application/listLockedMatches";
+import { LockMatch } from "./match/application/lockMatch";
+import { MatchRepository } from "./match/domain/matchRepository";
+import { createMatchController } from "./match/http/matchController";
+import { PrismaMatchRepository } from "./match/infrastructure/prismaMatchRepository";
 import { EnsureVenueFromCms } from "./venue/application/ensureVenueFromCms";
 import { GetVenueByCmsId } from "./venue/application/getVenueByCmsId";
 import { VenueRepository } from "./venue/domain/venueRepository";
@@ -22,6 +32,7 @@ import { makeAuthenticationTokenParser } from "./util/jwtParser";
 
 export type CreateAppDependencies = {
   venueRepository?: VenueRepository;
+  matchRepository?: MatchRepository;
 };
 
 export async function createApp(
@@ -64,12 +75,42 @@ export async function createApp(
 
   const venueRepository =
     dependencies.venueRepository ?? new PrismaVenueRepository(prisma);
+  const matchRepository =
+    dependencies.matchRepository ?? new PrismaMatchRepository(prisma);
   const venueController = createVenueController({
     getVenueByCmsId: new GetVenueByCmsId(venueRepository),
     ensureVenueFromCms: new EnsureVenueFromCms(venueRepository),
     hasAuthenticatedCaller: makeOptionalAuthentication(config),
   });
+  const matchController = createMatchController({
+    createMatch: new CreateMatch(matchRepository, venueRepository),
+    getMatchById: new GetMatchById(matchRepository),
+    lockMatch: new LockMatch(matchRepository),
+    listLockedMatchesByPlayer: new ListLockedMatchesByPlayer(
+      matchRepository,
+      venueRepository,
+    ),
+    listLockedMatchesByVenue: new ListLockedMatchesByVenue(
+      matchRepository,
+      venueRepository,
+    ),
+  });
 
+  app.post("/api/matches", (req, res) => {
+    void matchController.create(req, res);
+  });
+  app.get("/api/matches", (req, res) => {
+    void matchController.listByPlayer(req, res);
+  });
+  app.get("/api/matches/:id", (req, res) => {
+    void matchController.getById(req, res);
+  });
+  app.post("/api/matches/:id/lock", (req, res) => {
+    void matchController.lock(req, res);
+  });
+  app.get("/api/venues/:cmsId/matches", (req, res) => {
+    void matchController.listByVenue(req, res);
+  });
   app.get("/api/venues/:cmsId", (req, res) => {
     void venueController.getByCmsId(req, res);
   });

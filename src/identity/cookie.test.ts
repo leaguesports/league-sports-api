@@ -1,17 +1,11 @@
-import { usesCrossOriginAuthCookies, getAuthCookieOptions } from "./auth-cookie";
-import { Config } from "../config";
+import { usesCrossOriginAuthCookies, getAuthCookieOptions } from "./cookie";
+import { IdentityConfig } from "./config";
 
-function makeConfig(overrides: Partial<Config>): Config {
+function makeConfig(overrides: Partial<IdentityConfig>): IdentityConfig {
   return {
-    PORT: 3000,
-    DATABASE_URL: "postgresql://localhost/league",
     NODE_ENV: "development",
-    GOOGLE_CLIENT_ID: "id",
-    GOOGLE_CLIENT_SECRET: "secret",
-    GOOGLE_REDIRECT_URI: "http://localhost:3000/callback",
     JWT_SECRET: "jwt",
     FRONTEND_URL: "http://localhost:3001",
-    CORS_ORIGINS: ["http://localhost:3001"],
     ...overrides,
   };
 }

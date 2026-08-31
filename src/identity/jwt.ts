@@ -1,9 +1,10 @@
 import jwt from "jsonwebtoken";
-import { Config } from "../config";
 import z from "zod";
 
+import { IdentityConfig } from "./config";
+
 export function makeJwtParser<T>(
-  config: Config,
+  config: IdentityConfig,
   schema: z.ZodSchema<T>,
 ): (token: string) => T {
   return (token: string) => {
@@ -31,12 +32,12 @@ const authenticationPayloadSchema = z.object({
 
 export type AuthenticationPayload = z.infer<typeof authenticationPayloadSchema>;
 
-export function makeAuthenticationTokenParser(config: Config) {
+export function makeAuthenticationTokenParser(config: IdentityConfig) {
   return makeJwtParser(config, authenticationPayloadSchema);
 }
 
 export function signAuthenticationToken(
-  config: Config,
+  config: IdentityConfig,
   payload: AuthenticationPayload,
 ): string {
   return jwt.sign(payload, config.JWT_SECRET);

@@ -1,8 +1,9 @@
 import { Request, Response, NextFunction } from "express";
-import { Config } from "../config";
 import jwt from "jsonwebtoken";
 
-export function makeAuthorizationMiddleware(config: Config) {
+import { IdentityConfig } from "./config";
+
+export function makeAuthorizationMiddleware(config: IdentityConfig) {
   return (req: Request, res: Response, next: NextFunction) => {
     const token = req.cookies.token;
 

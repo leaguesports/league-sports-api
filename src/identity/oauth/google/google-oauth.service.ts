@@ -13,7 +13,7 @@ const tokenDataSchema = z.object({
 
 type TokenData = z.infer<typeof tokenDataSchema>;
 
-export class GoogleOauth2Service {
+export class GoogleOauthService {
   private readonly clientId: string;
   private readonly clientSecret: string;
   private readonly redirectUri: string;

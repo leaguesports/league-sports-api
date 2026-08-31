@@ -3,23 +3,16 @@ import cors from "cors";
 import express from "express";
 
 import { Config } from "./config";
-import { createIdentityModule } from "./modules/identity";
 import { createPrismaClient } from "./lib/prisma";
-import { CreateMatch } from "./match/application/createMatch";
-import { GetMatchById } from "./match/application/getMatchById";
+import { createIdentityModule } from "./modules/identity";
 import {
-  ListLockedMatchesByPlayer,
-  ListLockedMatchesByVenue,
-} from "./match/application/listLockedMatches";
-import { LockMatch } from "./match/application/lockMatch";
-import { MatchRepository } from "./match/domain/matchRepository";
-import { createMatchController } from "./match/http/matchController";
-import { PrismaMatchRepository } from "./match/infrastructure/prismaMatchRepository";
-import { EnsureVenueFromCms } from "./venue/application/ensureVenueFromCms";
-import { GetVenueByCmsId } from "./venue/application/getVenueByCmsId";
-import { VenueRepository } from "./venue/domain/venueRepository";
-import { createVenueController } from "./venue/http/venueController";
-import { PrismaVenueRepository } from "./venue/infrastructure/prismaVenueRepository";
+  createMatchModule,
+  MatchRepository,
+} from "./modules/match";
+import {
+  createVenueModule,
+  VenueRepository,
+} from "./modules/venue";
 
 export type CreateAppDependencies = {
   venueRepository?: VenueRepository;
@@ -51,53 +44,20 @@ export async function createApp(
   app.locals.prisma = prisma;
 
   const identity = createIdentityModule({ config, prisma });
-
-  const venueRepository =
-    dependencies.venueRepository ?? new PrismaVenueRepository(prisma);
-  const matchRepository =
-    dependencies.matchRepository ?? new PrismaMatchRepository(prisma);
-  const venueController = createVenueController({
-    getVenueByCmsId: new GetVenueByCmsId(venueRepository),
-    ensureVenueFromCms: new EnsureVenueFromCms(venueRepository),
+  const venue = createVenueModule({
+    prisma,
+    venueRepository: dependencies.venueRepository,
     hasAuthenticatedCaller: identity.hasAuthenticatedCaller,
   });
-  const matchController = createMatchController({
-    createMatch: new CreateMatch(matchRepository, venueRepository),
-    getMatchById: new GetMatchById(matchRepository),
-    lockMatch: new LockMatch(matchRepository),
-    listLockedMatchesByPlayer: new ListLockedMatchesByPlayer(
-      matchRepository,
-      venueRepository,
-    ),
-    listLockedMatchesByVenue: new ListLockedMatchesByVenue(
-      matchRepository,
-      venueRepository,
-    ),
+  const match = createMatchModule({
+    prisma,
+    venueRepository: venue.venueRepository,
+    matchRepository: dependencies.matchRepository,
   });
 
   app.use(identity.router);
-
-  app.post("/api/matches", (req, res) => {
-    void matchController.create(req, res);
-  });
-  app.get("/api/matches", (req, res) => {
-    void matchController.listByPlayer(req, res);
-  });
-  app.get("/api/matches/:id", (req, res) => {
-    void matchController.getById(req, res);
-  });
-  app.post("/api/matches/:id/lock", (req, res) => {
-    void matchController.lock(req, res);
-  });
-  app.get("/api/venues/:cmsId/matches", (req, res) => {
-    void matchController.listByVenue(req, res);
-  });
-  app.get("/api/venues/:cmsId", (req, res) => {
-    void venueController.getByCmsId(req, res);
-  });
-  app.put("/api/venues/:cmsId", (req, res) => {
-    void venueController.ensureFromCms(req, res);
-  });
+  app.use(venue.router);
+  app.use(match.router);
 
   app.use(
     (

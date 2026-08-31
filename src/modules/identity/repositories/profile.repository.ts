@@ -1,4 +1,4 @@
-import { PrismaClient } from "../../generated/prisma/client";
+import { PrismaClient } from "../../../generated/prisma/client";
 
 export class ProfileRepository {
   private readonly prisma: PrismaClient;

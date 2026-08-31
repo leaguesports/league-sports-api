@@ -2,8 +2,8 @@ import dotenv from "dotenv";
 
 import { z } from "zod";
 
-import { identityConfigSchema } from "./identity/config";
-import { googleOauthConfigSchema } from "./identity/oauth/google/config";
+import { identityConfigSchema } from "./modules/identity/config";
+import { googleOauthConfigSchema } from "./modules/google-oauth/config";
 
 const appConfigSchema = z.object({
   PORT: z.number().default(3000),

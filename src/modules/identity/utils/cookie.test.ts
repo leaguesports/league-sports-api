@@ -1,5 +1,5 @@
 import { usesCrossOriginAuthCookies, getAuthCookieOptions } from "./cookie";
-import { IdentityConfig } from "./config";
+import { IdentityConfig } from "../config";
 
 function makeConfig(overrides: Partial<IdentityConfig>): IdentityConfig {
   return {

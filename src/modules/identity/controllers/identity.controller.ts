@@ -1,12 +1,12 @@
 import { Request, Response } from "express";
 
-import { IdentityConfig } from "./config";
+import { IdentityConfig } from "../config";
+import { AuthService } from "../services/auth.service";
 import {
   getAuthCookieOptions,
   getClearAuthCookieOptions,
-} from "./cookie";
-import { makeAuthenticationTokenParser } from "./jwt";
-import { AuthService } from "./services/auth.service";
+} from "../utils/cookie";
+import { makeAuthenticationTokenParser } from "../utils/jwt";
 
 export type IdentityControllerDeps = {
   config: IdentityConfig;

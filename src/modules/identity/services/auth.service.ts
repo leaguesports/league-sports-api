@@ -1,9 +1,9 @@
+import { GoogleOauthService, GoogleUserService } from "../../google-oauth";
 import { IdentityConfig } from "../config";
-import { GoogleOauthService, GoogleUserService } from "../oauth/google";
 import { AccountRepository } from "../repositories/account.repository";
 import { PlayerRepository } from "../repositories/player.repository";
 import { ProfileRepository } from "../repositories/profile.repository";
-import { signAuthenticationToken } from "../jwt";
+import { signAuthenticationToken } from "../utils/jwt";
 
 export type AuthServiceDeps = {
   config: IdentityConfig;

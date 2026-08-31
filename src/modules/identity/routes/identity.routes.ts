@@ -1,8 +1,8 @@
 import { Router } from "express";
 
-import { makeAuthorizationMiddleware } from "./authorization";
-import { IdentityConfig } from "./config";
-import { IdentityController } from "./controller";
+import { IdentityConfig } from "../config";
+import { IdentityController } from "../controllers/identity.controller";
+import { makeAuthorizationMiddleware } from "../middleware/authorization.middleware";
 
 export function createIdentityRoutes(
   controller: IdentityController,

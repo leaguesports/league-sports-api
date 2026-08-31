@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 
-import { IdentityConfig } from "./config";
+import { IdentityConfig } from "../config";
 
 export function makeAuthorizationMiddleware(config: IdentityConfig) {
   return (req: Request, res: Response, next: NextFunction) => {

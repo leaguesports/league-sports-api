@@ -1,6 +1,6 @@
 import { CookieOptions } from "express";
 
-import { IdentityConfig } from "./config";
+import { IdentityConfig } from "../config";
 
 /**
  * Cross-origin auth (e.g. leaguesports.co.za → railway.app) requires

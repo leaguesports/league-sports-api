@@ -1,15 +1,18 @@
 import { Request, Router } from "express";
 
-import { PrismaClient } from "../generated/prisma/client";
-import { makeAuthorizationMiddleware } from "./authorization";
+import { PrismaClient } from "../../generated/prisma/client";
+import {
+  createGoogleOauthModule,
+  GoogleOauthConfig,
+} from "../google-oauth";
 import { IdentityConfig } from "./config";
-import { IdentityController } from "./controller";
-import { createGoogleOauthModule, GoogleOauthConfig } from "./oauth/google";
-import { makeOptionalAuthentication } from "./optional-auth";
+import { IdentityController } from "./controllers/identity.controller";
+import { makeAuthorizationMiddleware } from "./middleware/authorization.middleware";
+import { makeOptionalAuthentication } from "./middleware/optional-auth.middleware";
 import { AccountRepository } from "./repositories/account.repository";
 import { PlayerRepository } from "./repositories/player.repository";
 import { ProfileRepository } from "./repositories/profile.repository";
-import { createIdentityRoutes } from "./routes";
+import { createIdentityRoutes } from "./routes/identity.routes";
 import { AuthService } from "./services/auth.service";
 
 export type CreateIdentityModuleParams = {

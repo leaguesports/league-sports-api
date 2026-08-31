@@ -1,7 +1,7 @@
 import jwt from "jsonwebtoken";
 import z from "zod";
 
-import { IdentityConfig } from "./config";
+import { IdentityConfig } from "../config";
 
 export function makeJwtParser<T>(
   config: IdentityConfig,

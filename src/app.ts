@@ -3,7 +3,7 @@ import cors from "cors";
 import express from "express";
 
 import { Config } from "./config";
-import { createIdentityModule } from "./identity";
+import { createIdentityModule } from "./modules/identity";
 import { createPrismaClient } from "./lib/prisma";
 import { CreateMatch } from "./match/application/createMatch";
 import { GetMatchById } from "./match/application/getMatchById";

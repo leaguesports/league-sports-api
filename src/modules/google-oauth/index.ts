@@ -1,6 +1,6 @@
 import { GoogleOauthConfig } from "./config";
-import { GoogleOauthService } from "./google-oauth.service";
-import { GoogleUserService } from "./google-user.service";
+import { GoogleOauthService } from "./services/google-oauth.service";
+import { GoogleUserService } from "./services/google-user.service";
 
 export type CreateGoogleOauthModuleParams = {
   config: GoogleOauthConfig;
@@ -25,5 +25,5 @@ export function createGoogleOauthModule({
 }
 
 export { googleOauthConfigSchema, type GoogleOauthConfig } from "./config";
-export { GoogleOauthService } from "./google-oauth.service";
-export { GoogleUserService } from "./google-user.service";
+export { GoogleOauthService } from "./services/google-oauth.service";
+export { GoogleUserService } from "./services/google-user.service";

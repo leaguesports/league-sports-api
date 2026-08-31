@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from "express";
-import { Config } from "../../config";
+import { Config } from "../config";
 import jwt from "jsonwebtoken";
 
 export function makeAuthorizationMiddleware(config: Config) {

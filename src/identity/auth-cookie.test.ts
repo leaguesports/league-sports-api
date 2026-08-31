@@ -1,4 +1,4 @@
-import { usesCrossOriginAuthCookies, getAuthCookieOptions } from "./authCookie";
+import { usesCrossOriginAuthCookies, getAuthCookieOptions } from "./auth-cookie";
 import { Config } from "../config";
 
 function makeConfig(overrides: Partial<Config>): Config {

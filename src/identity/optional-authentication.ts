@@ -1,7 +1,7 @@
 import { Request } from "express";
 import jwt from "jsonwebtoken";
 
-import { Config } from "../../config";
+import { Config } from "../config";
 
 export function makeOptionalAuthentication(config: Config) {
   return (req: Request): boolean => {

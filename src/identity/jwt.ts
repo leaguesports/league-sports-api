@@ -4,7 +4,7 @@ import z from "zod";
 
 export function makeJwtParser<T>(
   config: Config,
-  schema: z.ZodSchema<T>
+  schema: z.ZodSchema<T>,
 ): (token: string) => T {
   return (token: string) => {
     if (!token) {
@@ -19,7 +19,7 @@ export function makeJwtParser<T>(
 
     try {
       return z.parse(schema, decodedPayload);
-    } catch (error) {
+    } catch {
       throw new Error("Invalid token");
     }
   };
@@ -29,6 +29,15 @@ const authenticationPayloadSchema = z.object({
   userId: z.string(),
 });
 
+export type AuthenticationPayload = z.infer<typeof authenticationPayloadSchema>;
+
 export function makeAuthenticationTokenParser(config: Config) {
   return makeJwtParser(config, authenticationPayloadSchema);
+}
+
+export function signAuthenticationToken(
+  config: Config,
+  payload: AuthenticationPayload,
+): string {
+  return jwt.sign(payload, config.JWT_SECRET);
 }

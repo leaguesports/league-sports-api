@@ -1,6 +1,6 @@
-import { PrismaClient } from "../generated/prisma/client";
+import { PrismaClient } from "../../../generated/prisma/client";
 
-export class AccountService {
+export class AccountRepository {
   private readonly prisma: PrismaClient;
 
   constructor(prisma: PrismaClient) {

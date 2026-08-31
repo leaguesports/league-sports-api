@@ -1,9 +1,9 @@
 import { Request } from "express";
 import jwt from "jsonwebtoken";
 
-import { Config } from "../../config";
+import { IdentityConfig } from "../config";
 
-export function makeOptionalAuthentication(config: Config) {
+export function makeOptionalAuthentication(config: IdentityConfig) {
   return (req: Request): boolean => {
     const token = req.cookies?.token;
     if (typeof token !== "string" || token.length === 0) {

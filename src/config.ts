@@ -2,19 +2,18 @@ import dotenv from "dotenv";
 
 import { z } from "zod";
 
-const configSchema = z.object({
+import { identityConfigSchema } from "./modules/identity/config";
+import { googleOauthConfigSchema } from "./modules/google-oauth/config";
+
+const appConfigSchema = z.object({
   PORT: z.number().default(3000),
   DATABASE_URL: z.string(),
-  NODE_ENV: z.enum(["development", "production"]).default("development"),
-  // Google OAuth2
-  GOOGLE_CLIENT_ID: z.string(),
-  GOOGLE_CLIENT_SECRET: z.string(),
-  GOOGLE_REDIRECT_URI: z.string(),
-  // JWT
-  JWT_SECRET: z.string(),
-  FRONTEND_URL: z.string(),
   CORS_ORIGINS: z.array(z.string()),
 });
+
+export const configSchema = appConfigSchema
+  .merge(identityConfigSchema)
+  .merge(googleOauthConfigSchema);
 
 export type Config = z.infer<typeof configSchema>;
 

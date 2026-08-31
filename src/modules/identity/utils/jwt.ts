@@ -1,10 +1,11 @@
 import jwt from "jsonwebtoken";
-import { Config } from "../config";
 import z from "zod";
 
+import { IdentityConfig } from "../config";
+
 export function makeJwtParser<T>(
-  config: Config,
-  schema: z.ZodSchema<T>
+  config: IdentityConfig,
+  schema: z.ZodSchema<T>,
 ): (token: string) => T {
   return (token: string) => {
     if (!token) {
@@ -19,7 +20,7 @@ export function makeJwtParser<T>(
 
     try {
       return z.parse(schema, decodedPayload);
-    } catch (error) {
+    } catch {
       throw new Error("Invalid token");
     }
   };
@@ -29,6 +30,15 @@ const authenticationPayloadSchema = z.object({
   userId: z.string(),
 });
 
-export function makeAuthenticationTokenParser(config: Config) {
+export type AuthenticationPayload = z.infer<typeof authenticationPayloadSchema>;
+
+export function makeAuthenticationTokenParser(config: IdentityConfig) {
   return makeJwtParser(config, authenticationPayloadSchema);
+}
+
+export function signAuthenticationToken(
+  config: IdentityConfig,
+  payload: AuthenticationPayload,
+): string {
+  return jwt.sign(payload, config.JWT_SECRET);
 }

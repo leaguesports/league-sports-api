@@ -42,8 +42,44 @@ export function expandOriginVariants(origin: string): string[] {
   return [...variants];
 }
 
+/**
+ * `FRONTEND_URL` (± www) plus comma-separated `CORS_ORIGINS`.
+ * HTTPS `*.vercel.app` preview hosts are allowed separately
+ * (`isVercelPreviewOrigin`) and do not need to be listed here.
+ */
 export function getCorsOrigins(frontendUrl: string, extraOrigins: string[]): string[] {
   return [...new Set([...expandOriginVariants(frontendUrl), ...extraOrigins])];
+}
+
+/** Vercel Preview hostnames only (`https://*.vercel.app`), not `https://vercel.app`. */
+export function isVercelPreviewOrigin(origin: string): boolean {
+  try {
+    const url = new URL(origin);
+    return url.protocol === "https:" && url.hostname.endsWith(".vercel.app");
+  } catch {
+    return false;
+  }
+}
+
+export function isAllowedCorsOrigin(
+  origin: string,
+  allowedOrigins: string[],
+): boolean {
+  return allowedOrigins.includes(origin) || isVercelPreviewOrigin(origin);
+}
+
+/**
+ * Reflect an allowed origin, or `false` to skip CORS headers without throwing.
+ * A thrown error in the cors callback surfaces as a browser network failure.
+ */
+export function corsReflectOrigin(
+  requestOrigin: string | undefined,
+  allowedOrigins: string[],
+  fallbackOrigin: string,
+): string | false {
+  if (!requestOrigin) return fallbackOrigin;
+  if (isAllowedCorsOrigin(requestOrigin, allowedOrigins)) return requestOrigin;
+  return false;
 }
 
 export function getConfig(): Config {

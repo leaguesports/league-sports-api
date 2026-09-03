@@ -2,7 +2,7 @@ import cookieParser from "cookie-parser";
 import cors from "cors";
 import express from "express";
 
-import { Config } from "./config";
+import { Config, corsReflectOrigin } from "./config";
 import { createPrismaClient } from "./lib/prisma";
 import { createIdentityModule } from "./modules/identity";
 import {
@@ -30,11 +30,10 @@ export async function createApp(
   app.use(
     cors({
       origin: (origin, callback) => {
-        if (!origin || config.CORS_ORIGINS.includes(origin)) {
-          callback(null, origin ?? config.FRONTEND_URL);
-        } else {
-          callback(new Error(`CORS blocked for origin: ${origin}`));
-        }
+        callback(
+          null,
+          corsReflectOrigin(origin, config.CORS_ORIGINS, config.FRONTEND_URL),
+        );
       },
       credentials: true,
     }),

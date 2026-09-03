@@ -287,6 +287,36 @@ describe("matches HTTP", () => {
     expect(response.status).toBe(400);
   });
 
+  test("unknown Origin still reaches the handler instead of throwing CORS", async () => {
+    const response = await fetch(`${server.url}/api/matches`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Origin: "https://evil.example",
+      },
+      body: "{}",
+    });
+
+    expect(response.status).toBe(400);
+    expect(response.headers.get("access-control-allow-origin")).toBeNull();
+    expect(await response.json()).toEqual({ error: "Invalid match payload" });
+  });
+
+  test("Vercel preview Origin is reflected so preview browsers can read the response", async () => {
+    const origin = "https://landing-page-git-feat-team.vercel.app";
+    const response = await fetch(`${server.url}/api/matches`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Origin: origin,
+      },
+      body: "{}",
+    });
+
+    expect(response.status).toBe(400);
+    expect(response.headers.get("access-control-allow-origin")).toBe(origin);
+  });
+
   test("lock maps persistence failures instead of returning 200", async () => {
     const created = await fetch(`${server.url}/api/matches`, {
       method: "POST",

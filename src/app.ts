@@ -4,6 +4,10 @@ import express from "express";
 
 import { Config, corsReflectOrigin } from "./config";
 import { createPrismaClient } from "./lib/prisma";
+import {
+  createGolfRoundModule,
+  GolfRoundRepository,
+} from "./modules/golf-round";
 import { createIdentityModule } from "./modules/identity";
 import {
   createMatchModule,
@@ -18,6 +22,7 @@ export type CreateAppDependencies = {
   venueRepository?: VenueRepository;
   venueFollowRepository?: import("./modules/venue").VenueFollowRepository;
   matchRepository?: MatchRepository;
+  golfRoundRepository?: GolfRoundRepository;
 };
 
 export async function createApp(
@@ -58,10 +63,17 @@ export async function createApp(
     matchRepository: dependencies.matchRepository,
     tryGetSessionUserId: identity.tryGetSessionUserId,
   });
+  const golfRound = createGolfRoundModule({
+    prisma,
+    venueRepository: venue.venueRepository,
+    golfRoundRepository: dependencies.golfRoundRepository,
+    tryGetSessionUserId: identity.tryGetSessionUserId,
+  });
 
   app.use(identity.router);
   app.use(venue.router);
   app.use(match.router);
+  app.use(golfRound.router);
 
   app.use(
     (

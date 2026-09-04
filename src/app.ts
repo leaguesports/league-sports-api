@@ -52,6 +52,7 @@ export async function createApp(
     prisma,
     venueRepository: venue.venueRepository,
     matchRepository: dependencies.matchRepository,
+    tryGetSessionUserId: identity.tryGetSessionUserId,
   });
 
   app.use(identity.router);

@@ -45,14 +45,14 @@ export class IdentityController {
 
   async me(req: Request, res: Response): Promise<void> {
     const { userId } = this.parseAuthenticationToken(req.cookies.token);
-    const player = await this.authService.getPlayerById(userId);
+    const user = await this.authService.getMeUser(userId);
 
-    if (!player) {
+    if (!user) {
       res.status(401).json({ error: "Unauthorized" });
       return;
     }
 
-    res.status(204).send();
+    res.status(200).json(user);
   }
 
   async logout(_req: Request, res: Response): Promise<void> {

@@ -36,11 +36,13 @@ model Account {
 }
 
 model Profile {
-  id        String @id @default(uuid())
-  userId    String @unique
+  id        String  @id @default(uuid())
+  userId    String  @unique
   firstName String
   lastName  String
-  email     String @unique @default("")
+  email     String  @unique @default("")
+  handle    String  @unique
+  avatarUrl String?
 
   user User @relation(fields: [userId], references: [id])
 }

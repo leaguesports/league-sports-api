@@ -8,7 +8,10 @@ import {
 import { IdentityConfig } from "./config";
 import { IdentityController } from "./controllers/identity.controller";
 import { makeAuthorizationMiddleware } from "./middleware/authorization.middleware";
-import { makeOptionalAuthentication } from "./middleware/optional-auth.middleware";
+import {
+  makeOptionalAuthentication,
+  makeTryGetSessionUserId,
+} from "./middleware/optional-auth.middleware";
 import { AccountRepository } from "./repositories/account.repository";
 import { PlayerRepository } from "./repositories/player.repository";
 import { ProfileRepository } from "./repositories/profile.repository";
@@ -24,6 +27,7 @@ export type IdentityModule = {
   router: Router;
   authorizationMiddleware: ReturnType<typeof makeAuthorizationMiddleware>;
   hasAuthenticatedCaller: (req: Request) => boolean;
+  tryGetSessionUserId: (req: Request) => string | null;
 };
 
 export function createIdentityModule({
@@ -54,6 +58,7 @@ export function createIdentityModule({
     router,
     authorizationMiddleware: makeAuthorizationMiddleware(config),
     hasAuthenticatedCaller: makeOptionalAuthentication(config),
+    tryGetSessionUserId: makeTryGetSessionUserId(config),
   };
 }
 

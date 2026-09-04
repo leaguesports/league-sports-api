@@ -48,12 +48,13 @@ model Profile {
 }
 
 model Venue {
-  id      String        @id @default(uuid())
-  cmsId   String        @unique
-  name    String
-  slug    String
-  matches Match[]
-  follows VenueFollow[]
+  id         String        @id @default(uuid())
+  cmsId      String        @unique
+  name       String
+  slug       String
+  matches    Match[]
+  golfRounds GolfRound[]
+  follows    VenueFollow[]
 }
 
 model VenueFollow {
@@ -119,5 +120,42 @@ model MatchPlayer {
   isGuest     Boolean
 
   @@unique([matchId, slot])
+  @@index([userId])
+}
+
+enum GolfRoundStatus {
+  live
+  locked
+}
+
+model GolfRound {
+  id           String          @id @default(uuid())
+  venueCmsId   String
+  venue        Venue           @relation(fields: [venueCmsId], references: [cmsId])
+  startsAt     DateTime
+  status       GolfRoundStatus @default(live)
+  holesPlayed  Int
+  startingHole Int             @default(1)
+  teeName      String?
+  course       Json
+  score        Json?
+  lockedAt     DateTime?
+  createdAt    DateTime        @default(now())
+  players      GolfRoundPlayer[]
+
+  @@index([venueCmsId])
+  @@index([status, startsAt])
+}
+
+model GolfRoundPlayer {
+  id          String    @id @default(uuid())
+  roundId     String
+  round       GolfRound @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  slot        Int
+  userId      String?
+  displayName String
+  isGuest     Boolean
+
+  @@unique([roundId, slot])
   @@index([userId])
 }

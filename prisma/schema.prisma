@@ -70,6 +70,24 @@ model VenueFollow {
   @@index([venueCmsId])
 }
 
+enum FriendshipStatus {
+  pending
+  accepted
+}
+
+model Friendship {
+  id          String           @id @default(uuid())
+  requesterId String
+  addresseeId String
+  status      FriendshipStatus @default(pending)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@unique([requesterId, addresseeId])
+  @@index([requesterId, status])
+  @@index([addresseeId, status])
+}
+
 enum MatchRuleset {
   golden_point
   advantage

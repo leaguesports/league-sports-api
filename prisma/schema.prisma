@@ -48,11 +48,25 @@ model Profile {
 }
 
 model Venue {
-  id      String  @id @default(uuid())
-  cmsId   String  @unique
+  id      String        @id @default(uuid())
+  cmsId   String        @unique
   name    String
   slug    String
   matches Match[]
+  follows VenueFollow[]
+}
+
+model VenueFollow {
+  id         String   @id @default(uuid())
+  userId     String
+  venueCmsId String
+  createdAt  DateTime @default(now())
+
+  venue Venue @relation(fields: [venueCmsId], references: [cmsId], onDelete: Cascade)
+
+  @@unique([userId, venueCmsId])
+  @@index([userId])
+  @@index([venueCmsId])
 }
 
 enum MatchRuleset {

@@ -16,6 +16,7 @@ import {
 
 export type CreateAppDependencies = {
   venueRepository?: VenueRepository;
+  venueFollowRepository?: import("./modules/venue").VenueFollowRepository;
   matchRepository?: MatchRepository;
 };
 
@@ -46,7 +47,10 @@ export async function createApp(
   const venue = createVenueModule({
     prisma,
     venueRepository: dependencies.venueRepository,
+    venueFollowRepository: dependencies.venueFollowRepository,
     hasAuthenticatedCaller: identity.hasAuthenticatedCaller,
+    tryGetSessionUserId: identity.tryGetSessionUserId,
+    requireAuth: identity.authorizationMiddleware,
   });
   const match = createMatchModule({
     prisma,

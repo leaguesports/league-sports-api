@@ -14,6 +14,24 @@ export type AuthServiceDeps = {
   profileRepository: ProfileRepository;
 };
 
+export type AuthMeUser = {
+  id: string;
+  displayName: string;
+  name: string;
+  email: string;
+  handle: string;
+  avatarUrl: string | null;
+};
+
+type GoogleUserInfo = {
+  id: string;
+  email?: string;
+  name?: string;
+  given_name?: string;
+  family_name?: string;
+  picture?: string;
+};
+
 export class AuthService {
   private readonly config: IdentityConfig;
   private readonly googleOauthService: GoogleOauthService;
@@ -44,9 +62,9 @@ export class AuthService {
         authenticationCode,
       );
 
-    const userInfo = await this.googleUserService.getUserInfo(
+    const userInfo = (await this.googleUserService.getUserInfo(
       tokenData.access_token,
-    );
+    )) as GoogleUserInfo;
 
     let account =
       await this.accountRepository.getAccountByProviderAndProviderId(
@@ -66,11 +84,23 @@ export class AuthService {
         new Date(new Date().getTime() + tokenData.expires_in * 1000),
       );
 
-      await this.profileRepository.createProfile(
-        player.id,
-        userInfo.name,
-        userInfo.family_name,
-      );
+      const firstName =
+        userInfo.given_name?.trim() ||
+        userInfo.name?.trim() ||
+        "Player";
+      const lastName = userInfo.family_name?.trim() || "";
+      const email = userInfo.email?.trim() || "";
+      const handleSeed = email || firstName;
+      const handle = await this.profileRepository.allocateHandle(handleSeed);
+
+      await this.profileRepository.createProfile({
+        userId: player.id,
+        firstName,
+        lastName,
+        email,
+        handle,
+        avatarUrl: userInfo.picture?.trim() || null,
+      });
     }
 
     return {
@@ -83,5 +113,45 @@ export class AuthService {
 
   async getPlayerById(userId: string) {
     return this.playerRepository.getPlayerById(userId);
+  }
+
+  async getMeUser(userId: string): Promise<AuthMeUser | null> {
+    const player = await this.playerRepository.getPlayerById(userId);
+    if (!player) return null;
+
+    let profile = player.profile;
+    if (!profile) {
+      const handle = await this.profileRepository.allocateHandle(
+        `user_${userId}`,
+        userId,
+      );
+      profile = await this.profileRepository.createProfile({
+        userId,
+        firstName: "Player",
+        lastName: "",
+        email: "",
+        handle,
+        avatarUrl: null,
+      });
+    } else if (!profile.handle?.trim()) {
+      const handle = await this.profileRepository.allocateHandle(
+        profile.email || profile.firstName || `user_${userId}`,
+        userId,
+      );
+      profile = await this.profileRepository.updateHandle(userId, handle);
+    }
+
+    const displayName =
+      [profile.firstName, profile.lastName].filter(Boolean).join(" ").trim() ||
+      profile.handle;
+
+    return {
+      id: userId,
+      displayName,
+      name: displayName,
+      email: profile.email || "",
+      handle: profile.handle,
+      avatarUrl: profile.avatarUrl ?? null,
+    };
   }
 }

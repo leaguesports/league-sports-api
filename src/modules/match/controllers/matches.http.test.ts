@@ -119,6 +119,15 @@ describe("matches HTTP", () => {
           { slot: "A1", displayName: "Alex", isGuest: true, userId: null },
           { slot: "A2", displayName: "Sam", isGuest: true, userId: null },
         ],
+        teamB: [
+          { slot: "B1", displayName: "Jordan", isGuest: true, userId: null },
+          {
+            slot: "B2",
+            displayName: "Riley",
+            isGuest: false,
+            userId: "user-riley",
+          },
+        ],
       },
     });
 

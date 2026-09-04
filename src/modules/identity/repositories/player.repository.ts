@@ -16,6 +16,7 @@ export class PlayerRepository {
   async getPlayerById(id: string) {
     return this.prisma.user.findUnique({
       where: { id },
+      include: { profile: true },
     });
   }
 }

@@ -1,0 +1,4 @@
+[deploy]
+# Schema was historically applied with `db push`, so baseline older
+# migrations before applying pending ones (Profile.handle / avatarUrl).
+preDeployCommand = ["sh -c \"npx prisma migrate resolve --applied 20260829070000_expand_venue_cmsid_slug || true; npx prisma migrate resolve --applied 20260829120000_padel_match || true; npx prisma migrate deploy\""]

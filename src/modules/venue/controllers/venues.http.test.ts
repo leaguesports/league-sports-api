@@ -199,4 +199,84 @@ describe("venues HTTP", () => {
     expect(response.status).toBe(503);
     expect(await response.json()).toEqual({ error: "Unable to save venue" });
   });
+
+  test("follow endpoints require auth and persist for the session user", async () => {
+    await fetch(`${server.url}/api/venues/sanity-1`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: "Grand Prix Arena",
+        slug: "grand-prix-arena",
+      }),
+    });
+
+    const unauth = await fetch(`${server.url}/api/venues/sanity-1/follow`, {
+      method: "POST",
+    });
+    expect(unauth.status).toBe(401);
+
+    const token = jwt.sign({ userId: "user-1" }, config.JWT_SECRET);
+    const cookie = `token=${token}`;
+
+    const followed = await fetch(`${server.url}/api/venues/sanity-1/follow`, {
+      method: "POST",
+      headers: { Cookie: cookie },
+    });
+    const followedBody = (await followed.json()) as {
+      following: boolean;
+      venueCmsId: string;
+      venue: { slug: string };
+    };
+    expect(followed.status).toBe(200);
+    expect(followedBody.following).toBe(true);
+    expect(followedBody.venueCmsId).toBe("sanity-1");
+    expect(followedBody.venue.slug).toBe("grand-prix-arena");
+
+    const status = await fetch(`${server.url}/api/venues/sanity-1/follow`, {
+      headers: { Cookie: cookie },
+    });
+    expect(status.status).toBe(200);
+    expect(await status.json()).toEqual({
+      following: true,
+      venueCmsId: "sanity-1",
+    });
+
+    const listed = await fetch(`${server.url}/api/me/followed-venues`, {
+      headers: { Cookie: cookie },
+    });
+    const listedBody = (await listed.json()) as {
+      venues: Array<{ cmsId: string; slug: string }>;
+    };
+    expect(listed.status).toBe(200);
+    expect(listedBody.venues).toHaveLength(1);
+    expect(listedBody.venues[0]).toMatchObject({
+      cmsId: "sanity-1",
+      slug: "grand-prix-arena",
+    });
+
+    const unfollowed = await fetch(`${server.url}/api/venues/sanity-1/follow`, {
+      method: "DELETE",
+      headers: { Cookie: cookie },
+    });
+    expect(unfollowed.status).toBe(200);
+    expect(await unfollowed.json()).toEqual({
+      following: false,
+      venueCmsId: "sanity-1",
+    });
+
+    const empty = await fetch(`${server.url}/api/me/followed-venues`, {
+      headers: { Cookie: cookie },
+    });
+    expect(await empty.json()).toEqual({ venues: [] });
+  });
+
+  test("follow returns 404 when the venue row is missing", async () => {
+    const token = jwt.sign({ userId: "user-1" }, config.JWT_SECRET);
+    const response = await fetch(`${server.url}/api/venues/missing/follow`, {
+      method: "POST",
+      headers: { Cookie: `token=${token}` },
+    });
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({ error: "Venue not found" });
+  });
 });

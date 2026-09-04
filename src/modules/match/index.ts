@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Request, Router } from "express";
 
 import { PrismaClient } from "../../generated/prisma/client";
 import { VenueRepository } from "../venue/repositories/venue.repository";
@@ -18,6 +18,7 @@ export type CreateMatchModuleParams = {
   prisma: PrismaClient;
   venueRepository: VenueRepository;
   matchRepository?: MatchRepository;
+  tryGetSessionUserId: (req: Request) => string | null;
 };
 
 export type MatchModule = {
@@ -29,6 +30,7 @@ export function createMatchModule({
   prisma,
   venueRepository,
   matchRepository: matchRepositoryOverride,
+  tryGetSessionUserId,
 }: CreateMatchModuleParams): MatchModule {
   const matchRepository =
     matchRepositoryOverride ?? new PrismaMatchRepository(prisma);
@@ -45,6 +47,7 @@ export function createMatchModule({
       matchRepository,
       venueRepository,
     ),
+    tryGetSessionUserId,
   });
 
   return {

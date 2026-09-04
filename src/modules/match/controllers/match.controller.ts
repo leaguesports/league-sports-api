@@ -12,6 +12,7 @@ import { DomainError } from "../../../lib/domain-error";
 import { MatchLockConflictError } from "../entities/match-lock-conflict-error";
 import { MatchVenueNotFoundError } from "../entities/match-venue-not-found-error";
 import { MatchPersistenceError } from "../entities/match-persistence-error";
+import { bindSessionUserIdToPairings } from "../utils/bind-session-user";
 
 const playerSchema = z.object({
   userId: z.string().nullable().optional(),
@@ -70,12 +71,17 @@ export function createMatchController(deps: {
   lockMatch: LockMatch;
   listLockedMatchesByPlayer: ListLockedMatchesByPlayer;
   listLockedMatchesByVenue: ListLockedMatchesByVenue;
+  tryGetSessionUserId: (req: Request) => string | null;
 }) {
   return {
     async create(req: Request, res: Response) {
       try {
         const body = z.parse(createMatchBodySchema, req.body ?? {});
-        const match = await deps.createMatch.execute(body);
+        const sessionUserId = deps.tryGetSessionUserId(req);
+        const pairings = sessionUserId
+          ? bindSessionUserIdToPairings(body.pairings, sessionUserId)
+          : body.pairings;
+        const match = await deps.createMatch.execute({ ...body, pairings });
         return res.status(201).json(match.toSnapshot());
       } catch (error) {
         return sendMatchError(res, error);

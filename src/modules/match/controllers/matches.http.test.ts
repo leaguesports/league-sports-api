@@ -5,6 +5,7 @@ import type { Express } from "express";
 
 import { createApp } from "../../../app";
 import { Config } from "../../../config";
+import { signAuthenticationToken } from "../../identity/utils/jwt";
 import { CmsId } from "../../venue/entities/cms-id";
 import { Slug } from "../../venue/entities/slug";
 import { Venue } from "../../venue/entities/venue";
@@ -72,6 +73,10 @@ describe("matches HTTP", () => {
   let matches: InMemoryMatchRepository;
   let app: Express;
   let server: { url: string; close: () => Promise<void> };
+
+  function sessionCookie(userId: string) {
+    return `token=${signAuthenticationToken(config, { userId })}`;
+  }
 
   beforeEach(async () => {
     venues = new InMemoryVenueRepository();
@@ -142,6 +147,139 @@ describe("matches HTTP", () => {
     expect(await playerHistory.json()).toEqual([]);
     expect(venueHistory.status).toBe(200);
     expect(await venueHistory.json()).toEqual([]);
+  });
+
+  test("authenticated create binds omitted userId, lock then lists by that player", async () => {
+    const created = await fetch(`${server.url}/api/matches`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: sessionCookie("user-riley"),
+      },
+      body: JSON.stringify({
+        ...createBody,
+        pairings: {
+          teamA: pairings.teamA,
+          teamB: [
+            { displayName: "Jordan", isGuest: true, userId: null },
+            { displayName: "Riley", isGuest: false, userId: null },
+          ],
+        },
+      }),
+    });
+    const createdBody = (await created.json()) as {
+      id: string;
+      pairings: {
+        teamB: { displayName: string; isGuest: boolean; userId: string | null }[];
+      };
+    };
+
+    expect(created.status).toBe(201);
+    expect(createdBody.pairings.teamB[1]).toEqual({
+      slot: "B2",
+      displayName: "Riley",
+      isGuest: false,
+      userId: "user-riley",
+    });
+
+    const locked = await fetch(`${server.url}/api/matches/${createdBody.id}/lock`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ score: scoreA, winner: "A" }),
+    });
+    expect(locked.status).toBe(200);
+
+    const history = await fetch(
+      `${server.url}/api/matches?playerUserId=user-riley`,
+    );
+    const items = (await history.json()) as { id: string }[];
+    expect(history.status).toBe(200);
+    expect(items.map((item) => item.id)).toEqual([createdBody.id]);
+  });
+
+  test("invalid or missing token still creates without 401", async () => {
+    const invalid = await fetch(`${server.url}/api/matches`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: "token=not-a-jwt",
+      },
+      body: JSON.stringify(createBody),
+    });
+    const invalidBody = (await invalid.json()) as {
+      pairings: { teamB: { userId: string | null }[] };
+    };
+
+    expect(invalid.status).toBe(201);
+    expect(invalid.status).not.toBe(401);
+    expect(invalidBody.pairings.teamB[1].userId).toBe("user-riley");
+
+    const guestsOnly = {
+      teamA: [
+        { displayName: "Alex", isGuest: true, userId: null },
+        { displayName: "Sam", isGuest: true, userId: null },
+      ],
+      teamB: [
+        { displayName: "Jordan", isGuest: true, userId: null },
+        { displayName: "Riley", isGuest: true, userId: null },
+      ],
+    };
+    const anonymous = await fetch(`${server.url}/api/matches`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...createBody, pairings: guestsOnly }),
+    });
+    const anonymousBody = (await anonymous.json()) as {
+      pairings: {
+        teamA: { isGuest: boolean; userId: string | null }[];
+        teamB: { isGuest: boolean; userId: string | null }[];
+      };
+    };
+
+    expect(anonymous.status).toBe(201);
+    expect(anonymousBody.pairings.teamA.every((player) => player.userId === null)).toBe(
+      true,
+    );
+    expect(anonymousBody.pairings.teamB[1]).toMatchObject({
+      isGuest: true,
+      userId: null,
+    });
+  });
+
+  test("authenticated create does not attach session userId to guest slots", async () => {
+    const created = await fetch(`${server.url}/api/matches`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: sessionCookie("user-riley"),
+      },
+      body: JSON.stringify({
+        ...createBody,
+        pairings: {
+          teamA: [
+            { displayName: "Alex", isGuest: true, userId: null },
+            { displayName: "Sam", isGuest: true, userId: null },
+          ],
+          teamB: [
+            { displayName: "Jordan", isGuest: true, userId: null },
+            { displayName: "Riley", isGuest: true, userId: null },
+          ],
+        },
+      }),
+    });
+    const createdBody = (await created.json()) as {
+      pairings: {
+        teamA: { isGuest: boolean; userId: string | null }[];
+        teamB: { isGuest: boolean; userId: string | null }[];
+      };
+    };
+
+    expect(created.status).toBe(201);
+    expect(
+      [...createdBody.pairings.teamA, ...createdBody.pairings.teamB].every(
+        (player) => player.isGuest && player.userId === null,
+      ),
+    ).toBe(true);
   });
 
   test("GET missing match is 404", async () => {

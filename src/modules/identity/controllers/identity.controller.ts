@@ -7,6 +7,7 @@ import {
   getClearAuthCookieOptions,
 } from "../utils/cookie";
 import { makeAuthenticationTokenParser } from "../utils/jwt";
+import { resolvePostAuthRedirect } from "../utils/post-auth-redirect";
 
 export type IdentityControllerDeps = {
   config: IdentityConfig;
@@ -36,11 +37,14 @@ export class IdentityController {
 
   async googleCallback(req: Request, res: Response): Promise<void> {
     const authenticationCode = req.query.code as string;
+    // Sign-in puts `returnTo` into Google OAuth `state`; Google echoes it here.
+    const returnTo =
+      typeof req.query.state === "string" ? req.query.state : undefined;
     const { token, frontendUrl } =
       await this.authService.signInWithGoogle(authenticationCode);
 
     res.cookie("token", token, getAuthCookieOptions(this.config));
-    res.redirect(frontendUrl);
+    res.redirect(resolvePostAuthRedirect(returnTo, frontendUrl));
   }
 
   async me(req: Request, res: Response): Promise<void> {

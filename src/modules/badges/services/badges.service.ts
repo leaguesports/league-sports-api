@@ -33,29 +33,29 @@ function earliestIso(a: string, b: string): string {
   return new Date(a).getTime() <= new Date(b).getTime() ? a : b;
 }
 
-/** Union live evaluation with persisted awards; earliest earnedAt wins. */
+/**
+ * Live evaluation is authoritative for membership.
+ * Persist only supplies an earlier earnedAt for ids that still evaluate (∩).
+ */
 export function mergeBadgeSnapshots(
   live: PublicBadge[],
   persisted: BadgeAwardRecord[],
 ): PublicBadge[] {
-  const byId = new Map<ServerBadgeId, string>();
+  const liveAt = new Map(live.map((badge) => [badge.id, badge.earnedAt]));
+  const persistedAt = new Map<ServerBadgeId, string>();
 
   for (const award of persisted) {
-    byId.set(award.badgeId, award.earnedAt.toISOString());
+    persistedAt.set(award.badgeId, award.earnedAt.toISOString());
   }
 
-  for (const badge of live) {
-    const existing = byId.get(badge.id);
-    byId.set(
-      badge.id,
-      existing ? earliestIso(existing, badge.earnedAt) : badge.earnedAt,
-    );
-  }
-
-  return SERVER_BADGE_IDS.filter((id) => byId.has(id)).map((id) => ({
-    id,
-    earnedAt: byId.get(id)!,
-  }));
+  return SERVER_BADGE_IDS.filter((id) => liveAt.has(id)).map((id) => {
+    const liveIso = liveAt.get(id)!;
+    const persistedIso = persistedAt.get(id);
+    return {
+      id,
+      earnedAt: persistedIso ? earliestIso(persistedIso, liveIso) : liveIso,
+    };
+  });
 }
 
 export class EvaluateUserBadges {

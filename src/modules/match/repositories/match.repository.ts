@@ -12,6 +12,6 @@ export interface MatchRepository {
   persistLock(match: Match): Promise<Match>;
   listLockedByPlayerUserId(userId: string): Promise<Match[]>;
   listLockedByVenueCmsId(cmsId: CmsId): Promise<Match[]>;
-  /** Slim locked-match rows for badge evaluation (no full score hydration). */
+  /** Slim session-attributed locked-match rows for badge evaluation. */
   listLockedPadelResultsForBadges(userId: string): Promise<LockedPadelBadgeRow[]>;
 }

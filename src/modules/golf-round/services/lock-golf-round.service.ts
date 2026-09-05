@@ -5,6 +5,7 @@ import { GolfRoundRepository } from "../repositories/golf-round.repository";
 export type LockGolfRoundInput = {
   roundId: string;
   score: unknown;
+  lockedByUserId: string;
 };
 
 export class LockGolfRound {
@@ -20,7 +21,7 @@ export class LockGolfRound {
       holeNumbers: round.course.holeNumbers(),
       playerSlots: round.playerSlots(),
     });
-    round.lock(score);
+    round.lock(score, new Date(), input.lockedByUserId);
     return this.rounds.persistLock(round);
   }
 }

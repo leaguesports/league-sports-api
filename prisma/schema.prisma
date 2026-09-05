@@ -88,6 +88,19 @@ model Friendship {
   @@index([addresseeId, status])
 }
 
+
+model BadgeAward {
+  id        String   @id @default(uuid())
+  userId    String
+  badgeId   String
+  earnedAt  DateTime
+  createdAt DateTime @default(now())
+
+  @@unique([userId, badgeId])
+  @@index([userId])
+}
+
+
 enum MatchRuleset {
   golden_point
   advantage

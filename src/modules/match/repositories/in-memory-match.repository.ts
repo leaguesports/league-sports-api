@@ -1,7 +1,10 @@
 import { CmsId } from "../../venue/entities/cms-id";
 import { Match } from "../entities/match";
 import { MatchLockConflictError } from "../entities/match-lock-conflict-error";
-import { MatchRepository } from "./match.repository";
+import {
+  LockedPadelBadgeRow,
+  MatchRepository,
+} from "./match.repository";
 
 export class InMemoryMatchRepository implements MatchRepository {
   private readonly byId = new Map<string, Match>();
@@ -45,6 +48,28 @@ export class InMemoryMatchRepository implements MatchRepository {
     );
   }
 
+  
+  async listLockedPadelResultsForBadges(
+    userId: string,
+  ): Promise<LockedPadelBadgeRow[]> {
+    const matches = await this.listLockedByPlayerUserId(userId);
+    return matches.flatMap((match) => {
+      if (match.lockedByUserId !== userId) {
+        return [];
+      }
+      const player = match.pairings.playerOnTeam(userId);
+      const winner = match.winner;
+      const won =
+        !player || !winner ? null : player.slot.team.equals(winner);
+      return [
+        {
+          lockedAt: match.lockedAt ?? match.startsAt.value,
+          won,
+        },
+      ];
+    });
+  }
+
   private lockedNewestFirst(): Match[] {
     return [...this.byId.values()]
       .filter((match) => match.isLocked)
@@ -70,5 +95,6 @@ function clone(match: Match | null): Match | null {
     score: match.score,
     winner: match.winner,
     lockedAt: match.lockedAt,
+    lockedByUserId: match.lockedByUserId,
   });
 }

@@ -113,8 +113,8 @@ describe(Match, () => {
     const match = createLiveMatch();
     const lockedAt = new Date("2026-08-29T11:00:00.000Z");
 
-    match.lock(MatchScore.from(lockScore), Team.A, lockedAt);
-    match.lock(MatchScore.from(lockScore), Team.A, new Date("2026-08-29T12:00:00.000Z"));
+    match.lock(MatchScore.from(lockScore), Team.A, lockedAt, "user-1");
+    match.lock(MatchScore.from(lockScore), Team.A, new Date("2026-08-29T12:00:00.000Z"), "user-other");
 
     expect(match.toSnapshot()).toMatchObject({
       status: "locked",
@@ -122,6 +122,7 @@ describe(Match, () => {
       lockedAt: "2026-08-29T11:00:00.000Z",
       score: lockScore,
     });
+    expect(match.lockedByUserId).toBe("user-1");
   });
 
   test("lock conflicts when the match is already locked with a different result", () => {

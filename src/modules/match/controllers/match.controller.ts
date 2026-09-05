@@ -12,7 +12,7 @@ import { DomainError } from "../../../lib/domain-error";
 import { MatchLockConflictError } from "../entities/match-lock-conflict-error";
 import { MatchVenueNotFoundError } from "../entities/match-venue-not-found-error";
 import { MatchPersistenceError } from "../entities/match-persistence-error";
-import { bindSessionUserIdToPairings } from "../utils/bind-session-user";
+import { sanitizePairingsForCreate } from "../utils/bind-session-user";
 
 const playerSchema = z.object({
   userId: z.string().nullable().optional(),
@@ -78,9 +78,7 @@ export function createMatchController(deps: {
       try {
         const body = z.parse(createMatchBodySchema, req.body ?? {});
         const sessionUserId = deps.tryGetSessionUserId(req);
-        const pairings = sessionUserId
-          ? bindSessionUserIdToPairings(body.pairings, sessionUserId)
-          : body.pairings;
+        const pairings = sanitizePairingsForCreate(body.pairings, sessionUserId);
         const match = await deps.createMatch.execute({ ...body, pairings });
         return res.status(201).json(match.toSnapshot());
       } catch (error) {
@@ -105,12 +103,28 @@ export function createMatchController(deps: {
 
     async lock(req: Request, res: Response) {
       try {
+        const sessionUserId = deps.tryGetSessionUserId(req);
+        if (!sessionUserId) {
+          return res.status(401).json({ error: "Unauthorized" });
+        }
+
         const { id } = z.parse(matchIdParamSchema, req.params);
         const body = z.parse(lockMatchBodySchema, req.body ?? {});
+        const existing = await deps.getMatchById.execute(id);
+        if (!existing) {
+          return res.status(404).json({ error: "Match not found" });
+        }
+        if (!existing.pairings.playerOnTeam(sessionUserId)) {
+          return res.status(403).json({
+            error: "Only a seated player can lock this match",
+          });
+        }
+
         const match = await deps.lockMatch.execute({
           matchId: id,
           score: body.score,
           winner: body.winner,
+          lockedByUserId: sessionUserId,
         });
 
         if (!match) {

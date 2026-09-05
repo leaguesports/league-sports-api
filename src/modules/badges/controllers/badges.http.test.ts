@@ -123,6 +123,7 @@ describe("badges HTTP", () => {
       }),
       Team.A,
       new Date("2026-09-01T11:00:00.000Z"),
+      "user-1",
     );
     await matches.create(match);
 
@@ -137,6 +138,67 @@ describe("badges HTTP", () => {
         { id: "first_win", earnedAt: "2026-09-01T11:00:00.000Z" },
       ],
     });
+  });
+
+  test("GET uses earlier persisted earnedAt only for ids that still evaluate", async () => {
+    const pending = await friendships.createPending("user-1", "user-2");
+    await friendships.accept(pending.id);
+    await awards.upsertAwards("user-1", [
+      {
+        userId: "user-1",
+        badgeId: "first_friend",
+        earnedAt: new Date("2026-08-01T09:00:00.000Z"),
+      },
+      {
+        userId: "user-1",
+        badgeId: "first_lock",
+        earnedAt: new Date("2026-07-01T09:00:00.000Z"),
+      },
+    ]);
+
+    const token = jwt.sign({ userId: "user-1" }, config.JWT_SECRET);
+    const res = await fetch(`${server.url}/api/me/badges`, {
+      headers: { Cookie: `token=${token}` },
+    });
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toEqual({
+      badges: [
+        { id: "first_friend", earnedAt: "2026-08-01T09:00:00.000Z" },
+      ],
+    });
+  });
+
+  test("GET ignores planted locks that were not session-attributed", async () => {
+    const match = Match.create({
+      venueCmsId: CmsId.from("sanity-court-1"),
+      startsAt: StartsAt.from("2026-09-01T10:00:00.000Z"),
+      ruleset: Ruleset.from("golden_point"),
+      pairings: {
+        teamA: [
+          { displayName: "Alex", isGuest: false, userId: "user-1" },
+          { displayName: "Sam", isGuest: true, userId: null },
+        ],
+        teamB: [
+          { displayName: "Jordan", isGuest: true, userId: null },
+          { displayName: "Riley", isGuest: true, userId: null },
+        ],
+      },
+    });
+    match.lock(
+      MatchScore.from({
+        sets: [{ gamesA: 6, gamesB: 4, tieBreak: null, winner: "A" }],
+      }),
+      Team.A,
+      new Date("2026-09-01T11:00:00.000Z"),
+    );
+    await matches.create(match);
+
+    const token = jwt.sign({ userId: "user-1" }, config.JWT_SECRET);
+    const res = await fetch(`${server.url}/api/me/badges`, {
+      headers: { Cookie: `token=${token}` },
+    });
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toEqual({ badges: [] });
   });
 
   test("POST rejects client earnedIds and accepts empty recompute", async () => {

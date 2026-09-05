@@ -7,6 +7,7 @@ export type LockMatchInput = {
   matchId: string;
   score: unknown;
   winner: unknown;
+  lockedByUserId: string;
 };
 
 export class LockMatch {
@@ -18,7 +19,12 @@ export class LockMatch {
       return null;
     }
 
-    match.lock(MatchScore.from(input.score), Team.from(input.winner, "winner"));
+    match.lock(
+      MatchScore.from(input.score),
+      Team.from(input.winner, "winner"),
+      new Date(),
+      input.lockedByUserId,
+    );
     return this.matches.persistLock(match);
   }
 }

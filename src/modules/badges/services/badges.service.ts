@@ -1,15 +1,17 @@
 import { DomainError } from "../../../lib/domain-error";
 import { FriendshipRepository } from "../../friends/repositories/friendship.repository";
 import { GolfRoundRepository } from "../../golf-round/repositories/golf-round.repository";
-import { Match } from "../../match/entities/match";
 import { MatchRepository } from "../../match/repositories/match.repository";
-import type { ServerBadgeId } from "../catalog";
+import { SERVER_BADGE_IDS, type ServerBadgeId } from "../catalog";
 import {
   BadgeEvidence,
   EarnedBadge,
   evaluateServerBadges,
 } from "../evaluate";
-import { BadgeAwardRepository } from "../repositories/badge-award.repository";
+import {
+  BadgeAwardRecord,
+  BadgeAwardRepository,
+} from "../repositories/badge-award.repository";
 
 export type PublicBadge = {
   id: ServerBadgeId;
@@ -27,11 +29,33 @@ function toPublic(badges: EarnedBadge[]): PublicBadge[] {
   }));
 }
 
-function playerWonMatch(match: Match, userId: string): boolean | null {
-  const player = match.pairings.playerOnTeam(userId);
-  const winner = match.winner;
-  if (!player || !winner) return null;
-  return player.slot.team.equals(winner);
+function earliestIso(a: string, b: string): string {
+  return new Date(a).getTime() <= new Date(b).getTime() ? a : b;
+}
+
+/**
+ * Live evaluation is authoritative for membership.
+ * Persist only supplies an earlier earnedAt for ids that still evaluate (∩).
+ */
+export function mergeBadgeSnapshots(
+  live: PublicBadge[],
+  persisted: BadgeAwardRecord[],
+): PublicBadge[] {
+  const liveAt = new Map(live.map((badge) => [badge.id, badge.earnedAt]));
+  const persistedAt = new Map<ServerBadgeId, string>();
+
+  for (const award of persisted) {
+    persistedAt.set(award.badgeId, award.earnedAt.toISOString());
+  }
+
+  return SERVER_BADGE_IDS.filter((id) => liveAt.has(id)).map((id) => {
+    const liveIso = liveAt.get(id)!;
+    const persistedIso = persistedAt.get(id);
+    return {
+      id,
+      earnedAt: persistedIso ? earliestIso(persistedIso, liveIso) : liveIso,
+    };
+  });
 }
 
 export class EvaluateUserBadges {
@@ -42,20 +66,18 @@ export class EvaluateUserBadges {
   ) {}
 
   async collectEvidence(userId: string): Promise<BadgeEvidence> {
-    const [lockedMatches, lockedGolf, friendshipRows] = await Promise.all([
-      this.matches.listLockedByPlayerUserId(userId),
-      this.golfRounds.listLockedByPlayerUserId(userId),
+    const [padelRows, golfTimes, friendshipRows] = await Promise.all([
+      this.matches.listLockedPadelResultsForBadges(userId),
+      this.golfRounds.listLockedAtForBadges(userId),
       this.friendships.listForUser(userId),
     ]);
 
     return {
-      padelResults: lockedMatches.map((match) => ({
-        lockedAt: (match.lockedAt ?? match.startsAt.value).toISOString(),
-        won: playerWonMatch(match, userId),
+      padelResults: padelRows.map((row) => ({
+        lockedAt: row.lockedAt.toISOString(),
+        won: row.won,
       })),
-      golfLockedAt: lockedGolf.map((round) =>
-        (round.lockedAt ?? round.startsAt.value).toISOString(),
-      ),
+      golfLockedAt: golfTimes.map((lockedAt) => lockedAt.toISOString()),
       friendSince: friendshipRows
         .filter((row) => row.status === "accepted")
         .map((row) => row.updatedAt.toISOString()),
@@ -74,10 +96,17 @@ export class EvaluateUserBadges {
 }
 
 export class ListBadges {
-  constructor(private readonly evaluate: EvaluateUserBadges) {}
+  constructor(
+    private readonly evaluate: EvaluateUserBadges,
+    private readonly awards: BadgeAwardRepository,
+  ) {}
 
   async execute(input: { userId: string }): Promise<BadgesSnapshot> {
-    return this.evaluate.execute(input.userId);
+    const [live, persisted] = await Promise.all([
+      this.evaluate.execute(input.userId),
+      this.awards.listForUser(input.userId),
+    ]);
+    return { badges: mergeBadgeSnapshots(live.badges, persisted) };
   }
 }
 
@@ -93,16 +122,16 @@ export class RecomputeBadges {
       throw new DomainError("userId is required");
     }
 
-    const snapshot = await this.evaluate.execute(userId);
+    const live = await this.evaluate.execute(userId);
     await this.awards.upsertAwards(
       userId,
-      snapshot.badges.map((badge) => ({
+      live.badges.map((badge) => ({
         userId,
         badgeId: badge.id,
         earnedAt: new Date(badge.earnedAt),
       })),
     );
-
-    return snapshot;
+    const persisted = await this.awards.listForUser(userId);
+    return { badges: mergeBadgeSnapshots(live.badges, persisted) };
   }
 }

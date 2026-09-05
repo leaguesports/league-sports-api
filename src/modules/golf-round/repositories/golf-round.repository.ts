@@ -7,4 +7,6 @@ export interface GolfRoundRepository {
   persistLock(round: GolfRound): Promise<GolfRound>;
   listLockedByPlayerUserId(userId: string): Promise<GolfRound[]>;
   listLockedByVenueCmsId(cmsId: CmsId): Promise<GolfRound[]>;
+  /** Session-attributed lock timestamps for badge evaluation. */
+  listLockedAtForBadges(userId: string): Promise<Date[]>;
 }

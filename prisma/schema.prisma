@@ -133,12 +133,14 @@ model Match {
   servingTeam MatchTeam?
   winnerTeam  MatchTeam?
   lockedAt    DateTime?
+  lockedByUserId String?
   score       Json?
   createdAt   DateTime      @default(now())
   players     MatchPlayer[]
 
   @@index([venueCmsId])
   @@index([status, startsAt])
+  @@index([lockedByUserId])
 }
 
 model MatchPlayer {
@@ -171,11 +173,13 @@ model GolfRound {
   course       Json
   score        Json?
   lockedAt     DateTime?
+  lockedByUserId String?
   createdAt    DateTime        @default(now())
   players      GolfRoundPlayer[]
 
   @@index([venueCmsId])
   @@index([status, startsAt])
+  @@index([lockedByUserId])
 }
 
 model GolfRoundPlayer {

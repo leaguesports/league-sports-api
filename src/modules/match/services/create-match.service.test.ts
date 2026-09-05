@@ -128,11 +128,13 @@ describe("match application", () => {
       matchId: created.id,
       score: scoreA,
       winner: "A",
+      lockedByUserId: "user-riley",
     });
     const again = await lock.execute({
       matchId: created.id,
       score: scoreA,
       winner: "A",
+      lockedByUserId: "user-riley",
     });
 
     expect(locked?.status).toBe("locked");
@@ -199,9 +201,24 @@ describe("match application", () => {
       },
     });
 
-    await lock.execute({ matchId: older.id, score: scoreA, winner: "A" });
-    await lock.execute({ matchId: newer.id, score: scoreA, winner: "A" });
-    await lock.execute({ matchId: otherCourt.id, score: scoreA, winner: "A" });
+    await lock.execute({
+      matchId: older.id,
+      score: scoreA,
+      winner: "A",
+      lockedByUserId: "user-riley",
+    });
+    await lock.execute({
+      matchId: newer.id,
+      score: scoreA,
+      winner: "A",
+      lockedByUserId: "user-riley",
+    });
+    await lock.execute({
+      matchId: otherCourt.id,
+      score: scoreA,
+      winner: "A",
+      lockedByUserId: "user-pat",
+    });
 
     const playerHistory = await new ListLockedMatchesByPlayer(
       matches,
@@ -244,8 +261,18 @@ describe("match application", () => {
       ruleset: "golden_point",
       pairings: guests,
     });
-    await lock.execute({ matchId: atCourt1.id, score: scoreA, winner: "A" });
-    await lock.execute({ matchId: atCourt2.id, score: scoreA, winner: "A" });
+    await lock.execute({
+      matchId: atCourt1.id,
+      score: scoreA,
+      winner: "A",
+      lockedByUserId: "user-riley",
+    });
+    await lock.execute({
+      matchId: atCourt2.id,
+      score: scoreA,
+      winner: "A",
+      lockedByUserId: "user-riley",
+    });
 
     const findByCmsId = jest.spyOn(venues, "findByCmsId");
     const findByCmsIds = jest.spyOn(venues, "findByCmsIds");

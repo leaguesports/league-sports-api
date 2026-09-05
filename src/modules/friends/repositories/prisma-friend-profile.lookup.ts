@@ -60,4 +60,54 @@ export class PrismaFriendProfileLookup implements FriendProfileLookup {
       });
     }
   }
+
+  async search(
+    query: string,
+    options: { limit?: number; excludeUserId?: string } = {},
+  ): Promise<FriendProfile[]> {
+    const needle = query.trim().replace(/^@/, "");
+    if (!needle) return [];
+
+    const limit = Math.min(Math.max(options.limit ?? 10, 1), 20);
+    const excludeUserId = options.excludeUserId?.trim() || undefined;
+
+    try {
+      const rows = await this.prisma.profile.findMany({
+        where: {
+          AND: [
+            excludeUserId ? { userId: { not: excludeUserId } } : {},
+            {
+              OR: [
+                {
+                  handle: {
+                    contains: needle,
+                    mode: "insensitive",
+                  },
+                },
+                {
+                  firstName: {
+                    contains: needle,
+                    mode: "insensitive",
+                  },
+                },
+                {
+                  lastName: {
+                    contains: needle,
+                    mode: "insensitive",
+                  },
+                },
+              ],
+            },
+          ],
+        },
+        take: limit,
+        orderBy: { handle: "asc" },
+      });
+      return rows.map(toProfile);
+    } catch (error) {
+      throw new FriendshipPersistenceError("Failed to search profiles", {
+        cause: error,
+      });
+    }
+  }
 }

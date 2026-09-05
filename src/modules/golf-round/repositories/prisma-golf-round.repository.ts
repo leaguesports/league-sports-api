@@ -158,6 +158,24 @@ export class PrismaGolfRoundRepository implements GolfRoundRepository {
       throw wrapPersistenceError(error, "Unable to load golf round");
     }
   }
+
+  async listLockedAtForBadges(userId: string): Promise<Date[]> {
+    try {
+      const rows = await this.prisma.golfRound.findMany({
+        where: {
+          status: "locked",
+          players: { some: { userId } },
+        },
+        select: {
+          lockedAt: true,
+          startsAt: true,
+        },
+      });
+      return rows.map((row) => row.lockedAt ?? row.startsAt);
+    } catch (error) {
+      throw wrapPersistenceError(error, "Unable to load golf round");
+    }
+  }
 }
 
 function toDomain(row: GolfRoundRow): GolfRound {

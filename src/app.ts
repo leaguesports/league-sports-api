@@ -26,10 +26,15 @@ import {
   createVenueModule,
   VenueRepository,
 } from "./modules/venue";
+import {
+  createFixturesModule,
+  FixtureFollowRepository,
+} from "./modules/fixtures";
 
 export type CreateAppDependencies = {
   venueRepository?: VenueRepository;
   venueFollowRepository?: import("./modules/venue").VenueFollowRepository;
+  fixtureFollowRepository?: FixtureFollowRepository;
   friendshipRepository?: FriendshipRepository;
   friendProfileLookup?: FriendProfileLookup;
   matchRepository?: MatchRepository;
@@ -69,6 +74,12 @@ export async function createApp(
     tryGetSessionUserId: identity.tryGetSessionUserId,
     requireAuth: identity.authorizationMiddleware,
   });
+  const fixtures = createFixturesModule({
+    prisma,
+    fixtureFollowRepository: dependencies.fixtureFollowRepository,
+    tryGetSessionUserId: identity.tryGetSessionUserId,
+    requireAuth: identity.authorizationMiddleware,
+  });
   const match = createMatchModule({
     prisma,
     venueRepository: venue.venueRepository,
@@ -100,6 +111,7 @@ export async function createApp(
 
   app.use(identity.router);
   app.use(venue.router);
+  app.use(fixtures.router);
   app.use(match.router);
   app.use(golfRound.router);
   app.use(friends.router);

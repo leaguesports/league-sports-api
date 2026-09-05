@@ -2,7 +2,10 @@ import { Prisma, PrismaClient } from "../../../generated/prisma/client";
 import { CmsId } from "../../venue/entities/cms-id";
 import { Match, MatchStatusValue } from "../entities/match";
 import { MatchLockConflictError } from "../entities/match-lock-conflict-error";
-import { MatchRepository } from "./match.repository";
+import {
+  LockedPadelBadgeRow,
+  MatchRepository,
+} from "./match.repository";
 import { MatchScore } from "../entities/match-score";
 import { Pairings } from "../entities/pairings";
 import { MatchPersistenceError } from "../entities/match-persistence-error";
@@ -159,6 +162,48 @@ export class PrismaMatchRepository implements MatchRepository {
       throw wrapPersistenceError(error, "Unable to load match");
     }
   }
+  async listLockedPadelResultsForBadges(
+    userId: string,
+  ): Promise<LockedPadelBadgeRow[]> {
+    try {
+      const rows = await this.prisma.match.findMany({
+        where: {
+          status: "locked",
+          players: { some: { userId } },
+        },
+        select: {
+          lockedAt: true,
+          startsAt: true,
+          winnerTeam: true,
+          players: {
+            where: { userId },
+            select: { slot: true },
+          },
+        },
+      });
+
+      return rows.map((row) => {
+        const slot = row.players[0]?.slot ?? null;
+        const playerTeam =
+          typeof slot === "string" && slot.startsWith("A")
+            ? "A"
+            : typeof slot === "string" && slot.startsWith("B")
+              ? "B"
+              : null;
+        const won =
+          row.winnerTeam && playerTeam
+            ? row.winnerTeam === playerTeam
+            : null;
+        return {
+          lockedAt: row.lockedAt ?? row.startsAt,
+          won,
+        };
+      });
+    } catch (error) {
+      throw wrapPersistenceError(error, "Unable to load match");
+    }
+  }
+
 }
 
 function toDomain(row: MatchRow): Match {

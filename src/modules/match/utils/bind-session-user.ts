@@ -14,6 +14,35 @@ function withSessionUser(player: MatchPlayerInput, sessionUserId: string): Match
   return { ...player, userId: sessionUserId, isGuest: false };
 }
 
+/**
+ * Strip account ids that are not the session user. Foreign ids become guests so
+ * create cannot plant another user's id for badge evidence.
+ */
+function stripNonSessionUserIds(
+  pairings: PairingsInput,
+  sessionUserId: string | null,
+): PairingsInput {
+  const strip = (player: MatchPlayerInput): MatchPlayerInput => {
+    const id = normalizedUserId(player.userId);
+    if (sessionUserId && id === sessionUserId) {
+      return withSessionUser(player, sessionUserId);
+    }
+    if (id !== null) {
+      return {
+        displayName: player.displayName,
+        isGuest: true,
+        userId: null,
+      };
+    }
+    return { ...player, userId: null };
+  };
+
+  return {
+    teamA: [strip(pairings.teamA[0]), strip(pairings.teamA[1])],
+    teamB: [strip(pairings.teamB[0]), strip(pairings.teamB[1])],
+  };
+}
+
 export function bindSessionUserIdToPairings(
   pairings: PairingsInput,
   sessionUserId: string,
@@ -57,4 +86,16 @@ export function bindSessionUserIdToPairings(
   }
 
   return { teamA, teamB };
+}
+
+/** Sanitize create payload: only the session user may be stamped as a userId. */
+export function sanitizePairingsForCreate(
+  pairings: PairingsInput,
+  sessionUserId: string | null,
+): PairingsInput {
+  const stripped = stripNonSessionUserIds(pairings, sessionUserId);
+  if (!sessionUserId) {
+    return stripped;
+  }
+  return bindSessionUserIdToPairings(stripped, sessionUserId);
 }

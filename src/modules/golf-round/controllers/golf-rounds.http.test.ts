@@ -151,8 +151,8 @@ describe("golf rounds HTTP", () => {
         {
           slot: 3,
           displayName: "Riley",
-          isGuest: false,
-          userId: "user-riley",
+          isGuest: true,
+          userId: null,
         },
       ],
     });
@@ -203,7 +203,10 @@ describe("golf rounds HTTP", () => {
       `${server.url}/api/golf-rounds/${createdBody.id}/lock`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: sessionCookie("user-riley"),
+        },
         body: JSON.stringify({ score: scoreA }),
       },
     );
@@ -249,7 +252,7 @@ describe("golf rounds HTTP", () => {
     expect(blankVenue.status).toBe(400);
   });
 
-  test("lock is 200, idempotent for the same score, 409 on conflict", async () => {
+  test("lock requires a seated session player", async () => {
     const created = await fetch(`${server.url}/api/golf-rounds`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -257,9 +260,48 @@ describe("golf rounds HTTP", () => {
     });
     const { id } = (await created.json()) as { id: string };
 
-    const locked = await fetch(`${server.url}/api/golf-rounds/${id}/lock`, {
+    const unauth = await fetch(`${server.url}/api/golf-rounds/${id}/lock`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ score: scoreA }),
+    });
+    expect(unauth.status).toBe(401);
+
+    const notSeated = await fetch(`${server.url}/api/golf-rounds/${id}/lock`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: sessionCookie("user-riley"),
+      },
+      body: JSON.stringify({ score: scoreA }),
+    });
+    expect(notSeated.status).toBe(403);
+  });
+
+  test("lock is 200, idempotent for the same score, 409 on conflict", async () => {
+    const created = await fetch(`${server.url}/api/golf-rounds`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: sessionCookie("user-riley"),
+      },
+      body: JSON.stringify({
+        ...createBody,
+        players: [
+          { slot: 1, displayName: "Alex", isGuest: true, userId: null },
+          { slot: 2, displayName: "Sam", isGuest: true, userId: null },
+          { slot: 3, displayName: "Riley", isGuest: false, userId: null },
+        ],
+      }),
+    });
+    const { id } = (await created.json()) as { id: string };
+
+    const locked = await fetch(`${server.url}/api/golf-rounds/${id}/lock`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: sessionCookie("user-riley"),
+      },
       body: JSON.stringify({ score: scoreA }),
     });
     const lockedBody = (await locked.json()) as {
@@ -273,14 +315,20 @@ describe("golf rounds HTTP", () => {
 
     const again = await fetch(`${server.url}/api/golf-rounds/${id}/lock`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: sessionCookie("user-riley"),
+      },
       body: JSON.stringify({ score: scoreA }),
     });
     expect(again.status).toBe(200);
 
     const conflict = await fetch(`${server.url}/api/golf-rounds/${id}/lock`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: sessionCookie("user-riley"),
+      },
       body: JSON.stringify({
         score: scoreForPlayers(
           courseHoles9.map((hole) => hole.number),
@@ -293,7 +341,10 @@ describe("golf rounds HTTP", () => {
 
     const missing = await fetch(`${server.url}/api/golf-rounds/missing/lock`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: sessionCookie("user-riley"),
+      },
       body: JSON.stringify({ score: scoreA }),
     });
     expect(missing.status).toBe(404);
@@ -302,18 +353,34 @@ describe("golf rounds HTTP", () => {
   test("history lists only locked rounds, newest first, with venue details", async () => {
     const older = await fetch(`${server.url}/api/golf-rounds`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: sessionCookie("user-riley"),
+      },
       body: JSON.stringify({
         ...createBody,
         startsAt: "2026-08-01T10:00:00.000Z",
+        players: [
+          { slot: 1, displayName: "Alex", isGuest: true, userId: null },
+          { slot: 2, displayName: "Sam", isGuest: true, userId: null },
+          { slot: 3, displayName: "Riley", isGuest: false, userId: null },
+        ],
       }),
     });
     const newer = await fetch(`${server.url}/api/golf-rounds`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: sessionCookie("user-riley"),
+      },
       body: JSON.stringify({
         ...createBody,
         startsAt: "2026-08-20T10:00:00.000Z",
+        players: [
+          { slot: 1, displayName: "Alex", isGuest: true, userId: null },
+          { slot: 2, displayName: "Sam", isGuest: true, userId: null },
+          { slot: 3, displayName: "Riley", isGuest: false, userId: null },
+        ],
       }),
     });
     const olderBody = (await older.json()) as { id: string };
@@ -321,12 +388,18 @@ describe("golf rounds HTTP", () => {
 
     await fetch(`${server.url}/api/golf-rounds/${olderBody.id}/lock`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: sessionCookie("user-riley"),
+      },
       body: JSON.stringify({ score: scoreA }),
     });
     await fetch(`${server.url}/api/golf-rounds/${newerBody.id}/lock`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: sessionCookie("user-riley"),
+      },
       body: JSON.stringify({ score: scoreA }),
     });
 
@@ -373,8 +446,18 @@ describe("golf rounds HTTP", () => {
   test("lock maps persistence failures instead of returning 200", async () => {
     const created = await fetch(`${server.url}/api/golf-rounds`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(createBody),
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: sessionCookie("user-riley"),
+      },
+      body: JSON.stringify({
+        ...createBody,
+        players: [
+          { slot: 1, displayName: "Alex", isGuest: true, userId: null },
+          { slot: 2, displayName: "Sam", isGuest: true, userId: null },
+          { slot: 3, displayName: "Riley", isGuest: false, userId: null },
+        ],
+      }),
     });
     const { id } = (await created.json()) as { id: string };
 
@@ -392,13 +475,17 @@ describe("golf rounds HTTP", () => {
           rounds.listLockedByPlayerUserId(userId),
         listLockedByVenueCmsId: (cmsId) =>
           rounds.listLockedByVenueCmsId(cmsId),
+        listLockedAtForBadges: (userId) => rounds.listLockedAtForBadges(userId),
       },
     });
     server = await listen(app);
 
     const response = await fetch(`${server.url}/api/golf-rounds/${id}/lock`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: sessionCookie("user-riley"),
+      },
       body: JSON.stringify({ score: scoreA }),
     });
 

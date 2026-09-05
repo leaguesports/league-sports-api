@@ -45,6 +45,12 @@ export class InMemoryGolfRoundRepository implements GolfRoundRepository {
     );
   }
 
+
+  async listLockedAtForBadges(userId: string): Promise<Date[]> {
+    const rounds = await this.listLockedByPlayerUserId(userId);
+    return rounds.map((round) => round.lockedAt ?? round.startsAt.value);
+  }
+
   private lockedNewestFirst(): GolfRound[] {
     return [...this.byId.values()]
       .filter((round) => round.isLocked)

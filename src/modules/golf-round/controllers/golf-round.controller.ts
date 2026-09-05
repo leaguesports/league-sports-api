@@ -121,6 +121,7 @@ export function createGolfRoundController(deps: {
         const round = await deps.lockGolfRound.execute({
           roundId: id,
           score: body.score,
+          lockedByUserId: sessionUserId,
         });
 
         if (!round) {

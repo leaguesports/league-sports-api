@@ -50,6 +50,7 @@ export class GolfRound {
     readonly players: readonly GolfPlayer[],
     private scoreValue: GolfScore | null,
     private lockedAtValue: Date | null,
+    private lockedByUserIdValue: string | null,
   ) {}
 
   static create(props: CreateGolfRoundProps): GolfRound {
@@ -74,6 +75,7 @@ export class GolfRound {
       players,
       null,
       null,
+      null,
     );
   }
 
@@ -89,6 +91,7 @@ export class GolfRound {
     players: GolfPlayer[];
     score: GolfScore | null;
     lockedAt: Date | null;
+    lockedByUserId?: string | null;
   }): GolfRound {
     return new GolfRound(
       props.id,
@@ -102,6 +105,7 @@ export class GolfRound {
       props.players,
       props.score,
       props.lockedAt,
+      normalizeLockedByUserId(props.lockedByUserId),
     );
   }
 
@@ -117,6 +121,10 @@ export class GolfRound {
     return this.lockedAtValue;
   }
 
+  get lockedByUserId(): string | null {
+    return this.lockedByUserIdValue;
+  }
+
   get isLocked(): boolean {
     return this.statusValue === "locked";
   }
@@ -129,7 +137,11 @@ export class GolfRound {
     return this.players.some((player) => player.hasUserId(userId));
   }
 
-  lock(score: GolfScore, lockedAt = new Date()): void {
+  lock(
+    score: GolfScore,
+    lockedAt = new Date(),
+    lockedByUserId: string | null = null,
+  ): void {
     if (this.statusValue === "locked") {
       if (this.hasSameScore(score)) {
         return;
@@ -141,6 +153,7 @@ export class GolfRound {
     this.statusValue = "locked";
     this.scoreValue = score;
     this.lockedAtValue = lockedAt;
+    this.lockedByUserIdValue = normalizeLockedByUserId(lockedByUserId);
   }
 
   hasSameScore(score: GolfScore): boolean {
@@ -177,6 +190,14 @@ export class GolfRound {
       lockedAt: this.lockedAtValue?.toISOString() ?? null,
     };
   }
+}
+
+function normalizeLockedByUserId(userId: string | null | undefined): string | null {
+  if (typeof userId !== "string") {
+    return null;
+  }
+  const value = userId.trim();
+  return value.length === 0 ? null : value;
 }
 
 function parseHolesPlayed(raw: unknown): number {

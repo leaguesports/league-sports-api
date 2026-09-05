@@ -28,6 +28,7 @@ type GolfRoundRow = {
   course: Prisma.JsonValue;
   score: Prisma.JsonValue | null;
   lockedAt: Date | null;
+  lockedByUserId: string | null;
   players: GolfRoundPlayerRow[];
 };
 
@@ -91,6 +92,7 @@ export class PrismaGolfRoundRepository implements GolfRoundRepository {
         data: {
           status: "locked",
           lockedAt: round.lockedAt,
+          lockedByUserId: round.lockedByUserId,
           score: snapshot.score === null ? Prisma.JsonNull : snapshot.score,
         },
       });
@@ -164,7 +166,7 @@ export class PrismaGolfRoundRepository implements GolfRoundRepository {
       const rows = await this.prisma.golfRound.findMany({
         where: {
           status: "locked",
-          players: { some: { userId } },
+          lockedByUserId: userId,
         },
         select: {
           lockedAt: true,
@@ -209,6 +211,7 @@ function toDomain(row: GolfRoundRow): GolfRound {
         })
       : null,
     lockedAt: row.lockedAt,
+    lockedByUserId: row.lockedByUserId,
   });
 }
 

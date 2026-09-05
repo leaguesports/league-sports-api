@@ -297,7 +297,7 @@ describe("matches HTTP", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ...createBody, venueCmsId: "no-such-court" }),
     });
-    expect(missingVenue.status).toBe(400);
+    expect(missingVenue.status).toBe(404);
 
     const incomplete = await fetch(`${server.url}/api/matches`, {
       method: "POST",

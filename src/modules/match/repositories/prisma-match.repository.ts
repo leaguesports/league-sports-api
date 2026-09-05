@@ -32,6 +32,7 @@ type MatchRow = {
   servingTeam: "A" | "B" | null;
   winnerTeam: "A" | "B" | null;
   lockedAt: Date | null;
+  lockedByUserId: string | null;
   score: Prisma.JsonValue | null;
   players: MatchPlayerRow[];
 };
@@ -95,6 +96,7 @@ export class PrismaMatchRepository implements MatchRepository {
           status: "locked",
           winnerTeam: snapshot.winner,
           lockedAt: match.lockedAt,
+          lockedByUserId: match.lockedByUserId,
           score: snapshot.score === null ? Prisma.JsonNull : snapshot.score,
         },
       });
@@ -169,7 +171,7 @@ export class PrismaMatchRepository implements MatchRepository {
       const rows = await this.prisma.match.findMany({
         where: {
           status: "locked",
-          players: { some: { userId } },
+          lockedByUserId: userId,
         },
         select: {
           lockedAt: true,
@@ -226,6 +228,7 @@ function toDomain(row: MatchRow): Match {
     score: row.score ? MatchScore.from(row.score) : null,
     winner: row.winnerTeam ? Team.from(row.winnerTeam, "winner") : null,
     lockedAt: row.lockedAt,
+    lockedByUserId: row.lockedByUserId,
   });
 }
 

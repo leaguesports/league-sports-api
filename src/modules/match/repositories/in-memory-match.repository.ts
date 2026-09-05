@@ -53,15 +53,20 @@ export class InMemoryMatchRepository implements MatchRepository {
     userId: string,
   ): Promise<LockedPadelBadgeRow[]> {
     const matches = await this.listLockedByPlayerUserId(userId);
-    return matches.map((match) => {
+    return matches.flatMap((match) => {
+      if (match.lockedByUserId !== userId) {
+        return [];
+      }
       const player = match.pairings.playerOnTeam(userId);
       const winner = match.winner;
       const won =
         !player || !winner ? null : player.slot.team.equals(winner);
-      return {
-        lockedAt: match.lockedAt ?? match.startsAt.value,
-        won,
-      };
+      return [
+        {
+          lockedAt: match.lockedAt ?? match.startsAt.value,
+          won,
+        },
+      ];
     });
   }
 
@@ -90,5 +95,6 @@ function clone(match: Match | null): Match | null {
     score: match.score,
     winner: match.winner,
     lockedAt: match.lockedAt,
+    lockedByUserId: match.lockedByUserId,
   });
 }

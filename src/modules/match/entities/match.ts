@@ -43,6 +43,7 @@ export class Match {
     private scoreValue: MatchScore | null,
     private winnerValue: Team | null,
     private lockedAtValue: Date | null,
+    private lockedByUserIdValue: string | null,
   ) {}
 
   static create(props: CreateMatchProps): Match {
@@ -54,6 +55,7 @@ export class Match {
       "live",
       props.servingTeam ?? Team.A,
       Pairings.from(props.pairings),
+      null,
       null,
       null,
       null,
@@ -71,6 +73,7 @@ export class Match {
     score: MatchScore | null;
     winner: Team | null;
     lockedAt: Date | null;
+    lockedByUserId?: string | null;
   }): Match {
     return new Match(
       props.id,
@@ -83,6 +86,7 @@ export class Match {
       props.score,
       props.winner,
       props.lockedAt,
+      normalizeLockedByUserId(props.lockedByUserId),
     );
   }
 
@@ -102,11 +106,20 @@ export class Match {
     return this.lockedAtValue;
   }
 
+  get lockedByUserId(): string | null {
+    return this.lockedByUserIdValue;
+  }
+
   get isLocked(): boolean {
     return this.statusValue === "locked";
   }
 
-  lock(score: MatchScore, winner: Team, lockedAt = new Date()): void {
+  lock(
+    score: MatchScore,
+    winner: Team,
+    lockedAt = new Date(),
+    lockedByUserId: string | null = null,
+  ): void {
     if (this.statusValue === "locked") {
       if (this.hasSameResult(score, winner)) {
         return;
@@ -119,6 +132,7 @@ export class Match {
     this.scoreValue = score;
     this.winnerValue = winner;
     this.lockedAtValue = lockedAt;
+    this.lockedByUserIdValue = normalizeLockedByUserId(lockedByUserId);
   }
 
   hasSameResult(score: MatchScore, winner: Team): boolean {
@@ -159,4 +173,12 @@ export class Match {
       lockedAt: this.lockedAtValue?.toISOString() ?? null,
     };
   }
+}
+
+function normalizeLockedByUserId(userId: string | null | undefined): string | null {
+  if (typeof userId !== "string") {
+    return null;
+  }
+  const value = userId.trim();
+  return value.length === 0 ? null : value;
 }

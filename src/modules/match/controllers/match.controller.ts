@@ -124,6 +124,7 @@ export function createMatchController(deps: {
           matchId: id,
           score: body.score,
           winner: body.winner,
+          lockedByUserId: sessionUserId,
         });
 
         if (!match) {

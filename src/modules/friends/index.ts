@@ -21,6 +21,7 @@ import {
   ListFriends,
   RemoveFriend,
   RequestFriend,
+  SearchUsers,
 } from "./services/friends.service";
 
 export type CreateFriendsModuleParams = {
@@ -58,6 +59,7 @@ export function createFriendsModule({
     acceptFriend: new AcceptFriend(friendshipRepository, friendProfileLookup),
     removeFriend: new RemoveFriend(friendshipRepository),
     listFriends: new ListFriends(friendshipRepository, friendProfileLookup),
+    searchUsers: new SearchUsers(friendshipRepository, friendProfileLookup),
     tryGetSessionUserId,
   });
 
@@ -89,4 +91,9 @@ export {
   ListFriends,
   RemoveFriend,
   RequestFriend,
+  SearchUsers,
+} from "./services/friends.service";
+export type {
+  PublicUserSearchResult,
+  UserSearchRelationship,
 } from "./services/friends.service";

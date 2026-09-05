@@ -36,15 +36,28 @@ model Account {
 }
 
 model Profile {
-  id        String  @id @default(uuid())
-  userId    String  @unique
-  firstName String
-  lastName  String
-  email     String  @unique @default("")
-  handle    String  @unique
-  avatarUrl String?
+  id                     String    @id @default(uuid())
+  userId                 String    @unique
+  firstName              String
+  lastName               String
+  email                  String    @unique @default("")
+  handle                 String    @unique
+  avatarUrl              String?
+  activeSportSlug        String?
+  onboardingCompletedAt  DateTime?
+  onboardingSkippedAt    DateTime?
 
   user User @relation(fields: [userId], references: [id])
+}
+
+model SportFollow {
+  id        String   @id @default(uuid())
+  userId    String
+  sportSlug String
+  createdAt DateTime @default(now())
+
+  @@unique([userId, sportSlug])
+  @@index([userId])
 }
 
 model Venue {

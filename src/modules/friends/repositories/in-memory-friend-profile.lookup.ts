@@ -22,4 +22,26 @@ export class InMemoryFriendProfileLookup implements FriendProfileLookup {
     if (!userId) return null;
     return this.findByUserId(userId);
   }
+
+  async search(
+    query: string,
+    options: { limit?: number; excludeUserId?: string } = {},
+  ): Promise<FriendProfile[]> {
+    const needle = query.trim().replace(/^@/, "").toLowerCase();
+    if (!needle) return [];
+
+    const limit = Math.min(Math.max(options.limit ?? 10, 1), 20);
+    const excludeUserId = options.excludeUserId?.trim() || "";
+
+    const matches: FriendProfile[] = [];
+    for (const profile of this.byUserId.values()) {
+      if (excludeUserId && profile.userId === excludeUserId) continue;
+      const handle = profile.handle.toLowerCase();
+      const name = profile.displayName.toLowerCase();
+      if (!handle.includes(needle) && !name.includes(needle)) continue;
+      matches.push({ ...profile });
+      if (matches.length >= limit) break;
+    }
+    return matches;
+  }
 }

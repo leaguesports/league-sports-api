@@ -139,6 +139,27 @@ describe("badges HTTP", () => {
     });
   });
 
+  test("GET merges persisted awards with live evaluation", async () => {
+    const token = jwt.sign({ userId: "user-1" }, config.JWT_SECRET);
+    await awards.upsertAwards("user-1", [
+      {
+        userId: "user-1",
+        badgeId: "first_friend",
+        earnedAt: new Date("2026-08-01T09:00:00.000Z"),
+      },
+    ]);
+
+    const res = await fetch(`${server.url}/api/me/badges`, {
+      headers: { Cookie: `token=${token}` },
+    });
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toEqual({
+      badges: [
+        { id: "first_friend", earnedAt: "2026-08-01T09:00:00.000Z" },
+      ],
+    });
+  });
+
   test("POST rejects client earnedIds and accepts empty recompute", async () => {
     const token = jwt.sign({ userId: "user-1" }, config.JWT_SECRET);
 

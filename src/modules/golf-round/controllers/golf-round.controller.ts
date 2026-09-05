@@ -12,7 +12,7 @@ import {
   ListLockedGolfRoundsByVenue,
 } from "../services/list-locked-golf-rounds.service";
 import { LockGolfRound } from "../services/lock-golf-round.service";
-import { bindSessionUserIdToPlayers } from "../utils/bind-session-user";
+import { sanitizePlayersForCreate } from "../utils/bind-session-user";
 
 const playerSchema = z.object({
   slot: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]),
@@ -76,9 +76,7 @@ export function createGolfRoundController(deps: {
       try {
         const body = z.parse(createGolfRoundBodySchema, req.body ?? {});
         const sessionUserId = deps.tryGetSessionUserId(req);
-        const players = sessionUserId
-          ? bindSessionUserIdToPlayers(body.players, sessionUserId)
-          : body.players;
+        const players = sanitizePlayersForCreate(body.players, sessionUserId);
         const round = await deps.createGolfRound.execute({ ...body, players });
         return res.status(201).json(round.toSnapshot());
       } catch (error) {
@@ -103,8 +101,23 @@ export function createGolfRoundController(deps: {
 
     async lock(req: Request, res: Response) {
       try {
+        const sessionUserId = deps.tryGetSessionUserId(req);
+        if (!sessionUserId) {
+          return res.status(401).json({ error: "Unauthorized" });
+        }
+
         const { id } = z.parse(golfRoundIdParamSchema, req.params);
         const body = z.parse(lockGolfRoundBodySchema, req.body ?? {});
+        const existing = await deps.getGolfRoundById.execute(id);
+        if (!existing) {
+          return res.status(404).json({ error: "Golf round not found" });
+        }
+        if (!existing.hasPlayerUserId(sessionUserId)) {
+          return res.status(403).json({
+            error: "Only a seated player can lock this golf round",
+          });
+        }
+
         const round = await deps.lockGolfRound.execute({
           roundId: id,
           score: body.score,

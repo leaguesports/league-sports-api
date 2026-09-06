@@ -83,6 +83,17 @@ model VenueFollow {
   @@index([venueCmsId])
 }
 
+model FixtureFollow {
+  id          String   @id @default(uuid())
+  userId      String
+  fixtureSlug String   @db.VarChar(80)
+  createdAt   DateTime @default(now())
+
+  @@unique([userId, fixtureSlug])
+  @@index([userId])
+  @@index([fixtureSlug])
+}
+
 enum FriendshipStatus {
   pending
   accepted

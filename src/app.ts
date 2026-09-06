@@ -31,6 +31,10 @@ import {
   PreferencesRepository,
 } from "./modules/preferences";
 import {
+  createTrainingModule,
+  TrainingEnrollmentRepository,
+} from "./modules/training";
+import {
   createVenueModule,
   VenueRepository,
 } from "./modules/venue";
@@ -45,6 +49,7 @@ export type CreateAppDependencies = {
   badgeAwardRepository?: BadgeAwardRepository;
   preferencesRepository?: PreferencesRepository;
   communityRepository?: CommunityRepository;
+  trainingEnrollmentRepository?: TrainingEnrollmentRepository;
 };
 
 export async function createApp(
@@ -120,6 +125,12 @@ export async function createApp(
     tryGetSessionUserId: identity.tryGetSessionUserId,
     requireAuth: identity.authorizationMiddleware,
   });
+  const training = createTrainingModule({
+    prisma,
+    trainingEnrollmentRepository: dependencies.trainingEnrollmentRepository,
+    tryGetSessionUserId: identity.tryGetSessionUserId,
+    requireAuth: identity.authorizationMiddleware,
+  });
 
   app.use(identity.router);
   app.use(venue.router);
@@ -129,6 +140,7 @@ export async function createApp(
   app.use(preferences.router);
   app.use(badges.router);
   app.use(communities.router);
+  app.use(training.router);
 
   app.use(
     (

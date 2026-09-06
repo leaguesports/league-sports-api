@@ -144,6 +144,30 @@ model BadgeAward {
   @@index([userId])
 }
 
+// Curated training plans live in code (src/modules/training/catalog), not this table.
+// This model is session-owned enrollment + progress only. No User FK — same as
+// Friendship / BadgeAward / CommunityMember.
+enum TrainingEnrollmentStatus {
+  active
+  completed
+}
+
+model TrainingEnrollment {
+  id               String                    @id @default(uuid())
+  userId           String
+  planId           String
+  status           TrainingEnrollmentStatus  @default(active)
+  completedStepIds String[]
+  percentComplete  Int                       @default(0)
+  currentStepIndex Int                       @default(0)
+  startedAt        DateTime                  @default(now())
+  updatedAt        DateTime                  @updatedAt
+  completedAt      DateTime?
+
+  @@index([userId])
+  @@index([userId, planId, status])
+}
+
 
 enum MatchRuleset {
   golden_point

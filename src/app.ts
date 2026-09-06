@@ -35,6 +35,10 @@ import {
   TrainingEnrollmentRepository,
 } from "./modules/training";
 import {
+  createIntegrationsModule,
+  IntegrationConnectionRepository,
+} from "./modules/integrations";
+import {
   createVenueModule,
   VenueRepository,
 } from "./modules/venue";
@@ -50,6 +54,7 @@ export type CreateAppDependencies = {
   preferencesRepository?: PreferencesRepository;
   communityRepository?: CommunityRepository;
   trainingEnrollmentRepository?: TrainingEnrollmentRepository;
+  integrationConnectionRepository?: IntegrationConnectionRepository;
 };
 
 export async function createApp(
@@ -131,6 +136,14 @@ export async function createApp(
     tryGetSessionUserId: identity.tryGetSessionUserId,
     requireAuth: identity.authorizationMiddleware,
   });
+  const integrations = createIntegrationsModule({
+    prisma,
+    tokenEncryptionKey: config.JWT_SECRET,
+    integrationConnectionRepository:
+      dependencies.integrationConnectionRepository,
+    tryGetSessionUserId: identity.tryGetSessionUserId,
+    requireAuth: identity.authorizationMiddleware,
+  });
 
   app.use(identity.router);
   app.use(venue.router);
@@ -141,6 +154,7 @@ export async function createApp(
   app.use(badges.router);
   app.use(communities.router);
   app.use(training.router);
+  app.use(integrations.router);
 
   app.use(
     (

@@ -168,6 +168,33 @@ model TrainingEnrollment {
   @@index([userId, planId, status])
 }
 
+// Session-owned provider connection + import history. Catalog (Trackman /
+// Autodarts / generic-import) lives in src/modules/integrations/catalog.
+// No User FK — same as Friendship / BadgeAward / TrainingEnrollment.
+enum IntegrationConnectionStatus {
+  connected
+  disconnected
+}
+
+model IntegrationConnection {
+  id                   String                      @id @default(uuid())
+  userId               String
+  providerId           String
+  status               IntegrationConnectionStatus @default(disconnected)
+  lastSyncedAt         DateTime?
+  importedSessionCount Int                         @default(0)
+  importedSessions     Json                        @default("[]")
+  encryptedToken       String?
+  tokenHint            String?
+  connectedAt          DateTime?
+  disconnectedAt       DateTime?
+  createdAt            DateTime                    @default(now())
+  updatedAt            DateTime                    @updatedAt
+
+  @@unique([userId, providerId])
+  @@index([userId])
+}
+
 
 enum MatchRuleset {
   golden_point

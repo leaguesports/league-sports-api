@@ -2,18 +2,18 @@ import { Request, Response } from "express";
 import { z } from "zod";
 
 import { DomainError } from "../../../lib/domain-error";
-import { ClubPersistenceError } from "../repositories/club-persistence-error";
+import { CommunityPersistenceError } from "../repositories/community-persistence-error";
 import {
-  ClubMembershipNotFoundError,
-  ClubNotFoundError,
-  CreateClub,
-  GetClub,
-  JoinClub,
-  LeaveClub,
-  ListClubs,
-  ListMyClubs,
+  CommunityMembershipNotFoundError,
+  CommunityNotFoundError,
+  CreateCommunity,
+  GetCommunity,
+  JoinCommunity,
+  LeaveCommunity,
+  ListCommunities,
+  ListMyCommunities,
   SoleOwnerLeaveError,
-} from "../services/clubs.service";
+} from "../services/communities.service";
 
 const createBodySchema = z.object({
   name: z.string(),
@@ -21,7 +21,7 @@ const createBodySchema = z.object({
   sport: z.string().nullable().optional(),
 });
 
-const clubIdParamSchema = z.object({
+const communityIdParamSchema = z.object({
   id: z.string(),
 });
 
@@ -29,27 +29,29 @@ const listQuerySchema = z.object({
   limit: z.string().optional(),
 });
 
-export function createClubsController(deps: {
-  createClub: CreateClub;
-  getClub: GetClub;
-  listClubs: ListClubs;
-  listMyClubs: ListMyClubs;
-  joinClub: JoinClub;
-  leaveClub: LeaveClub;
+export function createCommunitiesController(deps: {
+  createCommunity: CreateCommunity;
+  getCommunity: GetCommunity;
+  listCommunities: ListCommunities;
+  listMyCommunities: ListMyCommunities;
+  joinCommunity: JoinCommunity;
+  leaveCommunity: LeaveCommunity;
   tryGetSessionUserId: (req: Request) => string | null;
 }) {
   return {
     async list(req: Request, res: Response) {
       try {
         const query = z.parse(listQuerySchema, req.query ?? {});
-        const limitRaw = query.limit ? Number.parseInt(query.limit, 10) : undefined;
-        const result = await deps.listClubs.execute({
+        const limitRaw = query.limit
+          ? Number.parseInt(query.limit, 10)
+          : undefined;
+        const result = await deps.listCommunities.execute({
           userId: deps.tryGetSessionUserId(req),
           limit: limitRaw,
         });
         return res.status(200).json(result);
       } catch (error) {
-        return sendClubsError(res, error);
+        return sendCommunitiesError(res, error);
       }
     },
 
@@ -61,7 +63,7 @@ export function createClubsController(deps: {
         }
 
         const body = z.parse(createBodySchema, req.body ?? {});
-        const result = await deps.createClub.execute({
+        const result = await deps.createCommunity.execute({
           userId,
           name: body.name,
           city: body.city,
@@ -69,20 +71,20 @@ export function createClubsController(deps: {
         });
         return res.status(201).json(result);
       } catch (error) {
-        return sendClubsError(res, error);
+        return sendCommunitiesError(res, error);
       }
     },
 
     async get(req: Request, res: Response) {
       try {
-        const { id } = z.parse(clubIdParamSchema, req.params);
-        const result = await deps.getClub.execute({
-          clubId: id,
+        const { id } = z.parse(communityIdParamSchema, req.params);
+        const result = await deps.getCommunity.execute({
+          communityId: id,
           userId: deps.tryGetSessionUserId(req),
         });
         return res.status(200).json(result);
       } catch (error) {
-        return sendClubsError(res, error);
+        return sendCommunitiesError(res, error);
       }
     },
 
@@ -93,14 +95,14 @@ export function createClubsController(deps: {
           return res.status(401).json({ error: "Unauthorized" });
         }
 
-        const { id } = z.parse(clubIdParamSchema, req.params);
-        const result = await deps.joinClub.execute({
+        const { id } = z.parse(communityIdParamSchema, req.params);
+        const result = await deps.joinCommunity.execute({
           userId,
-          clubId: id,
+          communityId: id,
         });
         return res.status(200).json(result);
       } catch (error) {
-        return sendClubsError(res, error);
+        return sendCommunitiesError(res, error);
       }
     },
 
@@ -111,14 +113,14 @@ export function createClubsController(deps: {
           return res.status(401).json({ error: "Unauthorized" });
         }
 
-        const { id } = z.parse(clubIdParamSchema, req.params);
-        const result = await deps.leaveClub.execute({
+        const { id } = z.parse(communityIdParamSchema, req.params);
+        const result = await deps.leaveCommunity.execute({
           userId,
-          clubId: id,
+          communityId: id,
         });
         return res.status(200).json(result);
       } catch (error) {
-        return sendClubsError(res, error);
+        return sendCommunitiesError(res, error);
       }
     },
 
@@ -129,21 +131,21 @@ export function createClubsController(deps: {
           return res.status(401).json({ error: "Unauthorized" });
         }
 
-        const result = await deps.listMyClubs.execute({ userId });
+        const result = await deps.listMyCommunities.execute({ userId });
         return res.status(200).json(result);
       } catch (error) {
-        return sendClubsError(res, error);
+        return sendCommunitiesError(res, error);
       }
     },
   };
 }
 
-function sendClubsError(res: Response, error: unknown) {
-  if (error instanceof ClubNotFoundError) {
+function sendCommunitiesError(res: Response, error: unknown) {
+  if (error instanceof CommunityNotFoundError) {
     return res.status(404).json({ error: error.message });
   }
 
-  if (error instanceof ClubMembershipNotFoundError) {
+  if (error instanceof CommunityMembershipNotFoundError) {
     return res.status(404).json({ error: error.message });
   }
 
@@ -156,10 +158,10 @@ function sendClubsError(res: Response, error: unknown) {
   }
 
   if (error instanceof z.ZodError) {
-    return res.status(400).json({ error: "Invalid clubs payload" });
+    return res.status(400).json({ error: "Invalid communities payload" });
   }
 
-  if (error instanceof ClubPersistenceError) {
+  if (error instanceof CommunityPersistenceError) {
     return res.status(503).json({ error: error.message });
   }
 

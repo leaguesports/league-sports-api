@@ -9,7 +9,7 @@ import { Config } from "../../../config";
 import { InMemoryFriendProfileLookup } from "../../friends/repositories/in-memory-friend-profile.lookup";
 import { InMemoryFriendshipRepository } from "../../friends/repositories/in-memory-friendship.repository";
 import { InMemoryVenueRepository } from "../../venue/repositories/in-memory-venue.repository";
-import { InMemoryClubRepository } from "../repositories/in-memory-club.repository";
+import { InMemoryCommunityRepository } from "../repositories/in-memory-community.repository";
 
 function makeConfig(): Config {
   return {
@@ -41,15 +41,15 @@ async function listen(app: Express) {
   };
 }
 
-describe("clubs HTTP", () => {
+describe("communities HTTP", () => {
   const config = makeConfig();
-  let clubs: InMemoryClubRepository;
+  let communities: InMemoryCommunityRepository;
   let profiles: InMemoryFriendProfileLookup;
   let app: Express;
   let server: { url: string; close: () => Promise<void> };
 
   beforeEach(async () => {
-    clubs = new InMemoryClubRepository();
+    communities = new InMemoryCommunityRepository();
     profiles = new InMemoryFriendProfileLookup();
     profiles.seed({
       userId: "user-a",
@@ -68,7 +68,7 @@ describe("clubs HTTP", () => {
       venueRepository: new InMemoryVenueRepository(),
       friendshipRepository: new InMemoryFriendshipRepository(),
       friendProfileLookup: profiles,
-      clubRepository: clubs,
+      communityRepository: communities,
     });
     server = await listen(app);
   });
@@ -83,46 +83,51 @@ describe("clubs HTTP", () => {
   }
 
   test("create requires auth and lists/details are public", async () => {
-    const unauth = await fetch(`${server.url}/api/clubs`, {
+    const unauth = await fetch(`${server.url}/api/communities`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: "Sea Point Padel", city: "Cape Town" }),
+      body: JSON.stringify({ name: "Sunday Beers", city: "Cape Town" }),
     });
     expect(unauth.status).toBe(401);
 
-    const created = await fetch(`${server.url}/api/clubs`, {
+    const created = await fetch(`${server.url}/api/communities`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Cookie: cookie("user-a"),
       },
       body: JSON.stringify({
-        name: "Sea Point Padel",
+        name: "Sunday Beers",
         city: "Cape Town",
         sport: "padel",
       }),
     });
     expect(created.status).toBe(201);
     const createdBody = (await created.json()) as {
-      club: { id: string; memberCount: number; role: string; members: unknown[] };
+      community: {
+        id: string;
+        memberCount: number;
+        role: string;
+        members: unknown[];
+      };
     };
-    expect(createdBody.club).toMatchObject({
-      name: "Sea Point Padel",
+    expect(createdBody.community).toMatchObject({
+      name: "Sunday Beers",
       city: "Cape Town",
       sport: "padel",
       memberCount: 1,
       joined: true,
       role: "owner",
     });
-    expect(createdBody.club.members).toHaveLength(1);
+    expect(createdBody.community.members).toHaveLength(1);
 
-    const listed = await fetch(`${server.url}/api/clubs`);
+    const listed = await fetch(`${server.url}/api/communities`);
     expect(listed.status).toBe(200);
     expect(await listed.json()).toMatchObject({
-      clubs: [
+      communities: [
         {
-          id: createdBody.club.id,
-          name: "Sea Point Padel",
+          id: createdBody.community.id,
+          name: "Sunday Beers",
           memberCount: 1,
           joined: false,
           role: null,
@@ -130,18 +135,22 @@ describe("clubs HTTP", () => {
       ],
     });
 
-    const sessionList = await fetch(`${server.url}/api/clubs`, {
+    const sessionList = await fetch(`${server.url}/api/communities`, {
       headers: { Cookie: cookie("user-a") },
     });
     expect(await sessionList.json()).toMatchObject({
-      clubs: [{ id: createdBody.club.id, joined: true, role: "owner" }],
+      communities: [
+        { id: createdBody.community.id, joined: true, role: "owner" },
+      ],
     });
 
-    const detail = await fetch(`${server.url}/api/clubs/${createdBody.club.id}`);
+    const detail = await fetch(
+      `${server.url}/api/communities/${createdBody.community.id}`,
+    );
     expect(detail.status).toBe(200);
     expect(await detail.json()).toMatchObject({
-      club: {
-        id: createdBody.club.id,
+      community: {
+        id: createdBody.community.id,
         memberCount: 1,
         members: [{ handle: "alex", role: "owner" }],
       },
@@ -149,28 +158,38 @@ describe("clubs HTTP", () => {
   });
 
   test("join is idempotent and leave updates member count", async () => {
-    const created = await fetch(`${server.url}/api/clubs`, {
+    const created = await fetch(`${server.url}/api/communities`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Cookie: cookie("user-a"),
       },
-      body: JSON.stringify({ name: "Joburg Multi", city: "Johannesburg", sport: "multi" }),
+      body: JSON.stringify({
+        name: "Joburg Sundays",
+        city: "Johannesburg",
+        sport: "multi",
+      }),
     });
-    const { club } = (await created.json()) as { club: { id: string } };
+    const { community } = (await created.json()) as {
+      community: { id: string };
+    };
 
-    const unauthJoin = await fetch(`${server.url}/api/clubs/${club.id}/join`, {
-      method: "POST",
-    });
+    const unauthJoin = await fetch(
+      `${server.url}/api/communities/${community.id}/join`,
+      { method: "POST" },
+    );
     expect(unauthJoin.status).toBe(401);
 
-    const joined = await fetch(`${server.url}/api/clubs/${club.id}/join`, {
-      method: "POST",
-      headers: { Cookie: cookie("user-b") },
-    });
+    const joined = await fetch(
+      `${server.url}/api/communities/${community.id}/join`,
+      {
+        method: "POST",
+        headers: { Cookie: cookie("user-b") },
+      },
+    );
     expect(joined.status).toBe(200);
     expect(await joined.json()).toMatchObject({
-      club: {
+      community: {
         memberCount: 2,
         joined: true,
         role: "member",
@@ -178,63 +197,76 @@ describe("clubs HTTP", () => {
       },
     });
 
-    const joinedAgain = await fetch(`${server.url}/api/clubs/${club.id}/join`, {
-      method: "POST",
-      headers: { Cookie: cookie("user-b") },
-    });
+    const joinedAgain = await fetch(
+      `${server.url}/api/communities/${community.id}/join`,
+      {
+        method: "POST",
+        headers: { Cookie: cookie("user-b") },
+      },
+    );
     expect(joinedAgain.status).toBe(200);
     expect(await joinedAgain.json()).toMatchObject({
-      club: { memberCount: 2 },
+      community: { memberCount: 2 },
     });
 
-    const mine = await fetch(`${server.url}/api/me/clubs`, {
+    const mine = await fetch(`${server.url}/api/me/communities`, {
       headers: { Cookie: cookie("user-b") },
     });
     expect(mine.status).toBe(200);
     expect(await mine.json()).toMatchObject({
-      clubs: [{ id: club.id, role: "member", memberCount: 2 }],
+      communities: [{ id: community.id, role: "member", memberCount: 2 }],
     });
 
-    const left = await fetch(`${server.url}/api/clubs/${club.id}/join`, {
-      method: "DELETE",
-      headers: { Cookie: cookie("user-b") },
-    });
+    const left = await fetch(
+      `${server.url}/api/communities/${community.id}/join`,
+      {
+        method: "DELETE",
+        headers: { Cookie: cookie("user-b") },
+      },
+    );
     expect(left.status).toBe(200);
     expect(await left.json()).toEqual({ ok: true });
 
-    const afterLeave = await fetch(`${server.url}/api/clubs/${club.id}`);
+    const afterLeave = await fetch(
+      `${server.url}/api/communities/${community.id}`,
+    );
     expect(await afterLeave.json()).toMatchObject({
-      club: { memberCount: 1, members: [{ handle: "alex" }] },
+      community: { memberCount: 1, members: [{ handle: "alex" }] },
     });
   });
 
-  test("sole owner cannot leave and guests cannot read /me/clubs", async () => {
-    const created = await fetch(`${server.url}/api/clubs`, {
+  test("sole owner cannot leave and guests cannot read /me/communities", async () => {
+    const created = await fetch(`${server.url}/api/communities`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Cookie: cookie("user-a"),
       },
-      body: JSON.stringify({ name: "Owner Club", city: "Cape Town" }),
+      body: JSON.stringify({ name: "Owner League", city: "Cape Town" }),
     });
-    const { club } = (await created.json()) as { club: { id: string } };
+    const { community } = (await created.json()) as {
+      community: { id: string };
+    };
 
-    const blocked = await fetch(`${server.url}/api/clubs/${club.id}/join`, {
-      method: "DELETE",
-      headers: { Cookie: cookie("user-a") },
-    });
+    const blocked = await fetch(
+      `${server.url}/api/communities/${community.id}/join`,
+      {
+        method: "DELETE",
+        headers: { Cookie: cookie("user-a") },
+      },
+    );
     expect(blocked.status).toBe(409);
     expect(await blocked.json()).toEqual({
-      error: "Sole owner cannot leave the club",
+      error: "Sole owner cannot leave the community",
     });
 
-    const unauthMe = await fetch(`${server.url}/api/me/clubs`);
+    const unauthMe = await fetch(`${server.url}/api/me/communities`);
     expect(unauthMe.status).toBe(401);
 
-    const missing = await fetch(`${server.url}/api/clubs/does-not-exist`);
+    const missing = await fetch(`${server.url}/api/communities/does-not-exist`);
     expect(missing.status).toBe(404);
 
-    const invalid = await fetch(`${server.url}/api/clubs`, {
+    const invalid = await fetch(`${server.url}/api/communities`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

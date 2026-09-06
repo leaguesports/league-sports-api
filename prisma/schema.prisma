@@ -101,35 +101,35 @@ model Friendship {
   @@index([addresseeId, status])
 }
 
-enum ClubMemberRole {
+enum CommunityMemberRole {
   owner
   member
 }
 
-model Club {
-  id        String       @id @default(uuid())
+model Community {
+  id        String            @id @default(uuid())
   name      String
   city      String
   sport     String?
-  createdAt DateTime     @default(now())
-  updatedAt DateTime     @updatedAt
-  members   ClubMember[]
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+  members   CommunityMember[]
 
   @@index([createdAt])
 }
 
-model ClubMember {
-  id        String         @id @default(uuid())
-  clubId    String
-  userId    String
-  role      ClubMemberRole @default(member)
-  createdAt DateTime       @default(now())
+model CommunityMember {
+  id          String               @id @default(uuid())
+  communityId String
+  userId      String
+  role        CommunityMemberRole  @default(member)
+  createdAt   DateTime             @default(now())
 
-  club Club @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  community Community @relation(fields: [communityId], references: [id], onDelete: Cascade)
 
-  @@unique([clubId, userId])
+  @@unique([communityId, userId])
   @@index([userId])
-  @@index([clubId])
+  @@index([communityId])
 }
 
 model BadgeAward {

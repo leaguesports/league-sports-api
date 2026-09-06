@@ -3,12 +3,15 @@ import {
   FriendProfile,
   FriendProfileLookup,
 } from "../../friends/repositories/friendship.repository";
-import { ClubRepository, ClubSummary } from "../repositories/club.repository";
+import {
+  CommunityRepository,
+  CommunitySummary,
+} from "../repositories/community.repository";
 
-export const CLUB_SPORTS = ["padel", "multi"] as const;
-export type ClubSport = (typeof CLUB_SPORTS)[number];
+export const COMMUNITY_SPORTS = ["padel", "multi"] as const;
+export type CommunitySport = (typeof COMMUNITY_SPORTS)[number];
 
-export type PublicClubMember = {
+export type PublicCommunityMember = {
   id: string;
   displayName: string;
   handle: string;
@@ -17,7 +20,7 @@ export type PublicClubMember = {
   joinedAt: string;
 };
 
-export type PublicClubSummary = {
+export type PublicCommunitySummary = {
   id: string;
   name: string;
   city: string;
@@ -28,11 +31,11 @@ export type PublicClubSummary = {
   role: "owner" | "member" | null;
 };
 
-export type PublicClub = PublicClubSummary & {
-  members: PublicClubMember[];
+export type PublicCommunity = PublicCommunitySummary & {
+  members: PublicCommunityMember[];
 };
 
-export type PublicMyClub = PublicClubSummary & {
+export type PublicMyCommunity = PublicCommunitySummary & {
   role: "owner" | "member";
   joinedAt: string;
 };
@@ -46,7 +49,7 @@ function parseSport(raw: string | null | undefined): string | null {
   if (raw == null) return null;
   const sport = raw.trim().toLowerCase();
   if (sport.length === 0) return null;
-  if (!(CLUB_SPORTS as readonly string[]).includes(sport)) {
+  if (!(COMMUNITY_SPORTS as readonly string[]).includes(sport)) {
     throw new DomainError("sport must be padel or multi");
   }
   return sport;
@@ -74,16 +77,16 @@ function parseLimit(raw?: number): number {
 }
 
 function toPublicSummary(
-  club: ClubSummary,
+  community: CommunitySummary,
   membership: { role: "owner" | "member" } | null,
-): PublicClubSummary {
+): PublicCommunitySummary {
   return {
-    id: club.id,
-    name: club.name,
-    city: club.city,
-    sport: club.sport,
-    memberCount: club.memberCount,
-    createdAt: club.createdAt.toISOString(),
+    id: community.id,
+    name: community.name,
+    city: community.city,
+    sport: community.sport,
+    memberCount: community.memberCount,
+    createdAt: community.createdAt.toISOString(),
     joined: membership != null,
     role: membership?.role ?? null,
   };
@@ -110,13 +113,13 @@ async function toPublicMembers(
     role: "owner" | "member";
     createdAt: Date;
   }>,
-): Promise<PublicClubMember[]> {
+): Promise<PublicCommunityMember[]> {
   const sorted = [...members].sort((a, b) => {
     if (a.role !== b.role) return a.role === "owner" ? -1 : 1;
     return a.createdAt.getTime() - b.createdAt.getTime();
   });
 
-  const out: PublicClubMember[] = [];
+  const out: PublicCommunityMember[] = [];
   for (const member of sorted) {
     const profile = await resolveProfile(lookup, member.userId);
     out.push({
@@ -131,9 +134,9 @@ async function toPublicMembers(
   return out;
 }
 
-export class CreateClub {
+export class CreateCommunity {
   constructor(
-    private readonly clubs: ClubRepository,
+    private readonly communities: CommunityRepository,
     private readonly profiles: FriendProfileLookup,
   ) {}
 
@@ -142,11 +145,11 @@ export class CreateClub {
     name: unknown;
     city: unknown;
     sport?: string | null;
-  }): Promise<{ club: PublicClub }> {
+  }): Promise<{ community: PublicCommunity }> {
     const userId = input.userId.trim();
     if (!userId) throw new DomainError("userId is required");
 
-    const created = await this.clubs.create({
+    const created = await this.communities.create({
       name: parseName(input.name),
       city: parseCity(input.city),
       sport: parseSport(input.sport),
@@ -154,7 +157,7 @@ export class CreateClub {
     });
 
     return {
-      club: {
+      community: {
         ...toPublicSummary(
           { ...created, memberCount: created.members.length },
           { role: "owner" },
@@ -165,162 +168,170 @@ export class CreateClub {
   }
 }
 
-export class GetClub {
+export class GetCommunity {
   constructor(
-    private readonly clubs: ClubRepository,
+    private readonly communities: CommunityRepository,
     private readonly profiles: FriendProfileLookup,
   ) {}
 
   async execute(input: {
-    clubId: string;
+    communityId: string;
     userId?: string | null;
-  }): Promise<{ club: PublicClub }> {
-    const clubId = input.clubId.trim();
-    if (!clubId) throw new DomainError("club id is required");
+  }): Promise<{ community: PublicCommunity }> {
+    const communityId = input.communityId.trim();
+    if (!communityId) throw new DomainError("community id is required");
 
-    const club = await this.clubs.findById(clubId);
-    if (!club) throw new ClubNotFoundError();
+    const community = await this.communities.findById(communityId);
+    if (!community) throw new CommunityNotFoundError();
 
     const userId = input.userId?.trim() || "";
     const membership = userId
-      ? club.members.find((row) => row.userId === userId) ?? null
+      ? community.members.find((row) => row.userId === userId) ?? null
       : null;
 
     return {
-      club: {
-        ...toPublicSummary({ ...club, memberCount: club.members.length }, membership),
-        members: await toPublicMembers(this.profiles, club.members),
+      community: {
+        ...toPublicSummary(
+          { ...community, memberCount: community.members.length },
+          membership,
+        ),
+        members: await toPublicMembers(this.profiles, community.members),
       },
     };
   }
 }
 
-export class ListClubs {
-  constructor(private readonly clubs: ClubRepository) {}
+export class ListCommunities {
+  constructor(private readonly communities: CommunityRepository) {}
 
   async execute(input: {
     userId?: string | null;
     limit?: number;
-  }): Promise<{ clubs: PublicClubSummary[] }> {
-    const clubs = await this.clubs.list({ limit: parseLimit(input.limit) });
+  }): Promise<{ communities: PublicCommunitySummary[] }> {
+    const rows = await this.communities.list({ limit: parseLimit(input.limit) });
     const userId = input.userId?.trim() || "";
-    const mine = userId ? await this.clubs.listForUser(userId) : [];
-    const roleByClub = new Map(mine.map((row) => [row.id, row.role]));
+    const mine = userId ? await this.communities.listForUser(userId) : [];
+    const roleByCommunity = new Map(mine.map((row) => [row.id, row.role]));
 
     return {
-      clubs: clubs.map((club) => {
-        const role = roleByClub.get(club.id);
-        return toPublicSummary(club, role ? { role } : null);
+      communities: rows.map((community) => {
+        const role = roleByCommunity.get(community.id);
+        return toPublicSummary(community, role ? { role } : null);
       }),
     };
   }
 }
 
-export class ListMyClubs {
-  constructor(private readonly clubs: ClubRepository) {}
+export class ListMyCommunities {
+  constructor(private readonly communities: CommunityRepository) {}
 
-  async execute(input: { userId: string }): Promise<{ clubs: PublicMyClub[] }> {
+  async execute(input: {
+    userId: string;
+  }): Promise<{ communities: PublicMyCommunity[] }> {
     const userId = input.userId.trim();
     if (!userId) throw new DomainError("userId is required");
 
-    const clubs = await this.clubs.listForUser(userId);
+    const rows = await this.communities.listForUser(userId);
     return {
-      clubs: clubs.map((club) => ({
-        ...toPublicSummary(club, { role: club.role }),
-        role: club.role,
-        joinedAt: club.joinedAt.toISOString(),
+      communities: rows.map((community) => ({
+        ...toPublicSummary(community, { role: community.role }),
+        role: community.role,
+        joinedAt: community.joinedAt.toISOString(),
       })),
     };
   }
 }
 
-export class JoinClub {
+export class JoinCommunity {
   constructor(
-    private readonly clubs: ClubRepository,
+    private readonly communities: CommunityRepository,
     private readonly profiles: FriendProfileLookup,
   ) {}
 
   async execute(input: {
     userId: string;
-    clubId: string;
-  }): Promise<{ club: PublicClub }> {
+    communityId: string;
+  }): Promise<{ community: PublicCommunity }> {
     const userId = input.userId.trim();
-    const clubId = input.clubId.trim();
+    const communityId = input.communityId.trim();
     if (!userId) throw new DomainError("userId is required");
-    if (!clubId) throw new DomainError("club id is required");
+    if (!communityId) throw new DomainError("community id is required");
 
-    const existing = await this.clubs.findById(clubId);
-    if (!existing) throw new ClubNotFoundError();
+    const existing = await this.communities.findById(communityId);
+    if (!existing) throw new CommunityNotFoundError();
 
-    await this.clubs.addMember(clubId, userId, "member");
-    const club = await this.clubs.findById(clubId);
-    if (!club) throw new ClubNotFoundError();
+    await this.communities.addMember(communityId, userId, "member");
+    const community = await this.communities.findById(communityId);
+    if (!community) throw new CommunityNotFoundError();
 
-    const membership = club.members.find((row) => row.userId === userId) ?? {
+    const membership = community.members.find((row) => row.userId === userId) ?? {
       role: "member" as const,
     };
 
     return {
-      club: {
+      community: {
         ...toPublicSummary(
-          { ...club, memberCount: club.members.length },
+          { ...community, memberCount: community.members.length },
           { role: membership.role },
         ),
-        members: await toPublicMembers(this.profiles, club.members),
+        members: await toPublicMembers(this.profiles, community.members),
       },
     };
   }
 }
 
-export class LeaveClub {
-  constructor(private readonly clubs: ClubRepository) {}
+export class LeaveCommunity {
+  constructor(private readonly communities: CommunityRepository) {}
 
   async execute(input: {
     userId: string;
-    clubId: string;
+    communityId: string;
   }): Promise<{ ok: true }> {
     const userId = input.userId.trim();
-    const clubId = input.clubId.trim();
+    const communityId = input.communityId.trim();
     if (!userId) throw new DomainError("userId is required");
-    if (!clubId) throw new DomainError("club id is required");
+    if (!communityId) throw new DomainError("community id is required");
 
-    const club = await this.clubs.findById(clubId);
-    if (!club) throw new ClubNotFoundError();
+    const community = await this.communities.findById(communityId);
+    if (!community) throw new CommunityNotFoundError();
 
-    const membership = await this.clubs.findMembership(clubId, userId);
-    if (!membership) throw new ClubMembershipNotFoundError();
+    const membership = await this.communities.findMembership(
+      communityId,
+      userId,
+    );
+    if (!membership) throw new CommunityMembershipNotFoundError();
 
     if (membership.role === "owner") {
-      const owners = await this.clubs.countOwners(clubId);
+      const owners = await this.communities.countOwners(communityId);
       if (owners <= 1) {
         throw new SoleOwnerLeaveError();
       }
     }
 
-    const removed = await this.clubs.removeMember(clubId, userId);
-    if (!removed) throw new ClubMembershipNotFoundError();
+    const removed = await this.communities.removeMember(communityId, userId);
+    if (!removed) throw new CommunityMembershipNotFoundError();
 
     return { ok: true as const };
   }
 }
 
-export class ClubNotFoundError extends Error {
+export class CommunityNotFoundError extends Error {
   constructor() {
-    super("Club not found");
-    this.name = "ClubNotFoundError";
+    super("Community not found");
+    this.name = "CommunityNotFoundError";
   }
 }
 
-export class ClubMembershipNotFoundError extends Error {
+export class CommunityMembershipNotFoundError extends Error {
   constructor() {
-    super("Club membership not found");
-    this.name = "ClubMembershipNotFoundError";
+    super("Community membership not found");
+    this.name = "CommunityMembershipNotFoundError";
   }
 }
 
 export class SoleOwnerLeaveError extends Error {
   constructor() {
-    super("Sole owner cannot leave the club");
+    super("Sole owner cannot leave the community");
     this.name = "SoleOwnerLeaveError";
   }
 }

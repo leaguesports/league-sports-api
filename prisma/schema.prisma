@@ -101,6 +101,36 @@ model Friendship {
   @@index([addresseeId, status])
 }
 
+enum ClubMemberRole {
+  owner
+  member
+}
+
+model Club {
+  id        String       @id @default(uuid())
+  name      String
+  city      String
+  sport     String?
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  members   ClubMember[]
+
+  @@index([createdAt])
+}
+
+model ClubMember {
+  id        String         @id @default(uuid())
+  clubId    String
+  userId    String
+  role      ClubMemberRole @default(member)
+  createdAt DateTime       @default(now())
+
+  club Club @relation(fields: [clubId], references: [id], onDelete: Cascade)
+
+  @@unique([clubId, userId])
+  @@index([userId])
+  @@index([clubId])
+}
 
 model BadgeAward {
   id        String   @id @default(uuid())

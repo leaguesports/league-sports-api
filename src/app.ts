@@ -23,6 +23,10 @@ import {
   BadgeAwardRepository,
 } from "./modules/badges";
 import {
+  createClubsModule,
+  ClubRepository,
+} from "./modules/clubs";
+import {
   createPreferencesModule,
   PreferencesRepository,
 } from "./modules/preferences";
@@ -40,6 +44,7 @@ export type CreateAppDependencies = {
   golfRoundRepository?: GolfRoundRepository;
   badgeAwardRepository?: BadgeAwardRepository;
   preferencesRepository?: PreferencesRepository;
+  clubRepository?: ClubRepository;
 };
 
 export async function createApp(
@@ -108,6 +113,13 @@ export async function createApp(
     tryGetSessionUserId: identity.tryGetSessionUserId,
     requireAuth: identity.authorizationMiddleware,
   });
+  const clubs = createClubsModule({
+    prisma,
+    clubRepository: dependencies.clubRepository,
+    friendProfileLookup: friends.friendProfileLookup,
+    tryGetSessionUserId: identity.tryGetSessionUserId,
+    requireAuth: identity.authorizationMiddleware,
+  });
 
   app.use(identity.router);
   app.use(venue.router);
@@ -116,6 +128,7 @@ export async function createApp(
   app.use(friends.router);
   app.use(preferences.router);
   app.use(badges.router);
+  app.use(clubs.router);
 
   app.use(
     (

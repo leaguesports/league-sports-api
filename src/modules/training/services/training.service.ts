@@ -1,6 +1,7 @@
 import { DomainError } from "../../../lib/domain-error";
 import { TrainingCatalog } from "../catalog/training-catalog";
 import { TrainingEnrollment } from "../entities/training-enrollment";
+import { TrainingEnrollmentActiveConflictError } from "../entities/training-enrollment-active-conflict-error";
 import { TrainingEnrollmentCompletedError } from "../entities/training-enrollment-completed-error";
 import { TrainingEnrollmentNotFoundError } from "../entities/training-enrollment-not-found-error";
 import { TrainingPlan } from "../entities/training-plan";
@@ -87,10 +88,22 @@ export class CreateEnrollment {
       return { enrollment: toPublicEnrollment(active), resumed: true };
     }
 
-    const created = await this.enrollments.create(
-      TrainingEnrollment.start(userId, plan),
-    );
-    return { enrollment: toPublicEnrollment(created), resumed: false };
+    try {
+      const created = await this.enrollments.create(
+        TrainingEnrollment.start(userId, plan),
+      );
+      return { enrollment: toPublicEnrollment(created), resumed: false };
+    } catch (error) {
+      if (error instanceof TrainingEnrollmentActiveConflictError) {
+        const active =
+          error.existing ??
+          (await this.enrollments.findActiveByUserAndPlan(userId, plan.id));
+        if (active) {
+          return { enrollment: toPublicEnrollment(active), resumed: true };
+        }
+      }
+      throw error;
+    }
   }
 }
 
@@ -137,6 +150,7 @@ export class AdvanceEnrollment {
   }
 }
 
+export { TrainingEnrollmentActiveConflictError } from "../entities/training-enrollment-active-conflict-error";
 export { TrainingEnrollmentCompletedError } from "../entities/training-enrollment-completed-error";
 export { TrainingEnrollmentNotFoundError } from "../entities/training-enrollment-not-found-error";
 export { TrainingPlanNotFoundError } from "../entities/training-plan-not-found-error";

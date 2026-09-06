@@ -77,6 +77,7 @@ export { TrainingSport, TRAINING_SPORTS } from "./entities/training-sport";
 export { TrainingFocus, TRAINING_FOCUSES } from "./entities/training-focus";
 export { EnrollmentStatus } from "./entities/enrollment-status";
 export { PercentComplete } from "./entities/percent-complete";
+export { TrainingEnrollmentActiveConflictError } from "./entities/training-enrollment-active-conflict-error";
 export { TrainingEnrollmentPersistenceError } from "./entities/training-enrollment-persistence-error";
 export { TrainingEnrollmentNotFoundError } from "./entities/training-enrollment-not-found-error";
 export { TrainingEnrollmentCompletedError } from "./entities/training-enrollment-completed-error";

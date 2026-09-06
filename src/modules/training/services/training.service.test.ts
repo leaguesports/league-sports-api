@@ -1,6 +1,9 @@
 import { DomainError } from "../../../lib/domain-error";
 import { TrainingCatalog } from "../catalog/training-catalog";
+import { TrainingEnrollment } from "../entities/training-enrollment";
+import { TrainingEnrollmentActiveConflictError } from "../entities/training-enrollment-active-conflict-error";
 import { InMemoryTrainingEnrollmentRepository } from "../repositories/in-memory-training-enrollment.repository";
+import { TrainingPlanId } from "../entities/training-plan-id";
 import {
   AdvanceEnrollment,
   CreateEnrollment,
@@ -9,6 +12,21 @@ import {
   TrainingEnrollmentNotFoundError,
   TrainingPlanNotFoundError,
 } from "./training.service";
+
+class RaceyEnrollmentRepository extends InMemoryTrainingEnrollmentRepository {
+  missActiveOnce = false;
+
+  override async findActiveByUserAndPlan(
+    userId: string,
+    planId: TrainingPlanId,
+  ) {
+    if (this.missActiveOnce) {
+      this.missActiveOnce = false;
+      return null;
+    }
+    return super.findActiveByUserAndPlan(userId, planId);
+  }
+}
 
 describe("training services", () => {
   function setup() {
@@ -196,5 +214,109 @@ describe("training services", () => {
         percentComplete: 50,
       }),
     ).rejects.toBeInstanceOf(TrainingEnrollmentCompletedError);
+  });
+
+  test("create treats a unique-active race as resume", async () => {
+    const catalog = TrainingCatalog.padel();
+    const enrollments = new RaceyEnrollmentRepository(catalog);
+    const create = new CreateEnrollment(enrollments, catalog);
+    const first = await create.execute({
+      userId: "user-a",
+      planId: "accuracy-focus",
+    });
+
+    enrollments.missActiveOnce = true;
+    const raced = await create.execute({
+      userId: "user-a",
+      planId: "accuracy-focus",
+    });
+    expect(raced.resumed).toBe(true);
+    expect(raced.enrollment.id).toBe(first.enrollment.id);
+
+    const colliding = TrainingEnrollment.start(
+      "user-a",
+      catalog.require("accuracy-focus"),
+    );
+    await expect(enrollments.create(colliding)).rejects.toBeInstanceOf(
+      TrainingEnrollmentActiveConflictError,
+    );
+  });
+
+  test("list skips drifted enrollments and still returns the catalog", async () => {
+    const { enrollments, list, create } = setup();
+    await create.execute({ userId: "user-a", planId: "accuracy-focus" });
+    enrollments.seedSnapshot({
+      id: "retired-1",
+      userId: "user-a",
+      planId: "retired-plan",
+      status: "completed",
+      completedStepIds: ["old-step"],
+      percentComplete: 100,
+      currentStepIndex: 1,
+      startedAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-02T00:00:00.000Z",
+      completedAt: "2026-01-02T00:00:00.000Z",
+    });
+    enrollments.seedSnapshot({
+      id: "stale-step",
+      userId: "user-a",
+      planId: "accuracy-focus",
+      status: "completed",
+      completedStepIds: ["removed-drill"],
+      percentComplete: 100,
+      currentStepIndex: 1,
+      startedAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-03T00:00:00.000Z",
+      completedAt: "2026-01-03T00:00:00.000Z",
+    });
+
+    const listed = await list.execute({ userId: "user-a" });
+    expect(listed.plans.map((plan) => plan.id)).toContain("accuracy-focus");
+    expect(listed.enrollments.map((row) => row.id)).toEqual(
+      expect.not.arrayContaining(["retired-1", "stale-step"]),
+    );
+    expect(listed.enrollments).toHaveLength(1);
+    expect(listed.enrollments[0]?.planId).toBe("accuracy-focus");
+  });
+
+  test("list caps enrollments at 50 with active first", async () => {
+    const { enrollments, list } = setup();
+    const now = Date.parse("2026-01-01T00:00:00.000Z");
+    for (let i = 0; i < 60; i += 1) {
+      enrollments.seedSnapshot({
+        id: `done-${i}`,
+        userId: "user-a",
+        planId: "accuracy-focus",
+        status: "completed",
+        completedStepIds: [
+          "warm-up",
+          "target-practice",
+          "precision-drills",
+          "cool-down",
+        ],
+        percentComplete: 100,
+        currentStepIndex: 4,
+        startedAt: new Date(now + i).toISOString(),
+        updatedAt: new Date(now + i).toISOString(),
+        completedAt: new Date(now + i).toISOString(),
+      });
+    }
+    enrollments.seedSnapshot({
+      id: "active-now",
+      userId: "user-a",
+      planId: "consistency-builder",
+      status: "active",
+      completedStepIds: [],
+      percentComplete: 0,
+      currentStepIndex: 0,
+      startedAt: new Date(now + 1000).toISOString(),
+      updatedAt: new Date(now + 1000).toISOString(),
+      completedAt: null,
+    });
+
+    const listed = await list.execute({ userId: "user-a" });
+    expect(listed.enrollments).toHaveLength(50);
+    expect(listed.enrollments[0]?.id).toBe("active-now");
+    expect(listed.enrollments.every((row) => row.id !== "done-0")).toBe(true);
   });
 });

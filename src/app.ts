@@ -42,6 +42,10 @@ import {
   createVenueModule,
   VenueRepository,
 } from "./modules/venue";
+import {
+  createPoolsModule,
+  PoolRepository,
+} from "./modules/pools";
 
 export type CreateAppDependencies = {
   venueRepository?: VenueRepository;
@@ -55,6 +59,7 @@ export type CreateAppDependencies = {
   communityRepository?: CommunityRepository;
   trainingEnrollmentRepository?: TrainingEnrollmentRepository;
   integrationConnectionRepository?: IntegrationConnectionRepository;
+  poolRepository?: PoolRepository;
 };
 
 export async function createApp(
@@ -144,6 +149,13 @@ export async function createApp(
     tryGetSessionUserId: identity.tryGetSessionUserId,
     requireAuth: identity.authorizationMiddleware,
   });
+  const pools = createPoolsModule({
+    prisma,
+    poolRepository: dependencies.poolRepository,
+    friendProfileLookup: friends.friendProfileLookup,
+    tryGetSessionUserId: identity.tryGetSessionUserId,
+    requireAuth: identity.authorizationMiddleware,
+  });
 
   app.use(identity.router);
   app.use(venue.router);
@@ -155,6 +167,7 @@ export async function createApp(
   app.use(communities.router);
   app.use(training.router);
   app.use(integrations.router);
+  app.use(pools.router);
 
   app.use(
     (

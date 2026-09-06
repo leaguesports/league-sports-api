@@ -195,6 +195,57 @@ model IntegrationConnection {
   @@index([userId])
 }
 
+// Fixture-scoped friends tip pool. No User FK — same as Friendship /
+// CommunityMember. Invite link is the share surface (WhatsApp). No money.
+enum PredictionPoolMemberRole {
+  owner
+  member
+}
+
+enum PredictionWinner {
+  home
+  away
+  draw
+}
+
+model PredictionPool {
+  id              String        @id @default(uuid())
+  fixtureSlug     String        @db.VarChar(80)
+  title           String?
+  inviteCode      String        @unique @db.VarChar(16)
+  createdByUserId String
+  kicksOffAt      DateTime?
+  lockedAt        DateTime?
+  resultHomeScore Int?
+  resultAwayScore Int?
+  resultWinner    PredictionWinner?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  entries         PredictionPoolEntry[]
+
+  @@index([fixtureSlug])
+  @@index([createdByUserId])
+}
+
+model PredictionPoolEntry {
+  id        String                   @id @default(uuid())
+  poolId    String
+  userId    String
+  role      PredictionPoolMemberRole @default(member)
+  tip       String?
+  homeScore Int?
+  awayScore Int?
+  winner    PredictionWinner?
+  createdAt DateTime                 @default(now())
+  updatedAt DateTime                 @updatedAt
+
+  pool PredictionPool @relation(fields: [poolId], references: [id], onDelete: Cascade)
+
+  @@unique([poolId, userId])
+  @@index([userId])
+  @@index([poolId])
+}
+
 
 enum MatchRuleset {
   golden_point

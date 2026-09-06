@@ -2,17 +2,17 @@ import { Request, Response } from "express";
 import { z } from "zod";
 
 import { DomainError } from "../../../lib/domain-error";
-import { CommunityPersistenceError } from "../repositories/community-persistence-error";
+import { CommunityMembershipNotFoundError } from "../entities/community-membership-not-found-error";
+import { CommunityNotFoundError } from "../entities/community-not-found-error";
+import { CommunityPersistenceError } from "../entities/community-persistence-error";
+import { SoleOwnerLeaveError } from "../entities/sole-owner-leave-error";
 import {
-  CommunityMembershipNotFoundError,
-  CommunityNotFoundError,
   CreateCommunity,
   GetCommunity,
   JoinCommunity,
   LeaveCommunity,
   ListCommunities,
   ListMyCommunities,
-  SoleOwnerLeaveError,
 } from "../services/communities.service";
 
 const createBodySchema = z.object({

@@ -275,5 +275,17 @@ describe("communities HTTP", () => {
       body: JSON.stringify({ name: "  ", city: "Cape Town" }),
     });
     expect(invalid.status).toBe(400);
+
+    const notMember = await fetch(
+      `${server.url}/api/communities/${community.id}/join`,
+      {
+        method: "DELETE",
+        headers: { Cookie: cookie("user-b") },
+      },
+    );
+    expect(notMember.status).toBe(404);
+    expect(await notMember.json()).toEqual({
+      error: "Community membership not found",
+    });
   });
 });

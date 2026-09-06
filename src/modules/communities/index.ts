@@ -65,27 +65,24 @@ export function createCommunitiesModule({
 export { createCommunitiesController } from "./controllers/communities.controller";
 export { InMemoryCommunityRepository } from "./repositories/in-memory-community.repository";
 export { PrismaCommunityRepository } from "./repositories/prisma-community.repository";
-export { CommunityPersistenceError } from "./repositories/community-persistence-error";
-export type {
-  CommunityMemberRecord,
-  CommunityMemberRole,
-  CommunityRecord,
-  CommunityRepository,
-  CommunitySummary,
-  CommunitySummaryForUser,
-  CommunityWithMembers,
-} from "./repositories/community.repository";
+export type { CommunityRepository } from "./repositories/community.repository";
+export { Community } from "./entities/community";
+export { City } from "./entities/city";
+export { CommunityName } from "./entities/community-name";
+export { CommunitySport, COMMUNITY_SPORTS } from "./entities/community-sport";
+export { CommunityMemberRole } from "./entities/community-member-role";
+export { CommunityMembership } from "./entities/community-membership";
+export { CommunityPersistenceError } from "./entities/community-persistence-error";
+export { CommunityMembershipNotFoundError } from "./entities/community-membership-not-found-error";
+export { CommunityNotFoundError } from "./entities/community-not-found-error";
+export { SoleOwnerLeaveError } from "./entities/sole-owner-leave-error";
 export {
-  COMMUNITY_SPORTS,
-  CommunityMembershipNotFoundError,
-  CommunityNotFoundError,
   CreateCommunity,
   GetCommunity,
   JoinCommunity,
   LeaveCommunity,
   ListCommunities,
   ListMyCommunities,
-  SoleOwnerLeaveError,
 } from "./services/communities.service";
 export type {
   PublicCommunity,

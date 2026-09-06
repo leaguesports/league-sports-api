@@ -1,15 +1,14 @@
-import { DomainError, requiredTrimmed } from "../../../lib/domain-error";
+import { DomainError } from "../../../lib/domain-error";
 import {
   FriendProfile,
   FriendProfileLookup,
 } from "../../friends/repositories/friendship.repository";
-import {
-  CommunityRepository,
-  CommunitySummary,
-} from "../repositories/community.repository";
-
-export const COMMUNITY_SPORTS = ["padel", "multi"] as const;
-export type CommunitySport = (typeof COMMUNITY_SPORTS)[number];
+import { City } from "../entities/city";
+import { Community } from "../entities/community";
+import { CommunityName } from "../entities/community-name";
+import { CommunityNotFoundError } from "../entities/community-not-found-error";
+import { CommunitySport } from "../entities/community-sport";
+import { CommunityRepository } from "../repositories/community.repository";
 
 export type PublicCommunityMember = {
   id: string;
@@ -40,36 +39,8 @@ export type PublicMyCommunity = PublicCommunitySummary & {
   joinedAt: string;
 };
 
-const MAX_NAME_LENGTH = 80;
-const MAX_CITY_LENGTH = 80;
 const DEFAULT_LIST_LIMIT = 50;
 const MAX_LIST_LIMIT = 100;
-
-function parseSport(raw: string | null | undefined): string | null {
-  if (raw == null) return null;
-  const sport = raw.trim().toLowerCase();
-  if (sport.length === 0) return null;
-  if (!(COMMUNITY_SPORTS as readonly string[]).includes(sport)) {
-    throw new DomainError("sport must be padel or multi");
-  }
-  return sport;
-}
-
-function parseName(raw: unknown): string {
-  const name = requiredTrimmed(raw, "name");
-  if (name.length > MAX_NAME_LENGTH) {
-    throw new DomainError(`name must be at most ${MAX_NAME_LENGTH} characters`);
-  }
-  return name;
-}
-
-function parseCity(raw: unknown): string {
-  const city = requiredTrimmed(raw, "city");
-  if (city.length > MAX_CITY_LENGTH) {
-    throw new DomainError(`city must be at most ${MAX_CITY_LENGTH} characters`);
-  }
-  return city;
-}
 
 function parseLimit(raw?: number): number {
   if (raw == null || Number.isNaN(raw)) return DEFAULT_LIST_LIMIT;
@@ -77,18 +48,20 @@ function parseLimit(raw?: number): number {
 }
 
 function toPublicSummary(
-  community: CommunitySummary,
-  membership: { role: "owner" | "member" } | null,
+  community: Community,
+  userId?: string | null,
 ): PublicCommunitySummary {
+  const snapshot = community.toSnapshot();
+  const membership = userId ? community.membershipOf(userId) : null;
   return {
-    id: community.id,
-    name: community.name,
-    city: community.city,
-    sport: community.sport,
+    id: snapshot.id,
+    name: snapshot.name,
+    city: snapshot.city,
+    sport: snapshot.sport,
     memberCount: community.memberCount,
-    createdAt: community.createdAt.toISOString(),
+    createdAt: snapshot.createdAt,
     joined: membership != null,
-    role: membership?.role ?? null,
+    role: membership?.role.value ?? null,
   };
 }
 
@@ -108,19 +81,11 @@ async function resolveProfile(
 
 async function toPublicMembers(
   lookup: FriendProfileLookup,
-  members: Array<{
-    userId: string;
-    role: "owner" | "member";
-    createdAt: Date;
-  }>,
+  community: Community,
 ): Promise<PublicCommunityMember[]> {
-  const sorted = [...members].sort((a, b) => {
-    if (a.role !== b.role) return a.role === "owner" ? -1 : 1;
-    return a.createdAt.getTime() - b.createdAt.getTime();
-  });
-
+  // Sequential lookups match friends v1. Batch/findByUserIds if lists grow.
   const out: PublicCommunityMember[] = [];
-  for (const member of sorted) {
+  for (const member of community.toSnapshot().members) {
     const profile = await resolveProfile(lookup, member.userId);
     out.push({
       id: profile.userId,
@@ -128,10 +93,21 @@ async function toPublicMembers(
       handle: profile.handle,
       avatarUrl: profile.avatarUrl,
       role: member.role,
-      joinedAt: member.createdAt.toISOString(),
+      joinedAt: member.joinedAt,
     });
   }
   return out;
+}
+
+async function toPublicCommunity(
+  lookup: FriendProfileLookup,
+  community: Community,
+  userId?: string | null,
+): Promise<PublicCommunity> {
+  return {
+    ...toPublicSummary(community, userId),
+    members: await toPublicMembers(lookup, community),
+  };
 }
 
 export class CreateCommunity {
@@ -146,24 +122,15 @@ export class CreateCommunity {
     city: unknown;
     sport?: string | null;
   }): Promise<{ community: PublicCommunity }> {
-    const userId = input.userId.trim();
-    if (!userId) throw new DomainError("userId is required");
-
-    const created = await this.communities.create({
-      name: parseName(input.name),
-      city: parseCity(input.city),
-      sport: parseSport(input.sport),
-      ownerUserId: userId,
+    const community = Community.create({
+      name: CommunityName.from(input.name),
+      city: City.from(input.city),
+      sport: CommunitySport.from(input.sport),
+      ownerUserId: input.userId,
     });
-
+    const saved = await this.communities.create(community);
     return {
-      community: {
-        ...toPublicSummary(
-          { ...created, memberCount: created.members.length },
-          { role: "owner" },
-        ),
-        members: await toPublicMembers(this.profiles, created.members),
-      },
+      community: await toPublicCommunity(this.profiles, saved, input.userId),
     };
   }
 }
@@ -184,19 +151,12 @@ export class GetCommunity {
     const community = await this.communities.findById(communityId);
     if (!community) throw new CommunityNotFoundError();
 
-    const userId = input.userId?.trim() || "";
-    const membership = userId
-      ? community.members.find((row) => row.userId === userId) ?? null
-      : null;
-
     return {
-      community: {
-        ...toPublicSummary(
-          { ...community, memberCount: community.members.length },
-          membership,
-        ),
-        members: await toPublicMembers(this.profiles, community.members),
-      },
+      community: await toPublicCommunity(
+        this.profiles,
+        community,
+        input.userId,
+      ),
     };
   }
 }
@@ -209,15 +169,10 @@ export class ListCommunities {
     limit?: number;
   }): Promise<{ communities: PublicCommunitySummary[] }> {
     const rows = await this.communities.list({ limit: parseLimit(input.limit) });
-    const userId = input.userId?.trim() || "";
-    const mine = userId ? await this.communities.listForUser(userId) : [];
-    const roleByCommunity = new Map(mine.map((row) => [row.id, row.role]));
-
     return {
-      communities: rows.map((community) => {
-        const role = roleByCommunity.get(community.id);
-        return toPublicSummary(community, role ? { role } : null);
-      }),
+      communities: rows.map((community) =>
+        toPublicSummary(community, input.userId),
+      ),
     };
   }
 }
@@ -233,11 +188,14 @@ export class ListMyCommunities {
 
     const rows = await this.communities.listForUser(userId);
     return {
-      communities: rows.map((community) => ({
-        ...toPublicSummary(community, { role: community.role }),
-        role: community.role,
-        joinedAt: community.joinedAt.toISOString(),
-      })),
+      communities: rows.map((community) => {
+        const membership = community.membershipOf(userId);
+        return {
+          ...toPublicSummary(community, userId),
+          role: membership?.role.value ?? "member",
+          joinedAt: membership?.joinedAt.toISOString() ?? community.createdAt.toISOString(),
+        };
+      }),
     };
   }
 }
@@ -257,25 +215,13 @@ export class JoinCommunity {
     if (!userId) throw new DomainError("userId is required");
     if (!communityId) throw new DomainError("community id is required");
 
-    const existing = await this.communities.findById(communityId);
-    if (!existing) throw new CommunityNotFoundError();
-
-    await this.communities.addMember(communityId, userId, "member");
     const community = await this.communities.findById(communityId);
     if (!community) throw new CommunityNotFoundError();
 
-    const membership = community.members.find((row) => row.userId === userId) ?? {
-      role: "member" as const,
-    };
-
+    community.join(userId);
+    const saved = await this.communities.persist(community);
     return {
-      community: {
-        ...toPublicSummary(
-          { ...community, memberCount: community.members.length },
-          { role: membership.role },
-        ),
-        members: await toPublicMembers(this.profiles, community.members),
-      },
+      community: await toPublicCommunity(this.profiles, saved, userId),
     };
   }
 }
@@ -295,43 +241,13 @@ export class LeaveCommunity {
     const community = await this.communities.findById(communityId);
     if (!community) throw new CommunityNotFoundError();
 
-    const membership = await this.communities.findMembership(
-      communityId,
-      userId,
-    );
-    if (!membership) throw new CommunityMembershipNotFoundError();
-
-    if (membership.role === "owner") {
-      const owners = await this.communities.countOwners(communityId);
-      if (owners <= 1) {
-        throw new SoleOwnerLeaveError();
-      }
-    }
-
-    const removed = await this.communities.removeMember(communityId, userId);
-    if (!removed) throw new CommunityMembershipNotFoundError();
-
+    community.leave(userId);
+    await this.communities.persist(community);
     return { ok: true as const };
   }
 }
 
-export class CommunityNotFoundError extends Error {
-  constructor() {
-    super("Community not found");
-    this.name = "CommunityNotFoundError";
-  }
-}
-
-export class CommunityMembershipNotFoundError extends Error {
-  constructor() {
-    super("Community membership not found");
-    this.name = "CommunityMembershipNotFoundError";
-  }
-}
-
-export class SoleOwnerLeaveError extends Error {
-  constructor() {
-    super("Sole owner cannot leave the community");
-    this.name = "SoleOwnerLeaveError";
-  }
-}
+export { CommunityMembershipNotFoundError } from "../entities/community-membership-not-found-error";
+export { CommunityNotFoundError } from "../entities/community-not-found-error";
+export { SoleOwnerLeaveError } from "../entities/sole-owner-leave-error";
+export { COMMUNITY_SPORTS } from "../entities/community-sport";

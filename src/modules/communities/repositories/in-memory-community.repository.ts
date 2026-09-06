@@ -1,157 +1,50 @@
-import {
-  CommunityMemberRecord,
-  CommunityMemberRole,
-  CommunityRecord,
-  CommunityRepository,
-  CommunitySummary,
-  CommunitySummaryForUser,
-  CommunityWithMembers,
-  CreateCommunityInput,
-} from "./community.repository";
+import { Community } from "../entities/community";
+import { CommunityPersistenceError } from "../entities/community-persistence-error";
+import { CommunityRepository } from "./community.repository";
 
 export class InMemoryCommunityRepository implements CommunityRepository {
-  private readonly communities = new Map<string, CommunityRecord>();
-  private readonly members = new Map<string, CommunityMemberRecord>();
-  private seq = 0;
-  private clock = Date.now();
+  private readonly byId = new Map<string, Community>();
 
-  private nextId(prefix: string): string {
-    this.seq += 1;
-    return `${prefix}_${this.seq}`;
+  async findById(id: string): Promise<Community | null> {
+    return clone(this.byId.get(id) ?? null);
   }
 
-  private now(): Date {
-    this.clock += 1;
-    return new Date(this.clock);
+  async create(community: Community): Promise<Community> {
+    const stored = clone(community)!;
+    this.byId.set(stored.id, stored);
+    return clone(stored)!;
   }
 
-  private cloneCommunity(row: CommunityRecord): CommunityRecord {
-    return { ...row };
+  async persist(community: Community): Promise<Community> {
+    if (!this.byId.has(community.id)) {
+      throw new CommunityPersistenceError("Unable to save community");
+    }
+    const stored = clone(community)!;
+    this.byId.set(stored.id, stored);
+    return clone(stored)!;
   }
 
-  private cloneMember(row: CommunityMemberRecord): CommunityMemberRecord {
-    return { ...row };
-  }
-
-  private membersForCommunity(communityId: string): CommunityMemberRecord[] {
-    return [...this.members.values()]
-      .filter((row) => row.communityId === communityId)
-      .map((row) => this.cloneMember(row))
-      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
-  }
-
-  async create(input: CreateCommunityInput): Promise<CommunityWithMembers> {
-    const now = this.now();
-    const community: CommunityRecord = {
-      id: this.nextId("community"),
-      name: input.name,
-      city: input.city,
-      sport: input.sport,
-      createdAt: now,
-      updatedAt: now,
-    };
-    this.communities.set(community.id, community);
-
-    const owner: CommunityMemberRecord = {
-      id: this.nextId("community_member"),
-      communityId: community.id,
-      userId: input.ownerUserId,
-      role: "owner",
-      createdAt: now,
-    };
-    this.members.set(owner.id, owner);
-
-    return {
-      ...this.cloneCommunity(community),
-      members: [this.cloneMember(owner)],
-    };
-  }
-
-  async findById(id: string): Promise<CommunityWithMembers | null> {
-    const community = this.communities.get(id);
-    if (!community) return null;
-    return {
-      ...this.cloneCommunity(community),
-      members: this.membersForCommunity(id),
-    };
-  }
-
-  async list(options: { limit?: number } = {}): Promise<CommunitySummary[]> {
+  async list(options: { limit?: number } = {}): Promise<Community[]> {
     const limit = options.limit ?? 50;
-    return [...this.communities.values()]
+    return [...this.byId.values()]
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
       .slice(0, limit)
-      .map((community) => ({
-        ...this.cloneCommunity(community),
-        memberCount: this.membersForCommunity(community.id).length,
-      }));
+      .map((community) => clone(community)!);
   }
 
-  async listForUser(userId: string): Promise<CommunitySummaryForUser[]> {
-    const mine = [...this.members.values()]
-      .filter((row) => row.userId === userId)
-      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-
-    const out: CommunitySummaryForUser[] = [];
-    for (const membership of mine) {
-      const community = this.communities.get(membership.communityId);
-      if (!community) continue;
-      out.push({
-        ...this.cloneCommunity(community),
-        memberCount: this.membersForCommunity(community.id).length,
-        role: membership.role,
-        joinedAt: membership.createdAt,
-      });
-    }
-    return out;
+  async listForUser(userId: string): Promise<Community[]> {
+    return [...this.byId.values()]
+      .filter((community) => community.membershipOf(userId))
+      .sort((a, b) => {
+        const aJoined = a.membershipOf(userId)?.joinedAt.getTime() ?? 0;
+        const bJoined = b.membershipOf(userId)?.joinedAt.getTime() ?? 0;
+        return bJoined - aJoined;
+      })
+      .map((community) => clone(community)!);
   }
+}
 
-  async findMembership(
-    communityId: string,
-    userId: string,
-  ): Promise<CommunityMemberRecord | null> {
-    for (const row of this.members.values()) {
-      if (row.communityId === communityId && row.userId === userId) {
-        return this.cloneMember(row);
-      }
-    }
-    return null;
-  }
-
-  async addMember(
-    communityId: string,
-    userId: string,
-    role: CommunityMemberRole = "member",
-  ): Promise<CommunityMemberRecord> {
-    const existing = await this.findMembership(communityId, userId);
-    if (existing) return existing;
-
-    const row: CommunityMemberRecord = {
-      id: this.nextId("community_member"),
-      communityId,
-      userId,
-      role,
-      createdAt: this.now(),
-    };
-    this.members.set(row.id, row);
-    return this.cloneMember(row);
-  }
-
-  async removeMember(communityId: string, userId: string): Promise<boolean> {
-    for (const [id, row] of this.members) {
-      if (row.communityId === communityId && row.userId === userId) {
-        this.members.delete(id);
-        return true;
-      }
-    }
-    return false;
-  }
-
-  async countOwners(communityId: string): Promise<number> {
-    let count = 0;
-    for (const row of this.members.values()) {
-      if (row.communityId === communityId && row.role === "owner") count += 1;
-    }
-    return count;
-  }
+function clone(community: Community | null): Community | null {
+  if (!community) return null;
+  return Community.fromSnapshot(community.toSnapshot());
 }

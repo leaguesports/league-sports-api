@@ -1,49 +1,29 @@
 import { PrismaClient } from "../../../generated/prisma/client";
-import { CommunityPersistenceError } from "./community-persistence-error";
-import {
-  CommunityMemberRecord,
-  CommunityMemberRole,
-  CommunityRecord,
-  CommunityRepository,
-  CommunitySummary,
-  CommunitySummaryForUser,
-  CommunityWithMembers,
-  CreateCommunityInput,
-} from "./community.repository";
+import { Community } from "../entities/community";
+import { CommunityMemberRole } from "../entities/community-member-role";
+import { CommunityMembership } from "../entities/community-membership";
+import { CommunityName } from "../entities/community-name";
+import { CommunityPersistenceError } from "../entities/community-persistence-error";
+import { CommunitySport } from "../entities/community-sport";
+import { City } from "../entities/city";
+import { CommunityRepository } from "./community.repository";
 
-function toCommunity(row: {
+type MemberRow = {
+  id: string;
+  userId: string;
+  role: "owner" | "member";
+  createdAt: Date;
+};
+
+type CommunityRow = {
   id: string;
   name: string;
   city: string;
   sport: string | null;
   createdAt: Date;
   updatedAt: Date;
-}): CommunityRecord {
-  return {
-    id: row.id,
-    name: row.name,
-    city: row.city,
-    sport: row.sport,
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
-  };
-}
-
-function toMember(row: {
-  id: string;
-  communityId: string;
-  userId: string;
-  role: CommunityMemberRole;
-  createdAt: Date;
-}): CommunityMemberRecord {
-  return {
-    id: row.id,
-    communityId: row.communityId,
-    userId: row.userId,
-    role: row.role,
-    createdAt: row.createdAt,
-  };
-}
+  members: MemberRow[];
+};
 
 function prismaErrorCode(error: unknown): string {
   if (error && typeof error === "object" && "code" in error) {
@@ -52,49 +32,35 @@ function prismaErrorCode(error: unknown): string {
   return "";
 }
 
+function toDomain(row: CommunityRow): Community {
+  return Community.rehydrate({
+    id: row.id,
+    name: CommunityName.from(row.name),
+    city: City.from(row.city),
+    sport: CommunitySport.from(row.sport),
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    members: row.members.map((member) =>
+      CommunityMembership.rehydrate({
+        id: member.id,
+        userId: member.userId,
+        role: CommunityMemberRole.from(member.role),
+        joinedAt: member.createdAt,
+      }),
+    ),
+  });
+}
+
 export class PrismaCommunityRepository implements CommunityRepository {
   constructor(private readonly prisma: PrismaClient) {}
 
-  async create(input: CreateCommunityInput): Promise<CommunityWithMembers> {
-    try {
-      const row = await this.prisma.$transaction(async (tx) => {
-        return tx.community.create({
-          data: {
-            name: input.name,
-            city: input.city,
-            sport: input.sport,
-            members: {
-              create: {
-                userId: input.ownerUserId,
-                role: "owner",
-              },
-            },
-          },
-          include: { members: { orderBy: { createdAt: "asc" } } },
-        });
-      });
-      return {
-        ...toCommunity(row),
-        members: row.members.map(toMember),
-      };
-    } catch (error) {
-      throw new CommunityPersistenceError("Failed to create community", {
-        cause: error,
-      });
-    }
-  }
-
-  async findById(id: string): Promise<CommunityWithMembers | null> {
+  async findById(id: string): Promise<Community | null> {
     try {
       const row = await this.prisma.community.findUnique({
         where: { id },
         include: { members: { orderBy: { createdAt: "asc" } } },
       });
-      if (!row) return null;
-      return {
-        ...toCommunity(row),
-        members: row.members.map(toMember),
-      };
+      return row ? toDomain(row) : null;
     } catch (error) {
       throw new CommunityPersistenceError("Failed to load community", {
         cause: error,
@@ -102,18 +68,105 @@ export class PrismaCommunityRepository implements CommunityRepository {
     }
   }
 
-  async list(options: { limit?: number } = {}): Promise<CommunitySummary[]> {
+  async create(community: Community): Promise<Community> {
+    const snapshot = community.toSnapshot();
+    try {
+      const row = await this.prisma.community.create({
+        data: {
+          id: snapshot.id,
+          name: snapshot.name,
+          city: snapshot.city,
+          sport: snapshot.sport,
+          createdAt: community.createdAt,
+          updatedAt: community.updatedAt,
+          members: {
+            create: snapshot.members.map((member) => ({
+              id: member.id,
+              userId: member.userId,
+              role: member.role,
+              createdAt: new Date(member.joinedAt),
+            })),
+          },
+        },
+        include: { members: { orderBy: { createdAt: "asc" } } },
+      });
+      return toDomain(row);
+    } catch (error) {
+      throw new CommunityPersistenceError("Failed to create community", {
+        cause: error,
+      });
+    }
+  }
+
+  async persist(community: Community): Promise<Community> {
+    const snapshot = community.toSnapshot();
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        await tx.community.update({
+          where: { id: snapshot.id },
+          data: {
+            name: snapshot.name,
+            city: snapshot.city,
+            sport: snapshot.sport,
+            updatedAt: community.updatedAt,
+          },
+        });
+
+        for (const member of snapshot.members) {
+          try {
+            await tx.communityMember.upsert({
+              where: {
+                communityId_userId: {
+                  communityId: snapshot.id,
+                  userId: member.userId,
+                },
+              },
+              create: {
+                id: member.id,
+                communityId: snapshot.id,
+                userId: member.userId,
+                role: member.role,
+                createdAt: new Date(member.joinedAt),
+              },
+              update: { role: member.role },
+            });
+          } catch (error) {
+            if (prismaErrorCode(error) !== "P2002") throw error;
+          }
+        }
+
+        if (community.removedUserIds.length > 0) {
+          await tx.communityMember.deleteMany({
+            where: {
+              communityId: snapshot.id,
+              userId: { in: [...community.removedUserIds] },
+            },
+          });
+        }
+      });
+
+      const reloaded = await this.findById(snapshot.id);
+      if (!reloaded) {
+        throw new CommunityPersistenceError("Failed to load community");
+      }
+      return reloaded;
+    } catch (error) {
+      if (error instanceof CommunityPersistenceError) throw error;
+      throw new CommunityPersistenceError("Failed to save community", {
+        cause: error,
+      });
+    }
+  }
+
+  async list(options: { limit?: number } = {}): Promise<Community[]> {
     const limit = Math.min(Math.max(options.limit ?? 50, 1), 100);
     try {
       const rows = await this.prisma.community.findMany({
         orderBy: { createdAt: "desc" },
         take: limit,
-        include: { _count: { select: { members: true } } },
+        include: { members: { orderBy: { createdAt: "asc" } } },
       });
-      return rows.map((row) => ({
-        ...toCommunity(row),
-        memberCount: row._count.members,
-      }));
+      return rows.map(toDomain);
     } catch (error) {
       throw new CommunityPersistenceError("Failed to list communities", {
         cause: error,
@@ -121,85 +174,21 @@ export class PrismaCommunityRepository implements CommunityRepository {
     }
   }
 
-  async listForUser(userId: string): Promise<CommunitySummaryForUser[]> {
+  async listForUser(userId: string): Promise<Community[]> {
     try {
-      const rows = await this.prisma.communityMember.findMany({
-        where: { userId },
-        orderBy: { createdAt: "desc" },
-        include: {
-          community: { include: { _count: { select: { members: true } } } },
-        },
+      const rows = await this.prisma.community.findMany({
+        where: { members: { some: { userId } } },
+        include: { members: { orderBy: { createdAt: "asc" } } },
       });
-      return rows.map((row) => ({
-        ...toCommunity(row.community),
-        memberCount: row.community._count.members,
-        role: row.role,
-        joinedAt: row.createdAt,
-      }));
+      return rows
+        .map(toDomain)
+        .sort((a, b) => {
+          const aJoined = a.membershipOf(userId)?.joinedAt.getTime() ?? 0;
+          const bJoined = b.membershipOf(userId)?.joinedAt.getTime() ?? 0;
+          return bJoined - aJoined;
+        });
     } catch (error) {
       throw new CommunityPersistenceError("Failed to list user communities", {
-        cause: error,
-      });
-    }
-  }
-
-  async findMembership(
-    communityId: string,
-    userId: string,
-  ): Promise<CommunityMemberRecord | null> {
-    try {
-      const row = await this.prisma.communityMember.findUnique({
-        where: { communityId_userId: { communityId, userId } },
-      });
-      return row ? toMember(row) : null;
-    } catch (error) {
-      throw new CommunityPersistenceError("Failed to load community membership", {
-        cause: error,
-      });
-    }
-  }
-
-  async addMember(
-    communityId: string,
-    userId: string,
-    role: CommunityMemberRole = "member",
-  ): Promise<CommunityMemberRecord> {
-    try {
-      const row = await this.prisma.communityMember.create({
-        data: { communityId, userId, role },
-      });
-      return toMember(row);
-    } catch (error) {
-      if (prismaErrorCode(error) === "P2002") {
-        const existing = await this.findMembership(communityId, userId);
-        if (existing) return existing;
-      }
-      throw new CommunityPersistenceError("Failed to join community", {
-        cause: error,
-      });
-    }
-  }
-
-  async removeMember(communityId: string, userId: string): Promise<boolean> {
-    try {
-      const result = await this.prisma.communityMember.deleteMany({
-        where: { communityId, userId },
-      });
-      return result.count > 0;
-    } catch (error) {
-      throw new CommunityPersistenceError("Failed to leave community", {
-        cause: error,
-      });
-    }
-  }
-
-  async countOwners(communityId: string): Promise<number> {
-    try {
-      return await this.prisma.communityMember.count({
-        where: { communityId, role: "owner" },
-      });
-    } catch (error) {
-      throw new CommunityPersistenceError("Failed to count community owners", {
         cause: error,
       });
     }

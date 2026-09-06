@@ -101,6 +101,37 @@ model Friendship {
   @@index([addresseeId, status])
 }
 
+enum CommunityMemberRole {
+  owner
+  member
+}
+
+model Community {
+  id        String            @id @default(uuid())
+  name      String
+  city      String
+  sport     String?
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+  members   CommunityMember[]
+
+  @@index([createdAt])
+}
+
+model CommunityMember {
+  id          String              @id @default(uuid())
+  communityId String
+  // No FK to User — same as Friendship/BadgeAward. Harden later if identity requires it.
+  userId      String
+  role        CommunityMemberRole @default(member)
+  createdAt   DateTime            @default(now())
+
+  community Community @relation(fields: [communityId], references: [id], onDelete: Cascade)
+
+  @@unique([communityId, userId])
+  @@index([userId])
+  @@index([communityId])
+}
 
 model BadgeAward {
   id        String   @id @default(uuid())

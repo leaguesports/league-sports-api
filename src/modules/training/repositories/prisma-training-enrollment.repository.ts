@@ -4,9 +4,20 @@ import { CompletedStepIds } from "../entities/completed-step-ids";
 import { EnrollmentStatus } from "../entities/enrollment-status";
 import { PercentComplete } from "../entities/percent-complete";
 import { TrainingEnrollment } from "../entities/training-enrollment";
+import { TrainingEnrollmentActiveConflictError } from "../entities/training-enrollment-active-conflict-error";
 import { TrainingEnrollmentPersistenceError } from "../entities/training-enrollment-persistence-error";
 import { TrainingPlanId } from "../entities/training-plan-id";
-import { TrainingEnrollmentRepository } from "./training-enrollment.repository";
+import {
+  enrollmentListLimit,
+  TrainingEnrollmentRepository,
+} from "./training-enrollment.repository";
+
+function prismaErrorCode(error: unknown): string {
+  if (error && typeof error === "object" && "code" in error) {
+    return String((error as { code?: unknown }).code);
+  }
+  return "";
+}
 
 type EnrollmentRow = {
   id: string;
@@ -44,6 +55,23 @@ function toDomain(
     updatedAt: row.updatedAt,
     completedAt: row.completedAt,
   });
+}
+
+function tryToDomain(
+  row: EnrollmentRow,
+  catalog: TrainingCatalog,
+): TrainingEnrollment | null {
+  try {
+    return toDomain(row, catalog);
+  } catch (error) {
+    console.warn(
+      "Skipping unreadable training enrollment",
+      row.id,
+      row.planId,
+      error,
+    );
+    return null;
+  }
 }
 
 export class PrismaTrainingEnrollmentRepository
@@ -110,6 +138,13 @@ export class PrismaTrainingEnrollmentRepository
       });
       return toDomain(row, this.catalog);
     } catch (error) {
+      if (prismaErrorCode(error) === "P2002") {
+        const existing = await this.findActiveByUserAndPlan(
+          snapshot.userId,
+          TrainingPlanId.from(snapshot.planId),
+        );
+        throw new TrainingEnrollmentActiveConflictError(existing ?? undefined);
+      }
       throw new TrainingEnrollmentPersistenceError(
         "Failed to create training enrollment",
         { cause: error },
@@ -140,22 +175,22 @@ export class PrismaTrainingEnrollmentRepository
     }
   }
 
-  async listForUser(userId: string): Promise<TrainingEnrollment[]> {
+  async listForUser(
+    userId: string,
+    options: { limit?: number } = {},
+  ): Promise<TrainingEnrollment[]> {
+    const limit = enrollmentListLimit(options.limit);
     try {
       const rows = await this.prisma.trainingEnrollment.findMany({
         where: { userId },
         orderBy: [{ status: "asc" }, { updatedAt: "desc" }],
+        take: limit,
       });
-      return rows
-        .map((row) => toDomain(row, this.catalog))
-        .sort((a, b) => {
-          if (a.status.isActive !== b.status.isActive) {
-            return a.status.isActive ? -1 : 1;
-          }
-          return b.updatedAt.getTime() - a.updatedAt.getTime();
-        });
+      return rows.flatMap((row) => {
+        const enrollment = tryToDomain(row, this.catalog);
+        return enrollment ? [enrollment] : [];
+      });
     } catch (error) {
-      if (error instanceof TrainingEnrollmentPersistenceError) throw error;
       throw new TrainingEnrollmentPersistenceError(
         "Failed to list training enrollments",
         { cause: error },

@@ -1,18 +1,28 @@
 import { TrainingCatalog } from "../catalog/training-catalog";
 import { TrainingEnrollment } from "../entities/training-enrollment";
+import type { TrainingEnrollmentSnapshot } from "../entities/training-enrollment";
+import { TrainingEnrollmentActiveConflictError } from "../entities/training-enrollment-active-conflict-error";
 import { TrainingEnrollmentPersistenceError } from "../entities/training-enrollment-persistence-error";
 import { TrainingPlanId } from "../entities/training-plan-id";
-import { TrainingEnrollmentRepository } from "./training-enrollment.repository";
+import {
+  enrollmentListLimit,
+  TrainingEnrollmentRepository,
+} from "./training-enrollment.repository";
 
 export class InMemoryTrainingEnrollmentRepository
   implements TrainingEnrollmentRepository
 {
-  private readonly byId = new Map<string, TrainingEnrollment>();
+  private readonly byId = new Map<string, TrainingEnrollmentSnapshot>();
 
   constructor(private readonly catalog: TrainingCatalog = TrainingCatalog.padel()) {}
 
+  /** Test helper: insert a row without hydrating against the catalog. */
+  seedSnapshot(snapshot: TrainingEnrollmentSnapshot): void {
+    this.byId.set(snapshot.id, snapshot);
+  }
+
   async findById(id: string): Promise<TrainingEnrollment | null> {
-    return clone(this.byId.get(id) ?? null, this.catalog);
+    return hydrate(this.byId.get(id) ?? null, this.catalog);
   }
 
   async findActiveByUserAndPlan(
@@ -20,18 +30,31 @@ export class InMemoryTrainingEnrollmentRepository
     planId: TrainingPlanId,
   ): Promise<TrainingEnrollment | null> {
     const match = [...this.byId.values()].find(
-      (enrollment) =>
-        enrollment.belongsTo(userId) &&
-        enrollment.planId.equals(planId) &&
-        enrollment.status.isActive,
+      (snapshot) =>
+        snapshot.userId === userId.trim() &&
+        snapshot.planId === planId.value &&
+        snapshot.status === "active",
     );
-    return clone(match ?? null, this.catalog);
+    return hydrate(match ?? null, this.catalog);
   }
 
   async create(enrollment: TrainingEnrollment): Promise<TrainingEnrollment> {
-    const stored = clone(enrollment, this.catalog)!;
+    const existing = [...this.byId.values()].find(
+      (snapshot) =>
+        snapshot.userId === enrollment.userId &&
+        snapshot.planId === enrollment.planId.value &&
+        snapshot.status === "active" &&
+        snapshot.id !== enrollment.id,
+    );
+    if (existing) {
+      throw new TrainingEnrollmentActiveConflictError(
+        hydrate(existing, this.catalog) ?? undefined,
+      );
+    }
+
+    const stored = enrollment.toSnapshot();
     this.byId.set(stored.id, stored);
-    return clone(stored, this.catalog)!;
+    return hydrate(stored, this.catalog)!;
   }
 
   async persist(enrollment: TrainingEnrollment): Promise<TrainingEnrollment> {
@@ -40,36 +63,64 @@ export class InMemoryTrainingEnrollmentRepository
         "Unable to save training enrollment",
       );
     }
-    const stored = clone(enrollment, this.catalog)!;
+    const stored = enrollment.toSnapshot();
     this.byId.set(stored.id, stored);
-    return clone(stored, this.catalog)!;
+    return hydrate(stored, this.catalog)!;
   }
 
-  async listForUser(userId: string): Promise<TrainingEnrollment[]> {
+  async listForUser(
+    userId: string,
+    options: { limit?: number } = {},
+  ): Promise<TrainingEnrollment[]> {
+    const limit = enrollmentListLimit(options.limit);
     return [...this.byId.values()]
-      .filter((enrollment) => enrollment.belongsTo(userId))
-      .sort(compareEnrollments)
-      .map((enrollment) => clone(enrollment, this.catalog)!);
+      .filter((snapshot) => snapshot.userId === userId.trim())
+      .sort(compareSnapshots)
+      .slice(0, limit)
+      .flatMap((snapshot) => {
+        const enrollment = tryHydrate(snapshot, this.catalog);
+        return enrollment ? [enrollment] : [];
+      });
   }
 }
 
-function compareEnrollments(a: TrainingEnrollment, b: TrainingEnrollment): number {
-  if (a.status.isActive !== b.status.isActive) {
-    return a.status.isActive ? -1 : 1;
+function compareSnapshots(
+  a: TrainingEnrollmentSnapshot,
+  b: TrainingEnrollmentSnapshot,
+): number {
+  if (a.status !== b.status) {
+    return a.status === "active" ? -1 : 1;
   }
-  return b.updatedAt.getTime() - a.updatedAt.getTime();
+  return Date.parse(b.updatedAt) - Date.parse(a.updatedAt);
 }
 
-function clone(
-  enrollment: TrainingEnrollment | null,
+function hydrate(
+  snapshot: TrainingEnrollmentSnapshot | null,
   catalog: TrainingCatalog,
 ): TrainingEnrollment | null {
-  if (!enrollment) return null;
-  const plan = catalog.get(enrollment.planId.value);
+  if (!snapshot) return null;
+  const plan = catalog.get(snapshot.planId);
   if (!plan) {
     throw new TrainingEnrollmentPersistenceError(
       "Unable to load training enrollment",
     );
   }
-  return TrainingEnrollment.fromSnapshot(enrollment.toSnapshot(), plan);
+  return TrainingEnrollment.fromSnapshot(snapshot, plan);
+}
+
+function tryHydrate(
+  snapshot: TrainingEnrollmentSnapshot,
+  catalog: TrainingCatalog,
+): TrainingEnrollment | null {
+  try {
+    return hydrate(snapshot, catalog);
+  } catch (error) {
+    console.warn(
+      "Skipping unreadable training enrollment",
+      snapshot.id,
+      snapshot.planId,
+      error,
+    );
+    return null;
+  }
 }

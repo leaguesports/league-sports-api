@@ -147,6 +147,8 @@ model BadgeAward {
 // Curated training plans live in code (src/modules/training/catalog), not this table.
 // This model is session-owned enrollment + progress only. No User FK — same as
 // Friendship / BadgeAward / CommunityMember.
+// Partial unique (userId, planId) WHERE status = active is in
+// 20260906083000_training_enrollment — keep that SQL as source of truth.
 enum TrainingEnrollmentStatus {
   active
   completed

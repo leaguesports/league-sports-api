@@ -14,6 +14,7 @@ import {
   ListCommunities,
   ListMyCommunities,
 } from "../services/communities.service";
+import { ListCommunityActivity } from "../services/list-community-activity.service";
 
 const createBodySchema = z.object({
   name: z.string(),
@@ -36,6 +37,7 @@ export function createCommunitiesController(deps: {
   listMyCommunities: ListMyCommunities;
   joinCommunity: JoinCommunity;
   leaveCommunity: LeaveCommunity;
+  listCommunityActivity: ListCommunityActivity;
   tryGetSessionUserId: (req: Request) => string | null;
 }) {
   return {
@@ -116,6 +118,18 @@ export function createCommunitiesController(deps: {
         const { id } = z.parse(communityIdParamSchema, req.params);
         const result = await deps.leaveCommunity.execute({
           userId,
+          communityId: id,
+        });
+        return res.status(200).json(result);
+      } catch (error) {
+        return sendCommunitiesError(res, error);
+      }
+    },
+
+    async activity(req: Request, res: Response) {
+      try {
+        const { id } = z.parse(communityIdParamSchema, req.params);
+        const result = await deps.listCommunityActivity.execute({
           communityId: id,
         });
         return res.status(200).json(result);

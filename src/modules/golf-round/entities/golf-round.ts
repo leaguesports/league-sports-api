@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { DomainError } from "../../../lib/domain-error";
+import { DomainError, requiredTrimmed } from "../../../lib/domain-error";
 import { CmsId } from "../../venue/entities/cms-id";
 import {
   CourseSnapshot,
@@ -27,12 +27,14 @@ export type GolfRoundSnapshot = {
   lockedAt: string | null;
 };
 
+export const TEE_NAME_MAX_LENGTH = 40;
+
 export type CreateGolfRoundProps = {
   venueCmsId: CmsId;
   startsAt: StartsAt;
   holesPlayed: number;
   startingHole?: number;
-  teeName?: string | null;
+  teeName: unknown;
   course: unknown;
   players: GolfPlayerInput[];
 };
@@ -56,7 +58,7 @@ export class GolfRound {
   static create(props: CreateGolfRoundProps): GolfRound {
     const holesPlayed = parseHolesPlayed(props.holesPlayed);
     const startingHole = parseStartingHole(props.startingHole ?? 1);
-    const teeName = parseOptionalTeeName(props.teeName);
+    const teeName = parseRequiredTeeName(props.teeName);
     const course = CourseSnapshot.from(props.course, {
       holesPlayed,
       startingHole,
@@ -232,15 +234,12 @@ function parseStartingHole(raw: unknown): number {
   return raw;
 }
 
-function parseOptionalTeeName(raw: unknown): string | null {
-  if (raw === undefined || raw === null) {
-    return null;
+export function parseRequiredTeeName(raw: unknown): string {
+  const value = requiredTrimmed(raw, "teeName");
+  if (value.length > TEE_NAME_MAX_LENGTH) {
+    throw new DomainError(
+      `teeName must be at most ${TEE_NAME_MAX_LENGTH} characters`,
+    );
   }
-
-  if (typeof raw !== "string") {
-    throw new DomainError("teeName must be a string");
-  }
-
-  const value = raw.trim();
-  return value.length === 0 ? null : value;
+  return value;
 }

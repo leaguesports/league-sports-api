@@ -34,7 +34,7 @@ const createGolfRoundBodySchema = z.object({
   startsAt: z.string(),
   holesPlayed: z.union([z.literal(9), z.literal(18)]),
   startingHole: z.number().optional(),
-  teeName: z.string().nullable().optional(),
+  teeName: z.string(),
   course: z.object({
     name: z.string().nullable().optional(),
     holes: z.array(courseHoleSchema).min(1),
@@ -71,7 +71,7 @@ const captureGolfRoundBodySchema = z.object({
   playedAt: z.string().optional(),
   holesPlayed: z.union([z.literal(9), z.literal(18)]),
   startingHole: z.number().optional(),
-  teeName: z.string().nullable().optional(),
+  teeName: z.string(),
   course: z.object({
     name: z.string().nullable().optional(),
     holes: z.array(courseHoleSchema).min(1),

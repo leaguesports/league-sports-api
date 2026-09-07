@@ -81,7 +81,7 @@ const startBodySchema = z
     pairings: pairingsSchema.optional(),
     holesPlayed: z.union([z.literal(9), z.literal(18)]).optional(),
     startingHole: z.number().optional(),
-    teeName: z.string().nullable().optional(),
+    teeName: z.string().optional(),
     course: z
       .object({
         name: z.string().nullable().optional(),

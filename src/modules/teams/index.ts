@@ -24,6 +24,7 @@ import {
   LeaveTeam,
   ListMyTeams,
   RemoveMember,
+  SearchTeams,
   TransferOwnership,
   UpdateMemberRole,
   UpdateTeam,
@@ -74,6 +75,7 @@ export function createTeamsModule({
       teamRepository,
       friendProfileLookup,
     ),
+    searchTeams: new SearchTeams(teamRepository, friendshipRepository),
     tryGetSessionUserId,
   });
 
@@ -113,6 +115,7 @@ export {
   LeaveTeam,
   ListMyTeams,
   RemoveMember,
+  SearchTeams,
   TransferOwnership,
   UpdateMemberRole,
   UpdateTeam,
@@ -121,5 +124,6 @@ export type {
   PublicInviteLink,
   PublicTeam,
   PublicTeamMember,
+  PublicTeamSearchHit,
   PublicTeamSummary,
 } from "./services/teams.service";

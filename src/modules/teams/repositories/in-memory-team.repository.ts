@@ -1,6 +1,7 @@
 import { Team } from "../entities/team";
 import { TeamPersistenceError } from "../entities/team-persistence-error";
-import { TeamRepository } from "./team.repository";
+import { TeamSportValue } from "../entities/team-sport";
+import { TeamRepository, TeamSearchParams } from "./team.repository";
 
 export class InMemoryTeamRepository implements TeamRepository {
   private readonly byId = new Map<string, Team>();
@@ -47,6 +48,41 @@ export class InMemoryTeamRepository implements TeamRepository {
         const bJoined = b.membershipOf(userId)?.joinedAt.getTime() ?? 0;
         return bJoined - aJoined;
       })
+      .map((team) => clone(team)!);
+  }
+
+  async listActiveForUsers(
+    userIds: string[],
+    sport: TeamSportValue,
+  ): Promise<Team[]> {
+    const ids = new Set(userIds);
+    return [...this.byId.values()]
+      .filter(
+        (team) =>
+          team.sport.value === sport &&
+          team.members.some(
+            (member) => member.status.isActive && ids.has(member.userId),
+          ),
+      )
+      .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())
+      .map((team) => clone(team)!);
+  }
+
+  async search(params: TeamSearchParams): Promise<Team[]> {
+    const query = params.query?.trim().toLowerCase() ?? "";
+    const exclude = new Set(params.excludeTeamIds ?? []);
+    const limit = Math.min(Math.max(params.limit ?? 20, 1), 50);
+    return [...this.byId.values()]
+      .filter((team) => {
+        if (team.sport.value !== params.sport) return false;
+        if (exclude.has(team.id)) return false;
+        if (query && !team.name.value.toLowerCase().includes(query)) {
+          return false;
+        }
+        return true;
+      })
+      .sort((a, b) => a.name.value.localeCompare(b.name.value))
+      .slice(0, limit)
       .map((team) => clone(team)!);
   }
 }

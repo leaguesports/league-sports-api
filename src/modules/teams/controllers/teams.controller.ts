@@ -19,6 +19,7 @@ import {
   LeaveTeam,
   ListMyTeams,
   RemoveMember,
+  SearchTeams,
   TransferOwnership,
   UpdateMemberRole,
   UpdateTeam,
@@ -69,6 +70,11 @@ const transferBodySchema = z.object({
   userId: z.string(),
 });
 
+const searchQuerySchema = z.object({
+  sport: z.string(),
+  q: z.string().optional(),
+});
+
 export function createTeamsController(deps: {
   createTeam: CreateTeam;
   getTeam: GetTeam;
@@ -82,6 +88,7 @@ export function createTeamsController(deps: {
   removeMember: RemoveMember;
   leaveTeam: LeaveTeam;
   transferOwnership: TransferOwnership;
+  searchTeams: SearchTeams;
   tryGetSessionUserId: (req: Request) => string | null;
 }) {
   return {
@@ -286,6 +293,25 @@ export function createTeamsController(deps: {
 
         const { id } = z.parse(teamIdParamSchema, req.params);
         const result = await deps.leaveTeam.execute({ userId, teamId: id });
+        return res.status(200).json(result);
+      } catch (error) {
+        return sendTeamsError(res, error);
+      }
+    },
+
+    async search(req: Request, res: Response) {
+      try {
+        const userId = deps.tryGetSessionUserId(req);
+        if (!userId) {
+          return res.status(401).json({ error: "Unauthorized" });
+        }
+
+        const query = z.parse(searchQuerySchema, req.query);
+        const result = await deps.searchTeams.execute({
+          userId,
+          sport: query.sport,
+          query: query.q,
+        });
         return res.status(200).json(result);
       } catch (error) {
         return sendTeamsError(res, error);

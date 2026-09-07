@@ -9,7 +9,8 @@ import { TeamMembership } from "../entities/team-membership";
 import { TeamName } from "../entities/team-name";
 import { TeamPersistenceError } from "../entities/team-persistence-error";
 import { TeamSport } from "../entities/team-sport";
-import { TeamRepository } from "./team.repository";
+import { TeamSportValue } from "../entities/team-sport";
+import { TeamRepository, TeamSearchParams } from "./team.repository";
 
 type MemberRow = {
   id: string;
@@ -257,6 +258,56 @@ export class PrismaTeamRepository implements TeamRepository {
         });
     } catch (error) {
       throw new TeamPersistenceError("Failed to list user teams", {
+        cause: error,
+      });
+    }
+  }
+
+  async listActiveForUsers(
+    userIds: string[],
+    sport: TeamSportValue,
+  ): Promise<Team[]> {
+    if (userIds.length === 0) return [];
+    try {
+      const rows = await this.prisma.team.findMany({
+        where: {
+          sport,
+          members: {
+            some: { userId: { in: userIds }, status: "active" },
+          },
+        },
+        include: includeRelations,
+        orderBy: { updatedAt: "desc" },
+      });
+      return rows.map(toDomain);
+    } catch (error) {
+      throw new TeamPersistenceError("Failed to list teams for users", {
+        cause: error,
+      });
+    }
+  }
+
+  async search(params: TeamSearchParams): Promise<Team[]> {
+    const query = params.query?.trim() ?? "";
+    const limit = Math.min(Math.max(params.limit ?? 20, 1), 50);
+    try {
+      const rows = await this.prisma.team.findMany({
+        where: {
+          sport: params.sport,
+          ...(params.excludeTeamIds && params.excludeTeamIds.length > 0
+            ? { id: { notIn: params.excludeTeamIds } }
+            : {}),
+          ...(query
+            ? { name: { contains: query, mode: "insensitive" } }
+            : {}),
+        },
+        include: includeRelations,
+        orderBy: { name: "asc" },
+        take: limit,
+      });
+      return rows.map(toDomain);
+    } catch (error) {
+      throw new TeamPersistenceError("Failed to search teams", {
         cause: error,
       });
     }

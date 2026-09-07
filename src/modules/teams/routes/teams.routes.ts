@@ -22,6 +22,10 @@ export function createTeamsRoutes(
     void controller.list(req, res);
   });
 
+  router.get("/api/teams/search", options.requireAuth, (req, res) => {
+    void controller.search(req, res);
+  });
+
   router.post("/api/teams/join", options.requireAuth, (req, res) => {
     void controller.join(req, res);
   });

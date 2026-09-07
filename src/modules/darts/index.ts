@@ -1,6 +1,7 @@
 import { Request, Router } from "express";
 
 import { PrismaClient } from "../../generated/prisma/client";
+import { OnScorecardLocked } from "../scorecards/on-scorecard-locked";
 import { VenueRepository } from "../venue/repositories/venue.repository";
 import { createDartsMatchController } from "./controllers/darts-match.controller";
 import { DartsMatchRepository } from "./repositories/darts-match.repository";
@@ -20,6 +21,7 @@ export type CreateDartsModuleParams = {
   venueRepository: VenueRepository;
   dartsMatchRepository?: DartsMatchRepository;
   tryGetSessionUserId: (req: Request) => string | null;
+  onScorecardLocked?: OnScorecardLocked;
 };
 
 export type DartsModule = {
@@ -32,6 +34,7 @@ export function createDartsModule({
   venueRepository,
   dartsMatchRepository: dartsMatchRepositoryOverride,
   tryGetSessionUserId,
+  onScorecardLocked,
 }: CreateDartsModuleParams): DartsModule {
   const dartsMatchRepository =
     dartsMatchRepositoryOverride ?? new PrismaDartsMatchRepository(prisma);
@@ -46,7 +49,10 @@ export function createDartsModule({
       venueRepository,
     ),
     getDartsMatchById: new GetDartsMatchById(dartsMatchRepository),
-    submitDartsTurn: new SubmitDartsTurn(dartsMatchRepository),
+    submitDartsTurn: new SubmitDartsTurn(
+      dartsMatchRepository,
+      onScorecardLocked,
+    ),
     listLockedDartsMatchesByPlayer: new ListLockedDartsMatchesByPlayer(
       dartsMatchRepository,
       venueRepository,

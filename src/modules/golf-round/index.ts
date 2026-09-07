@@ -1,6 +1,7 @@
 import { Request, Router } from "express";
 
 import { PrismaClient } from "../../generated/prisma/client";
+import { OnScorecardLocked } from "../scorecards/on-scorecard-locked";
 import { VenueRepository } from "../venue/repositories/venue.repository";
 import { createGolfRoundController } from "./controllers/golf-round.controller";
 import { GolfRoundRepository } from "./repositories/golf-round.repository";
@@ -20,6 +21,7 @@ export type CreateGolfRoundModuleParams = {
   venueRepository: VenueRepository;
   golfRoundRepository?: GolfRoundRepository;
   tryGetSessionUserId: (req: Request) => string | null;
+  onScorecardLocked?: OnScorecardLocked;
 };
 
 export type GolfRoundModule = {
@@ -32,6 +34,7 @@ export function createGolfRoundModule({
   venueRepository,
   golfRoundRepository: golfRoundRepositoryOverride,
   tryGetSessionUserId,
+  onScorecardLocked,
 }: CreateGolfRoundModuleParams): GolfRoundModule {
   const golfRoundRepository =
     golfRoundRepositoryOverride ?? new PrismaGolfRoundRepository(prisma);
@@ -43,7 +46,7 @@ export function createGolfRoundModule({
       venueRepository,
     ),
     getGolfRoundById: new GetGolfRoundById(golfRoundRepository),
-    lockGolfRound: new LockGolfRound(golfRoundRepository),
+    lockGolfRound: new LockGolfRound(golfRoundRepository, onScorecardLocked),
     listLockedGolfRoundsByPlayer: new ListLockedGolfRoundsByPlayer(
       golfRoundRepository,
       venueRepository,

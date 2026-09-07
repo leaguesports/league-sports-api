@@ -67,6 +67,7 @@ model Venue {
   slug            String
   matches         Match[]
   golfRounds      GolfRound[]
+  dartsMatches    DartsMatch[]
   follows         VenueFollow[]
   organisedGames  OrganisedGame[]
 }
@@ -419,4 +420,61 @@ model GolfRoundPlayer {
 
   @@unique([roundId, slot])
   @@index([userId])
+}
+
+enum DartsMatchStatus {
+  live
+  locked
+}
+
+// 501 double-out, single leg. venueCmsId is nullable so pub/home games
+// do not need a registered Venue. startingScore is stored for history
+// even though v1 is always 501.
+model DartsMatch {
+  id             String           @id @default(uuid())
+  venueCmsId     String?
+  venue          Venue?           @relation(fields: [venueCmsId], references: [cmsId])
+  startsAt       DateTime
+  startingScore  Int              @default(501)
+  status         DartsMatchStatus @default(live)
+  winnerSlot     Int?
+  lockedAt       DateTime?
+  lockedByUserId String?
+  createdAt      DateTime         @default(now())
+  players        DartsMatchPlayer[]
+  turns          DartsTurn[]
+
+  @@index([venueCmsId])
+  @@index([status, startsAt])
+  @@index([lockedByUserId])
+}
+
+model DartsMatchPlayer {
+  id          String     @id @default(uuid())
+  matchId     String
+  match       DartsMatch @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  slot        Int
+  userId      String?
+  displayName String
+  isGuest     Boolean
+  remaining   Int
+
+  @@unique([matchId, slot])
+  @@index([userId])
+}
+
+model DartsTurn {
+  id             String     @id @default(uuid())
+  matchId        String
+  match          DartsMatch @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  turnNumber     Int
+  playerSlot     Int
+  score          Int
+  bust           Boolean
+  checkout       Boolean
+  remainingAfter Int
+  createdAt      DateTime   @default(now())
+
+  @@unique([matchId, turnNumber])
+  @@index([matchId])
 }

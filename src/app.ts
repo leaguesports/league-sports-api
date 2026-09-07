@@ -5,6 +5,10 @@ import express from "express";
 import { Config, corsReflectOrigin } from "./config";
 import { createPrismaClient } from "./lib/prisma";
 import {
+  createDartsModule,
+  DartsMatchRepository,
+} from "./modules/darts";
+import {
   createGolfRoundModule,
   GolfRoundRepository,
 } from "./modules/golf-round";
@@ -62,6 +66,7 @@ export type CreateAppDependencies = {
   friendProfileLookup?: FriendProfileLookup;
   matchRepository?: MatchRepository;
   golfRoundRepository?: GolfRoundRepository;
+  dartsMatchRepository?: DartsMatchRepository;
   badgeAwardRepository?: BadgeAwardRepository;
   preferencesRepository?: PreferencesRepository;
   communityRepository?: CommunityRepository;
@@ -114,6 +119,12 @@ export async function createApp(
     prisma,
     venueRepository: venue.venueRepository,
     golfRoundRepository: dependencies.golfRoundRepository,
+    tryGetSessionUserId: identity.tryGetSessionUserId,
+  });
+  const darts = createDartsModule({
+    prisma,
+    venueRepository: venue.venueRepository,
+    dartsMatchRepository: dependencies.dartsMatchRepository,
     tryGetSessionUserId: identity.tryGetSessionUserId,
   });
   const friends = createFriendsModule({
@@ -190,6 +201,7 @@ export async function createApp(
   app.use(venue.router);
   app.use(match.router);
   app.use(golfRound.router);
+  app.use(darts.router);
   app.use(friends.router);
   app.use(preferences.router);
   app.use(badges.router);

@@ -58,6 +58,10 @@ import {
   createNotificationsModule,
   NotificationRepository,
 } from "./modules/notifications";
+import {
+  createTeamsModule,
+  TeamRepository,
+} from "./modules/teams";
 
 export type CreateAppDependencies = {
   venueRepository?: VenueRepository;
@@ -75,6 +79,7 @@ export type CreateAppDependencies = {
   poolRepository?: PoolRepository;
   organisedGameRepository?: OrganisedGameRepository;
   notificationRepository?: NotificationRepository;
+  teamRepository?: TeamRepository;
 };
 
 export async function createApp(
@@ -196,6 +201,14 @@ export async function createApp(
     tryGetSessionUserId: identity.tryGetSessionUserId,
     requireAuth: identity.authorizationMiddleware,
   });
+  const teams = createTeamsModule({
+    prisma,
+    teamRepository: dependencies.teamRepository,
+    friendshipRepository: friends.friendshipRepository,
+    friendProfileLookup: friends.friendProfileLookup,
+    tryGetSessionUserId: identity.tryGetSessionUserId,
+    requireAuth: identity.authorizationMiddleware,
+  });
 
   app.use(identity.router);
   app.use(venue.router);
@@ -211,6 +224,7 @@ export async function createApp(
   app.use(pools.router);
   app.use(notifications.router);
   app.use(organisedGames.router);
+  app.use(teams.router);
 
   app.use(
     (

@@ -367,6 +367,70 @@ model OrganisedGameInvite {
   @@index([gameId])
 }
 
+enum TeamSport {
+  padel
+  golf
+  darts
+}
+
+enum TeamMemberRole {
+  owner
+  captain
+  member
+}
+
+enum TeamMemberStatus {
+  active
+  invited
+}
+
+// Competitive squad (primary sport + roster). Not a Community.
+// No User FK — same as Friendship / CommunityMember. homeVenueCmsId is
+// optional and unused in UI v1; no Venue FK so teams can exist without
+// a registered venue.
+model Team {
+  id             String           @id @default(uuid())
+  name           String
+  sport          TeamSport
+  homeVenueCmsId String?
+  createdBy      String
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  members        TeamMembership[]
+  inviteLinks    TeamInviteLink[]
+
+  @@index([createdBy])
+  @@index([createdAt])
+}
+
+model TeamMembership {
+  id       String           @id @default(uuid())
+  teamId   String
+  userId   String
+  role     TeamMemberRole   @default(member)
+  status   TeamMemberStatus @default(active)
+  joinedAt DateTime         @default(now())
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, userId])
+  @@index([userId])
+  @@index([teamId])
+}
+
+model TeamInviteLink {
+  id        String    @id @default(uuid())
+  teamId    String
+  token     String    @unique @db.VarChar(32)
+  createdBy String
+  createdAt DateTime  @default(now())
+  revokedAt DateTime?
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@index([teamId])
+}
+
 enum NotificationType {
   organised_game_invite
 }

@@ -1,3 +1,4 @@
+import { DomainError } from "../../../lib/domain-error";
 import { CmsId } from "../../venue/entities/cms-id";
 import { Slug } from "../../venue/entities/slug";
 import { Venue } from "../../venue/entities/venue";
@@ -265,6 +266,56 @@ describe("organised games application", () => {
 
     const again = await start.execute({ userId: "host-1", gameId: game.id });
     expect(again.live.id).toBe(started.live.id);
+  });
+
+  test("host start golf requires teeName and seats the host", async () => {
+    const venues = new InMemoryVenueRepository();
+    const games = new InMemoryOrganisedGameRepository();
+    const friendships = new InMemoryFriendshipRepository();
+    const profiles = new InMemoryFriendProfileLookup();
+    const rounds = new InMemoryGolfRoundRepository();
+    seedProfiles(profiles);
+    await seedVenue(venues, "sanity-course-1");
+
+    const create = new CreateOrganisedGame(
+      games,
+      venues,
+      friendships,
+      profiles,
+    );
+    const { game } = await create.execute({
+      userId: "host-1",
+      sport: "golf",
+      venueCmsId: "sanity-course-1",
+      startsAt: new Date().toISOString(),
+    });
+
+    const start = new StartOrganisedGame(
+      games,
+      profiles,
+      new CreateMatch(new InMemoryMatchRepository(), venues),
+      new CreateGolfRound(rounds, venues),
+    );
+
+    await expect(
+      start.execute({ userId: "host-1", gameId: game.id }),
+    ).rejects.toBeInstanceOf(DomainError);
+
+    const started = await start.execute({
+      userId: "host-1",
+      gameId: game.id,
+      teeName: "Red",
+    });
+    expect(started.live.sport).toBe("golf");
+    expect(started.live.path).toBe(`/golf/${started.live.id}`);
+
+    const round = await rounds.findById(started.live.id);
+    expect(round?.toSnapshot()).toMatchObject({
+      status: "live",
+      teeName: "Red",
+      holesPlayed: 9,
+      players: [{ slot: 1, userId: "host-1", isGuest: false }],
+    });
   });
 
   test("start outside the window is rejected", async () => {

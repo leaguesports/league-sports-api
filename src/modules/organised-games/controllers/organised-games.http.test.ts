@@ -322,7 +322,7 @@ describe("organised games HTTP", () => {
     });
   });
 
-  test("golf start uses default 9-hole course and seats host", async () => {
+  test("golf start requires teeName, uses default 9-hole course, and seats host", async () => {
     const created = await fetch(`${server.url}/api/organised-games`, {
       method: "POST",
       headers: {
@@ -343,9 +343,23 @@ describe("organised games HTTP", () => {
     );
     expect(notHost.status).toBe(403);
 
-    const start = await fetch(
+    const missingTee = await fetch(
       `${server.url}/api/organised-games/${game.id}/start`,
       { method: "POST", headers: { Cookie: cookie("user-a") } },
+    );
+    expect(missingTee.status).toBe(400);
+    expect(await missingTee.json()).toEqual({ error: "teeName is required" });
+
+    const start = await fetch(
+      `${server.url}/api/organised-games/${game.id}/start`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: cookie("user-a"),
+        },
+        body: JSON.stringify({ teeName: "  White  " }),
+      },
     );
     expect(start.status).toBe(201);
     const started = (await start.json()) as {
@@ -363,6 +377,7 @@ describe("organised games HTTP", () => {
       status: "live",
       venueCmsId: "sanity-course-1",
       holesPlayed: 9,
+      teeName: "White",
       players: [{ slot: 1, userId: "user-a", isGuest: false }],
     });
   });

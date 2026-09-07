@@ -465,7 +465,7 @@ export type StartOrganisedGameInput = {
   pairings?: PairingsInput;
   holesPlayed?: unknown;
   startingHole?: unknown;
-  teeName?: string | null;
+  teeName?: unknown;
   course?: unknown;
   players?: GolfPlayerInput[];
 };

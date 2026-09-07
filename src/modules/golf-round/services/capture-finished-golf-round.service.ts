@@ -11,7 +11,7 @@ export type CaptureFinishedGolfRoundInput = {
   startsAt: unknown;
   holesPlayed: unknown;
   startingHole?: unknown;
-  teeName?: string | null;
+  teeName: unknown;
   course: unknown;
   players: GolfPlayerInput[];
   score: unknown;

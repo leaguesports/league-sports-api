@@ -333,6 +333,50 @@ describe("golf rounds HTTP", () => {
     expect(await response.json()).toEqual({ error: "Golf round not found" });
   });
 
+  test("POST create and capture require a trimmed teeName", async () => {
+    const { teeName: _ignored, ...createBodyWithoutTee } = createBody;
+
+    const omitted = await fetch(`${server.url}/api/golf-rounds`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(createBodyWithoutTee),
+    });
+    expect(omitted.status).toBe(400);
+
+    const blank = await fetch(`${server.url}/api/golf-rounds`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...createBody, teeName: "   " }),
+    });
+    expect(blank.status).toBe(400);
+    expect(await blank.json()).toEqual({ error: "teeName must not be blank" });
+
+    const created = await fetch(`${server.url}/api/golf-rounds`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...createBody, teeName: "  Yellow  " }),
+    });
+    expect(created.status).toBe(201);
+    expect(await created.json()).toMatchObject({ teeName: "Yellow" });
+
+    const captureMissing = await fetch(`${server.url}/api/golf-rounds/capture`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: sessionCookie("user-riley"),
+      },
+      body: JSON.stringify({
+        ...createBodyWithoutTee,
+        players: [
+          { slot: 1, displayName: "Alex", isGuest: true, userId: null },
+          { slot: 3, displayName: "Riley", isGuest: false, userId: null },
+        ],
+        score: scoreForPlayers([1, 2, 3, 4, 5, 6, 7, 8, 9], [1, 3], 4),
+      }),
+    });
+    expect(captureMissing.status).toBe(400);
+  });
+
   test("POST rejects unknown venue and invalid course length", async () => {
     const missingVenue = await fetch(`${server.url}/api/golf-rounds`, {
       method: "POST",

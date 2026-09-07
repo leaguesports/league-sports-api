@@ -6,6 +6,7 @@ import { createMatchController } from "./controllers/match.controller";
 import { PrismaMatchRepository } from "./repositories/prisma-match.repository";
 import { MatchRepository } from "./repositories/match.repository";
 import { createMatchRoutes } from "./routes/match.routes";
+import { CaptureFinishedMatch } from "./services/capture-finished-match.service";
 import { CreateMatch } from "./services/create-match.service";
 import { GetMatchById } from "./services/get-match-by-id.service";
 import {
@@ -37,6 +38,10 @@ export function createMatchModule({
 
   const controller = createMatchController({
     createMatch: new CreateMatch(matchRepository, venueRepository),
+    captureFinishedMatch: new CaptureFinishedMatch(
+      matchRepository,
+      venueRepository,
+    ),
     getMatchById: new GetMatchById(matchRepository),
     lockMatch: new LockMatch(matchRepository),
     listLockedMatchesByPlayer: new ListLockedMatchesByPlayer(
@@ -61,6 +66,7 @@ export { Match } from "./entities/match";
 export { InMemoryMatchRepository } from "./repositories/in-memory-match.repository";
 export { PrismaMatchRepository } from "./repositories/prisma-match.repository";
 export type { MatchRepository } from "./repositories/match.repository";
+export { CaptureFinishedMatch } from "./services/capture-finished-match.service";
 export { CreateMatch } from "./services/create-match.service";
 export { GetMatchById } from "./services/get-match-by-id.service";
 export { LockMatch } from "./services/lock-match.service";

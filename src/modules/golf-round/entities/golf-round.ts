@@ -79,6 +79,22 @@ export class GolfRound {
     );
   }
 
+  static captureFinished(
+    props: CreateGolfRoundProps & {
+      score: unknown;
+      lockedByUserId: string;
+      lockedAt?: Date;
+    },
+  ): GolfRound {
+    const round = GolfRound.create(props);
+    const score = GolfScore.from(props.score, {
+      holeNumbers: round.course.holeNumbers(),
+      playerSlots: round.playerSlots(),
+    });
+    round.lock(score, props.lockedAt ?? new Date(), props.lockedByUserId);
+    return round;
+  }
+
   static rehydrate(props: {
     id: string;
     venueCmsId: CmsId;

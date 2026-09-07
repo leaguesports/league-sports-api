@@ -205,6 +205,40 @@ describe(PrismaMatchRepository, () => {
     );
   });
 
+  test("create persists a captureFinished match as locked", async () => {
+    const prisma = createPrismaMap();
+    const repository = new PrismaMatchRepository(
+      prisma as unknown as PrismaClient,
+    );
+    const match = Match.captureFinished({
+      venueCmsId: CmsId.from("sanity-court-1"),
+      startsAt: StartsAt.from("2026-08-29T10:00:00.000Z"),
+      ruleset: Ruleset.from("golden_point"),
+      pairings: {
+        teamA: [
+          { displayName: "Alex", isGuest: true, userId: null },
+          { displayName: "Sam", isGuest: true, userId: null },
+        ],
+        teamB: [
+          { displayName: "Jordan", isGuest: true, userId: null },
+          { displayName: "Riley", isGuest: false, userId: "user-1" },
+        ],
+      },
+      servingTeam: Team.A,
+      score: { sets: [{ gamesA: 6, gamesB: 4, winner: "A" }] },
+      winner: "A",
+      lockedByUserId: "user-1",
+      lockedAt: new Date("2026-08-29T11:00:00.000Z"),
+    });
+
+    const stored = await repository.create(match);
+
+    expect(stored.status).toBe("locked");
+    expect(prisma.matches.get(match.id)?.status).toBe("locked");
+    expect(prisma.matches.get(match.id)?.winnerTeam).toBe("A");
+    expect(await repository.listLockedByPlayerUserId("user-1")).toHaveLength(1);
+  });
+
   test("persistLock conflicts when another result already won the race", async () => {
     const prisma = createPrismaMap();
     const repository = new PrismaMatchRepository(

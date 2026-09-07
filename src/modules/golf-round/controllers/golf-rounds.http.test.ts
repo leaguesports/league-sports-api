@@ -220,6 +220,113 @@ describe("golf rounds HTTP", () => {
     expect(items.map((item) => item.id)).toEqual([createdBody.id]);
   });
 
+  test("POST /api/golf-rounds/capture writes a locked round from one payload", async () => {
+    const captured = await fetch(`${server.url}/api/golf-rounds/capture`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: sessionCookie("user-riley"),
+      },
+      body: JSON.stringify({
+        venueCmsId: "sanity-course-1",
+        playedAt: "2026-09-04T10:00:00.000Z",
+        holesPlayed: 9,
+        startingHole: 1,
+        teeName: "White",
+        course: { name: "Links Nine", holes: courseHoles9 },
+        players: [
+          { slot: 1, displayName: "Alex", isGuest: true, userId: null },
+          { slot: 2, displayName: "Sam", isGuest: true, userId: null },
+          { slot: 3, displayName: "Riley", isGuest: false, userId: null },
+        ],
+        score: scoreA,
+      }),
+    });
+    const capturedBody = (await captured.json()) as {
+      id: string;
+      status: string;
+      score: unknown;
+      startsAt: string;
+    };
+
+    expect(captured.status).toBe(201);
+    expect(capturedBody.status).toBe("locked");
+    expect(capturedBody.score).toEqual(scoreA);
+    expect(capturedBody.startsAt).toBe("2026-09-04T10:00:00.000Z");
+
+    const history = await fetch(
+      `${server.url}/api/golf-rounds?playerUserId=user-riley`,
+    );
+    const items = (await history.json()) as { id: string }[];
+    expect(items.map((item) => item.id)).toEqual([capturedBody.id]);
+  });
+
+  test("POST /api/golf-rounds/capture requires a seated session player", async () => {
+    const unauth = await fetch(`${server.url}/api/golf-rounds/capture`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ...createBody,
+        score: scoreA,
+      }),
+    });
+    expect(unauth.status).toBe(401);
+
+    const guestsOnly = await fetch(`${server.url}/api/golf-rounds/capture`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: sessionCookie("user-riley"),
+      },
+      body: JSON.stringify({
+        ...createBody,
+        players: [
+          { slot: 1, displayName: "Alex", isGuest: true, userId: null },
+          { slot: 2, displayName: "Sam", isGuest: true, userId: null },
+        ],
+        score: scoreForPlayers([1, 2, 3, 4, 5, 6, 7, 8, 9], [1, 2], 4),
+      }),
+    });
+    expect(guestsOnly.status).toBe(403);
+
+    const missingVenue = await fetch(`${server.url}/api/golf-rounds/capture`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: sessionCookie("user-riley"),
+      },
+      body: JSON.stringify({
+        ...createBody,
+        venueCmsId: "no-such-course",
+        players: [
+          { slot: 1, displayName: "Alex", isGuest: true, userId: null },
+          { slot: 2, displayName: "Sam", isGuest: true, userId: null },
+          { slot: 3, displayName: "Riley", isGuest: false, userId: null },
+        ],
+        score: scoreA,
+      }),
+    });
+    expect(missingVenue.status).toBe(404);
+
+    const badScore = await fetch(`${server.url}/api/golf-rounds/capture`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: sessionCookie("user-riley"),
+      },
+      body: JSON.stringify({
+        ...createBody,
+        players: [
+          { slot: 1, displayName: "Alex", isGuest: true, userId: null },
+          { slot: 2, displayName: "Sam", isGuest: true, userId: null },
+          { slot: 3, displayName: "Riley", isGuest: false, userId: null },
+        ],
+        score: scoreForPlayers([1, 2], [1, 2, 3], 4),
+      }),
+    });
+    expect(badScore.status).toBe(400);
+  });
+
   test("GET missing golf round is 404", async () => {
     const response = await fetch(`${server.url}/api/golf-rounds/missing`);
     expect(response.status).toBe(404);

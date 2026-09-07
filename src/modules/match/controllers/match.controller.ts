@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { z } from "zod";
 
+import { CaptureFinishedMatch } from "../services/capture-finished-match.service";
 import { CreateMatch } from "../services/create-match.service";
 import { GetMatchById } from "../services/get-match-by-id.service";
 import {
@@ -13,6 +14,7 @@ import { MatchLockConflictError } from "../entities/match-lock-conflict-error";
 import { MatchVenueNotFoundError } from "../entities/match-venue-not-found-error";
 import { MatchPersistenceError } from "../entities/match-persistence-error";
 import { sanitizePairingsForCreate } from "../utils/bind-session-user";
+import { resolvePlayedAt } from "../utils/played-at";
 
 const playerSchema = z.object({
   userId: z.string().nullable().optional(),
@@ -65,8 +67,20 @@ const lockMatchBodySchema = z.object({
   winner: z.enum(["A", "B"]),
 });
 
+const captureMatchBodySchema = z.object({
+  venueCmsId: z.string(),
+  startsAt: z.string().optional(),
+  playedAt: z.string().optional(),
+  ruleset: z.enum(["golden_point", "advantage"]),
+  pairings: pairingsSchema,
+  servingTeam: z.enum(["A", "B"]).optional(),
+  score: lockMatchBodySchema.shape.score,
+  winner: lockMatchBodySchema.shape.winner,
+});
+
 export function createMatchController(deps: {
   createMatch: CreateMatch;
+  captureFinishedMatch: CaptureFinishedMatch;
   getMatchById: GetMatchById;
   lockMatch: LockMatch;
   listLockedMatchesByPlayer: ListLockedMatchesByPlayer;
@@ -80,6 +94,46 @@ export function createMatchController(deps: {
         const sessionUserId = deps.tryGetSessionUserId(req);
         const pairings = sanitizePairingsForCreate(body.pairings, sessionUserId);
         const match = await deps.createMatch.execute({ ...body, pairings });
+        return res.status(201).json(match.toSnapshot());
+      } catch (error) {
+        return sendMatchError(res, error);
+      }
+    },
+
+    async capture(req: Request, res: Response) {
+      try {
+        const sessionUserId = deps.tryGetSessionUserId(req);
+        if (!sessionUserId) {
+          return res.status(401).json({ error: "Unauthorized" });
+        }
+
+        const body = z.parse(captureMatchBodySchema, req.body ?? {});
+        const startsAt = resolvePlayedAt(body);
+        if (!startsAt) {
+          return res.status(400).json({ error: "startsAt or playedAt is required" });
+        }
+
+        const pairings = sanitizePairingsForCreate(body.pairings, sessionUserId);
+        const seated = [pairings.teamA[0], pairings.teamA[1], pairings.teamB[0], pairings.teamB[1]].some(
+          (player) => player.userId === sessionUserId,
+        );
+        if (!seated) {
+          return res.status(403).json({
+            error: "Only a seated player can capture this match",
+          });
+        }
+
+        const match = await deps.captureFinishedMatch.execute({
+          venueCmsId: body.venueCmsId,
+          startsAt,
+          ruleset: body.ruleset,
+          pairings,
+          servingTeam: body.servingTeam,
+          score: body.score,
+          winner: body.winner,
+          lockedByUserId: sessionUserId,
+        });
+
         return res.status(201).json(match.toSnapshot());
       } catch (error) {
         return sendMatchError(res, error);

@@ -62,8 +62,12 @@ export class PrismaMatchRepository implements MatchRepository {
           venueCmsId: snapshot.venueCmsId,
           startsAt: match.startsAt.value,
           ruleset: snapshot.ruleset,
-          status: "live",
+          status: snapshot.status,
           servingTeam: snapshot.servingTeam,
+          winnerTeam: snapshot.winner,
+          lockedAt: match.lockedAt,
+          lockedByUserId: match.lockedByUserId,
+          score: snapshot.score === null ? undefined : snapshot.score,
           players: {
             create: match.pairings.players.map((player) => ({
               slot: player.slot.value,

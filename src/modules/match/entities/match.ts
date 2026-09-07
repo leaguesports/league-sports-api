@@ -62,6 +62,24 @@ export class Match {
     );
   }
 
+  static captureFinished(
+    props: CreateMatchProps & {
+      score: unknown;
+      winner: unknown;
+      lockedByUserId: string;
+      lockedAt?: Date;
+    },
+  ): Match {
+    const match = Match.create(props);
+    match.lock(
+      MatchScore.from(props.score),
+      Team.from(props.winner, "winner"),
+      props.lockedAt ?? new Date(),
+      props.lockedByUserId,
+    );
+    return match;
+  }
+
   static rehydrate(props: {
     id: string;
     venueCmsId: CmsId;

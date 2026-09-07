@@ -11,6 +11,10 @@ export function createMatchRoutes(
     void controller.create(req, res);
   });
 
+  router.post("/api/matches/capture", (req, res) => {
+    void controller.capture(req, res);
+  });
+
   router.get("/api/matches", (req, res) => {
     void controller.listByPlayer(req, res);
   });

@@ -11,6 +11,10 @@ export function createGolfRoundRoutes(
     void controller.create(req, res);
   });
 
+  router.post("/api/golf-rounds/capture", (req, res) => {
+    void controller.capture(req, res);
+  });
+
   router.get("/api/golf-rounds", (req, res) => {
     void controller.listByPlayer(req, res);
   });

@@ -285,6 +285,133 @@ describe("matches HTTP", () => {
     ).toBe(true);
   });
 
+  test("POST /api/matches/capture writes a locked match from one payload", async () => {
+    const captured = await fetch(`${server.url}/api/matches/capture`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: sessionCookie("user-riley"),
+      },
+      body: JSON.stringify({
+        venueCmsId: "sanity-court-1",
+        playedAt: "2026-08-29T10:00:00.000Z",
+        ruleset: "golden_point",
+        pairings: {
+          teamA: pairings.teamA,
+          teamB: [
+            { displayName: "Jordan", isGuest: true, userId: null },
+            { displayName: "Riley", isGuest: false, userId: null },
+          ],
+        },
+        score: scoreA,
+        winner: "A",
+      }),
+    });
+    const capturedBody = (await captured.json()) as {
+      id: string;
+      status: string;
+      winner: string;
+      score: unknown;
+      startsAt: string;
+    };
+
+    expect(captured.status).toBe(201);
+    expect(capturedBody.status).toBe("locked");
+    expect(capturedBody.winner).toBe("A");
+    expect(capturedBody.score).toEqual(scoreA);
+    expect(capturedBody.startsAt).toBe("2026-08-29T10:00:00.000Z");
+
+    const history = await fetch(
+      `${server.url}/api/matches?playerUserId=user-riley`,
+    );
+    const items = (await history.json()) as { id: string }[];
+    expect(items.map((item) => item.id)).toEqual([capturedBody.id]);
+  });
+
+  test("POST /api/matches/capture requires a seated session player", async () => {
+    const unauth = await fetch(`${server.url}/api/matches/capture`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ...createBody,
+        score: scoreA,
+        winner: "A",
+      }),
+    });
+    expect(unauth.status).toBe(401);
+
+    const guestsOnly = await fetch(`${server.url}/api/matches/capture`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: sessionCookie("user-riley"),
+      },
+      body: JSON.stringify({
+        ...createBody,
+        pairings: {
+          teamA: [
+            { displayName: "Alex", isGuest: true, userId: null },
+            { displayName: "Sam", isGuest: true, userId: null },
+          ],
+          teamB: [
+            { displayName: "Jordan", isGuest: true, userId: null },
+            { displayName: "Riley", isGuest: true, userId: null },
+          ],
+        },
+        score: scoreA,
+        winner: "A",
+      }),
+    });
+    expect(guestsOnly.status).toBe(403);
+
+    const missingWhen = await fetch(`${server.url}/api/matches/capture`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: sessionCookie("user-riley"),
+      },
+      body: JSON.stringify({
+        venueCmsId: "sanity-court-1",
+        ruleset: "golden_point",
+        pairings: {
+          teamA: pairings.teamA,
+          teamB: [
+            { displayName: "Jordan", isGuest: true, userId: null },
+            { displayName: "Riley", isGuest: false, userId: null },
+          ],
+        },
+        score: scoreA,
+        winner: "A",
+      }),
+    });
+    expect(missingWhen.status).toBe(400);
+    expect(await missingWhen.json()).toEqual({
+      error: "startsAt or playedAt is required",
+    });
+
+    const missingVenue = await fetch(`${server.url}/api/matches/capture`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: sessionCookie("user-riley"),
+      },
+      body: JSON.stringify({
+        ...createBody,
+        venueCmsId: "no-such-court",
+        pairings: {
+          teamA: pairings.teamA,
+          teamB: [
+            { displayName: "Jordan", isGuest: true, userId: null },
+            { displayName: "Riley", isGuest: false, userId: null },
+          ],
+        },
+        score: scoreA,
+        winner: "A",
+      }),
+    });
+    expect(missingVenue.status).toBe(404);
+  });
+
   test("GET missing match is 404", async () => {
     const response = await fetch(`${server.url}/api/matches/missing`);
     expect(response.status).toBe(404);

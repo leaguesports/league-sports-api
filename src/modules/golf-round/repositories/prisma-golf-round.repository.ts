@@ -56,11 +56,14 @@ export class PrismaGolfRoundRepository implements GolfRoundRepository {
           id: snapshot.id,
           venueCmsId: snapshot.venueCmsId,
           startsAt: round.startsAt.value,
-          status: "live",
+          status: snapshot.status,
           holesPlayed: snapshot.holesPlayed,
           startingHole: snapshot.startingHole,
           teeName: snapshot.teeName,
           course: snapshot.course,
+          lockedAt: round.lockedAt,
+          lockedByUserId: round.lockedByUserId,
+          score: snapshot.score === null ? undefined : snapshot.score,
           players: {
             create: round.players.map((player) => ({
               slot: player.slot,

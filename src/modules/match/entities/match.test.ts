@@ -109,6 +109,32 @@ describe(Match, () => {
     ).toThrow(DomainError);
   });
 
+  test("captureFinished creates a locked match without a live session", () => {
+    const lockedAt = new Date("2026-08-29T11:00:00.000Z");
+    const match = Match.captureFinished({
+      venueCmsId: CmsId.from("sanity-court-1"),
+      startsAt: StartsAt.from("2026-08-29T10:00:00.000Z"),
+      ruleset: Ruleset.from("golden_point"),
+      pairings: {
+        teamA: [user("user-1", "Alex"), guest("Sam")],
+        teamB: [guest("Jordan"), guest("Riley")],
+      },
+      servingTeam: Team.A,
+      score: lockScore,
+      winner: "A",
+      lockedByUserId: "user-1",
+      lockedAt,
+    });
+
+    expect(match.toSnapshot()).toMatchObject({
+      status: "locked",
+      winner: "A",
+      lockedAt: "2026-08-29T11:00:00.000Z",
+      score: lockScore,
+    });
+    expect(match.lockedByUserId).toBe("user-1");
+  });
+
   test("lock writes the result once and is idempotent for the same score", () => {
     const match = createLiveMatch();
     const lockedAt = new Date("2026-08-29T11:00:00.000Z");

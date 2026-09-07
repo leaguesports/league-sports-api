@@ -6,6 +6,7 @@ import { createGolfRoundController } from "./controllers/golf-round.controller";
 import { GolfRoundRepository } from "./repositories/golf-round.repository";
 import { PrismaGolfRoundRepository } from "./repositories/prisma-golf-round.repository";
 import { createGolfRoundRoutes } from "./routes/golf-round.routes";
+import { CaptureFinishedGolfRound } from "./services/capture-finished-golf-round.service";
 import { CreateGolfRound } from "./services/create-golf-round.service";
 import { GetGolfRoundById } from "./services/get-golf-round-by-id.service";
 import {
@@ -37,6 +38,10 @@ export function createGolfRoundModule({
 
   const controller = createGolfRoundController({
     createGolfRound: new CreateGolfRound(golfRoundRepository, venueRepository),
+    captureFinishedGolfRound: new CaptureFinishedGolfRound(
+      golfRoundRepository,
+      venueRepository,
+    ),
     getGolfRoundById: new GetGolfRoundById(golfRoundRepository),
     lockGolfRound: new LockGolfRound(golfRoundRepository),
     listLockedGolfRoundsByPlayer: new ListLockedGolfRoundsByPlayer(
@@ -61,6 +66,7 @@ export { GolfRound } from "./entities/golf-round";
 export { InMemoryGolfRoundRepository } from "./repositories/in-memory-golf-round.repository";
 export { PrismaGolfRoundRepository } from "./repositories/prisma-golf-round.repository";
 export type { GolfRoundRepository } from "./repositories/golf-round.repository";
+export { CaptureFinishedGolfRound } from "./services/capture-finished-golf-round.service";
 export { CreateGolfRound } from "./services/create-golf-round.service";
 export { GetGolfRoundById } from "./services/get-golf-round-by-id.service";
 export { LockGolfRound } from "./services/lock-golf-round.service";

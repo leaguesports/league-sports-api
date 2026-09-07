@@ -61,13 +61,14 @@ model SportFollow {
 }
 
 model Venue {
-  id         String        @id @default(uuid())
-  cmsId      String        @unique
-  name       String
-  slug       String
-  matches    Match[]
-  golfRounds GolfRound[]
-  follows    VenueFollow[]
+  id              String           @id @default(uuid())
+  cmsId           String           @unique
+  name            String
+  slug            String
+  matches         Match[]
+  golfRounds      GolfRound[]
+  follows         VenueFollow[]
+  organisedGames  OrganisedGame[]
 }
 
 model VenueFollow {
@@ -307,6 +308,62 @@ model MatchPlayer {
 enum GolfRoundStatus {
   live
   locked
+}
+
+enum OrganisedGameSport {
+  padel
+  golf
+}
+
+enum OrganisedGameStatus {
+  open
+  started
+  cancelled
+}
+
+enum OrganisedGameRsvp {
+  pending
+  accepted
+  declined
+}
+
+// Host-scheduled padel/golf gathering. No User FK — same as Friendship /
+// CommunityMember. Share token is the unguessable invite surface.
+model OrganisedGame {
+  id              String              @id @default(uuid())
+  hostUserId      String
+  sport           OrganisedGameSport
+  status          OrganisedGameStatus @default(open)
+  venueCmsId      String
+  venue           Venue               @relation(fields: [venueCmsId], references: [cmsId])
+  startsAt        DateTime
+  notes           String?
+  capacity        Int
+  inviteToken     String              @unique @db.VarChar(32)
+  liveScorecardId String?
+  livePath        String?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  invites         OrganisedGameInvite[]
+
+  @@index([hostUserId])
+  @@index([venueCmsId])
+  @@index([status, startsAt])
+  @@index([hostUserId, status])
+}
+
+model OrganisedGameInvite {
+  id          String            @id @default(uuid())
+  gameId      String
+  game        OrganisedGame     @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  userId      String
+  rsvp        OrganisedGameRsvp @default(pending)
+  createdAt   DateTime          @default(now())
+  respondedAt DateTime?
+
+  @@unique([gameId, userId])
+  @@index([userId])
+  @@index([gameId])
 }
 
 model GolfRound {

@@ -182,7 +182,17 @@ describe("darts matches HTTP", () => {
           body: JSON.stringify(body),
         },
       );
-      return { status: response.status, body: await response.json() };
+      return {
+        status: response.status,
+        body: (await response.json()) as {
+          error?: string;
+          status?: string;
+          winnerSlot?: number;
+          winnerUserId?: string | null;
+          players: { slot: number; remaining: number }[];
+          turns: { turnNumber: number; bust: boolean; score: number }[];
+        },
+      };
     };
 
     expect((await score({ playerSlot: 1, score: 180 })).status).toBe(200);
@@ -190,11 +200,20 @@ describe("darts matches HTTP", () => {
     const leaveOne = await score({ playerSlot: 1, score: 140 });
     expect(leaveOne.status).toBe(200);
     expect(leaveOne.body).toMatchObject({
-      players: [{ slot: 1, remaining: 141 }],
-      turns: [expect.objectContaining({ turnNumber: 3, bust: true, score: 140 })],
+      players: [
+        { slot: 1, remaining: 141 },
+        { slot: 2, remaining: 501 },
+      ],
+    });
+    expect(leaveOne.body.turns[2]).toMatchObject({
+      turnNumber: 3,
+      bust: true,
+      score: 140,
     });
 
-    const illegalFinish = await score({ playerSlot: 2, score: 501 });
+    await score({ playerSlot: 2, score: 180 });
+    await score({ playerSlot: 2, score: 180 });
+    const illegalFinish = await score({ playerSlot: 2, score: 141 });
     expect(illegalFinish.status).toBe(400);
     expect(illegalFinish.body).toEqual({
       error: "checkout must be true to finish on 0",
@@ -202,7 +221,7 @@ describe("darts matches HTTP", () => {
 
     const checkout = await score({
       playerSlot: 2,
-      score: 501,
+      score: 141,
       checkout: true,
     });
     expect(checkout.status).toBe(200);

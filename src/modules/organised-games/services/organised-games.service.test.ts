@@ -9,6 +9,8 @@ import { InMemoryGolfRoundRepository } from "../../golf-round/repositories/in-me
 import { CreateGolfRound } from "../../golf-round/services/create-golf-round.service";
 import { InMemoryMatchRepository } from "../../match/repositories/in-memory-match.repository";
 import { CreateMatch } from "../../match/services/create-match.service";
+import { InMemoryNotificationRepository } from "../../notifications/repositories/in-memory-notification.repository";
+import { NotifyOrganisedGameInvite } from "../../notifications/services/notifications.service";
 import { OrganisedGameNotFriendError } from "../entities/organised-game-not-friend-error";
 import { OrganisedGameForbiddenError } from "../entities/organised-game-forbidden-error";
 import { OrganisedGameNotFoundError } from "../entities/organised-game-not-found-error";
@@ -296,5 +298,87 @@ describe("organised games application", () => {
     await expect(
       start.execute({ userId: "host-1", gameId: game.id }),
     ).rejects.toBeInstanceOf(OrganisedGameStartWindowError);
+  });
+
+  test("create, invite, and join notify the invitee; GET and RSVP mark the notice read", async () => {
+    const venues = new InMemoryVenueRepository();
+    const games = new InMemoryOrganisedGameRepository();
+    const friendships = new InMemoryFriendshipRepository();
+    const profiles = new InMemoryFriendProfileLookup();
+    const notifications = new InMemoryNotificationRepository();
+    const notifier = new NotifyOrganisedGameInvite(notifications);
+    seedProfiles(profiles);
+    await seedVenue(venues);
+    await becomeFriends(friendships, "host-1", "friend-a");
+    await becomeFriends(friendships, "host-1", "friend-b");
+
+    const create = new CreateOrganisedGame(
+      games,
+      venues,
+      friendships,
+      profiles,
+      notifier,
+    );
+    const { game } = await create.execute({
+      userId: "host-1",
+      sport: "padel",
+      venueCmsId: "sanity-court-1",
+      startsAt: STARTS_AT,
+      inviteUserIds: ["friend-a"],
+    });
+
+    const forFriendA = await notifications.listPage({
+      recipientId: "friend-a",
+      limit: 10,
+    });
+    expect(forFriendA.unreadCount).toBe(1);
+    expect(forFriendA.items[0]?.payload.toSnapshot()).toEqual({
+      organisedGameId: game.id,
+      sport: "padel",
+      startsAt: STARTS_AT,
+      venueCmsId: "sanity-court-1",
+    });
+
+    const invite = new InviteFriends(games, friendships, profiles, notifier);
+    await invite.execute({
+      userId: "host-1",
+      gameId: game.id,
+      userIds: ["friend-b"],
+    });
+    expect(
+      (await notifications.listPage({ recipientId: "friend-b", limit: 10 }))
+        .unreadCount,
+    ).toBe(1);
+
+    const join = new JoinByInviteToken(games, profiles, notifier);
+    await join.execute({ userId: "stranger", token: game.inviteToken! });
+    expect(
+      (await notifications.listPage({ recipientId: "stranger", limit: 10 }))
+        .unreadCount,
+    ).toBe(1);
+
+    await join.execute({ userId: "stranger", token: game.inviteToken! });
+    expect(
+      (await notifications.listPage({ recipientId: "stranger", limit: 10 }))
+        .items,
+    ).toHaveLength(1);
+
+    const get = new GetOrganisedGame(games, profiles, notifier);
+    await get.execute({ userId: "friend-a", gameId: game.id });
+    expect(
+      (await notifications.listPage({ recipientId: "friend-a", limit: 10 }))
+        .unreadCount,
+    ).toBe(0);
+
+    const rsvp = new RsvpOrganisedGame(games, profiles, notifier);
+    await rsvp.execute({
+      userId: "friend-b",
+      gameId: game.id,
+      rsvp: "accepted",
+    });
+    expect(
+      (await notifications.listPage({ recipientId: "friend-b", limit: 10 }))
+        .unreadCount,
+    ).toBe(0);
   });
 });

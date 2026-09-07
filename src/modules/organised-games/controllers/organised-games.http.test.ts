@@ -10,6 +10,7 @@ import { InMemoryFriendshipRepository } from "../../friends/repositories/in-memo
 import { InMemoryGolfRoundRepository } from "../../golf-round/repositories/in-memory-golf-round.repository";
 import { signAuthenticationToken } from "../../identity/utils/jwt";
 import { InMemoryMatchRepository } from "../../match/repositories/in-memory-match.repository";
+import { InMemoryNotificationRepository } from "../../notifications/repositories/in-memory-notification.repository";
 import { CmsId } from "../../venue/entities/cms-id";
 import { Slug } from "../../venue/entities/slug";
 import { Venue } from "../../venue/entities/venue";
@@ -62,6 +63,7 @@ describe("organised games HTTP", () => {
   let friendships: InMemoryFriendshipRepository;
   let profiles: InMemoryFriendProfileLookup;
   let games: InMemoryOrganisedGameRepository;
+  let notifications: InMemoryNotificationRepository;
   let matches: InMemoryMatchRepository;
   let rounds: InMemoryGolfRoundRepository;
   let app: Express;
@@ -76,6 +78,7 @@ describe("organised games HTTP", () => {
     friendships = new InMemoryFriendshipRepository();
     profiles = new InMemoryFriendProfileLookup();
     games = new InMemoryOrganisedGameRepository();
+    notifications = new InMemoryNotificationRepository();
     matches = new InMemoryMatchRepository();
     rounds = new InMemoryGolfRoundRepository();
 
@@ -122,6 +125,7 @@ describe("organised games HTTP", () => {
       friendshipRepository: friendships,
       friendProfileLookup: profiles,
       organisedGameRepository: games,
+      notificationRepository: notifications,
       matchRepository: matches,
       golfRoundRepository: rounds,
     });

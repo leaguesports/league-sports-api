@@ -14,6 +14,7 @@ import { GolfRoundRepository } from "../golf-round/repositories/golf-round.repos
 import { CreateGolfRound } from "../golf-round/services/create-golf-round.service";
 import { MatchRepository } from "../match/repositories/match.repository";
 import { CreateMatch } from "../match/services/create-match.service";
+import { OrganisedGameInviteNotifier } from "../notifications/services/notifications.service";
 import { VenueRepository } from "../venue/repositories/venue.repository";
 import { createOrganisedGamesController } from "./controllers/organised-games.controller";
 import { OrganisedGameRepository } from "./repositories/organised-game.repository";
@@ -40,6 +41,7 @@ export type CreateOrganisedGamesModuleParams = {
   matchRepository: MatchRepository;
   golfRoundRepository: GolfRoundRepository;
   organisedGameRepository?: OrganisedGameRepository;
+  inviteNotifier?: OrganisedGameInviteNotifier;
   tryGetSessionUserId: (req: Request) => string | null;
   requireAuth: (req: Request, res: Response, next: NextFunction) => void;
 };
@@ -57,6 +59,7 @@ export function createOrganisedGamesModule({
   matchRepository,
   golfRoundRepository,
   organisedGameRepository: organisedGameRepositoryOverride,
+  inviteNotifier,
   tryGetSessionUserId,
   requireAuth,
 }: CreateOrganisedGamesModuleParams): OrganisedGamesModule {
@@ -70,14 +73,17 @@ export function createOrganisedGamesModule({
       venueRepository,
       friendshipRepository,
       friendProfileLookup,
+      inviteNotifier,
     ),
     getOrganisedGame: new GetOrganisedGame(
       organisedGameRepository,
       friendProfileLookup,
+      inviteNotifier,
     ),
     getOrganisedGameByToken: new GetOrganisedGameByToken(
       organisedGameRepository,
       friendProfileLookup,
+      inviteNotifier,
     ),
     listMyOrganisedGames: new ListMyOrganisedGames(
       organisedGameRepository,
@@ -87,15 +93,18 @@ export function createOrganisedGamesModule({
       organisedGameRepository,
       friendshipRepository,
       friendProfileLookup,
+      inviteNotifier,
     ),
     listInvites: new ListInvites(organisedGameRepository, friendProfileLookup),
     joinByInviteToken: new JoinByInviteToken(
       organisedGameRepository,
       friendProfileLookup,
+      inviteNotifier,
     ),
     rsvpOrganisedGame: new RsvpOrganisedGame(
       organisedGameRepository,
       friendProfileLookup,
+      inviteNotifier,
     ),
     cancelOrganisedGame: new CancelOrganisedGame(
       organisedGameRepository,

@@ -20,6 +20,7 @@ import { OrganisedGameRsvp } from "../entities/organised-game-rsvp";
 import { OrganisedGameSport } from "../entities/organised-game-sport";
 import { OrganisedGameVenueNotFoundError } from "../entities/organised-game-venue-not-found-error";
 import { StartsAt } from "../entities/starts-at";
+import { OrganisedGameInviteNotifier } from "../../notifications/services/notifications.service";
 import { OrganisedGameRepository } from "../repositories/organised-game.repository";
 import { defaultNineHoleCourse } from "./default-golf-course";
 import {
@@ -155,12 +156,43 @@ async function requireAcceptedFriend(
   }
 }
 
+async function notifyInvitees(
+  notifier: OrganisedGameInviteNotifier | undefined,
+  game: OrganisedGame,
+  inviteeIds: string[],
+): Promise<void> {
+  if (!notifier || inviteeIds.length === 0) return;
+  for (const inviteeId of inviteeIds) {
+    await notifier.notifyInviteCreated({
+      recipientId: inviteeId,
+      actorId: game.hostUserId,
+      organisedGameId: game.id,
+      sport: game.sport.value,
+      startsAt: game.startsAt.toIsoString(),
+      venueCmsId: game.venueCmsId.value,
+    });
+  }
+}
+
+async function markInviteNotificationRead(
+  notifier: OrganisedGameInviteNotifier | undefined,
+  game: OrganisedGame,
+  userId: string,
+): Promise<void> {
+  if (!notifier || !game.inviteOf(userId)) return;
+  await notifier.markInviteNotificationsRead({
+    recipientId: userId,
+    organisedGameId: game.id,
+  });
+}
+
 export class CreateOrganisedGame {
   constructor(
     private readonly games: OrganisedGameRepository,
     private readonly venues: VenueRepository,
     private readonly friendships: FriendshipRepository,
     private readonly profiles: FriendProfileLookup,
+    private readonly inviteNotifier?: OrganisedGameInviteNotifier,
   ) {}
 
   async execute(input: {
@@ -199,6 +231,7 @@ export class CreateOrganisedGame {
     }
 
     const saved = await this.games.create(game);
+    await notifyInvitees(this.inviteNotifier, saved, inviteUserIds);
     return {
       game: await toPublicGame(saved, this.profiles, userId, {
         revealInviteToken: true,
@@ -211,6 +244,7 @@ export class GetOrganisedGame {
   constructor(
     private readonly games: OrganisedGameRepository,
     private readonly profiles: FriendProfileLookup,
+    private readonly inviteNotifier?: OrganisedGameInviteNotifier,
   ) {}
 
   async execute(input: { userId: string; gameId: string }) {
@@ -219,6 +253,7 @@ export class GetOrganisedGame {
     if (!game || !game.isParticipant(userId)) {
       throw new OrganisedGameNotFoundError();
     }
+    await markInviteNotificationRead(this.inviteNotifier, game, userId);
     return {
       game: await toPublicGame(game, this.profiles, userId, {
         revealInviteToken: game.isHost(userId),
@@ -231,6 +266,7 @@ export class GetOrganisedGameByToken {
   constructor(
     private readonly games: OrganisedGameRepository,
     private readonly profiles: FriendProfileLookup,
+    private readonly inviteNotifier?: OrganisedGameInviteNotifier,
   ) {}
 
   async execute(input: { userId: string; token: string }) {
@@ -239,6 +275,7 @@ export class GetOrganisedGameByToken {
     if (!game) {
       throw new OrganisedGameNotFoundError();
     }
+    await markInviteNotificationRead(this.inviteNotifier, game, userId);
     return {
       game: await toPublicGame(game, this.profiles, userId, {
         revealInviteToken: game.isHost(userId),
@@ -280,6 +317,7 @@ export class InviteFriends {
     private readonly games: OrganisedGameRepository,
     private readonly friendships: FriendshipRepository,
     private readonly profiles: FriendProfileLookup,
+    private readonly inviteNotifier?: OrganisedGameInviteNotifier,
   ) {}
 
   async execute(input: {
@@ -309,6 +347,7 @@ export class InviteFriends {
     }
 
     const saved = await this.games.persist(game);
+    await notifyInvitees(this.inviteNotifier, saved, userIds);
     return {
       game: await toPublicGame(saved, this.profiles, userId, {
         revealInviteToken: true,
@@ -340,6 +379,7 @@ export class JoinByInviteToken {
   constructor(
     private readonly games: OrganisedGameRepository,
     private readonly profiles: FriendProfileLookup,
+    private readonly inviteNotifier?: OrganisedGameInviteNotifier,
   ) {}
 
   async execute(input: { userId: string; token: string }) {
@@ -358,6 +398,7 @@ export class JoinByInviteToken {
 
     game.addInvitee(userId);
     const saved = await this.games.persist(game);
+    await notifyInvitees(this.inviteNotifier, saved, [userId]);
     return {
       game: await toPublicGame(saved, this.profiles, userId, {
         revealInviteToken: false,
@@ -370,6 +411,7 @@ export class RsvpOrganisedGame {
   constructor(
     private readonly games: OrganisedGameRepository,
     private readonly profiles: FriendProfileLookup,
+    private readonly inviteNotifier?: OrganisedGameInviteNotifier,
   ) {}
 
   async execute(input: { userId: string; gameId: string; rsvp: unknown }) {
@@ -381,6 +423,7 @@ export class RsvpOrganisedGame {
 
     game.rsvp(userId, OrganisedGameRsvp.fromDecision(input.rsvp));
     const saved = await this.games.persist(game);
+    await markInviteNotificationRead(this.inviteNotifier, saved, userId);
     return {
       game: await toPublicGame(saved, this.profiles, userId, {
         revealInviteToken: saved.isHost(userId),

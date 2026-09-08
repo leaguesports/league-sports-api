@@ -686,3 +686,82 @@ model DartsTurn {
   @@unique([matchId, turnNumber])
   @@index([matchId])
 }
+
+// Public roadmap / waitlist. githubIssueUrl is DB-only for eng ops —
+// never serialize it on public API responses.
+enum RoadmapFeatureStatus {
+  PLANNED
+  IN_PROGRESS
+  SHIPPED
+}
+
+enum RoadmapRequestType {
+  FEATURE_REQUEST
+  BUG
+}
+
+enum RoadmapRequestStatus {
+  NEW
+  PLANNED
+  DONE
+  ARCHIVED
+}
+
+model RoadmapFeature {
+  id             String               @id @default(uuid())
+  slug           String?              @unique
+  title          String
+  description    String
+  status         RoadmapFeatureStatus @default(PLANNED)
+  shippedAt      DateTime?
+  githubIssueUrl String?
+  voteCount      Int                  @default(0)
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+  archivedAt     DateTime?
+  votes          RoadmapVote[]
+  notifies       RoadmapNotify[]
+
+  @@index([status])
+  @@index([createdAt])
+  @@index([voteCount])
+}
+
+model RoadmapVote {
+  id        String         @id @default(uuid())
+  featureId String
+  voterKey  String
+  createdAt DateTime       @default(now())
+  feature   RoadmapFeature @relation(fields: [featureId], references: [id], onDelete: Cascade)
+
+  @@unique([featureId, voterKey])
+  @@index([featureId])
+  @@index([voterKey])
+}
+
+// (featureId, email) is always unique. Soft-unsubscribe sets unsubscribedAt;
+// a later notify for the same pair reactivates the row (clears unsubscribedAt).
+model RoadmapNotify {
+  id             String         @id @default(uuid())
+  featureId      String
+  email          String
+  unsubscribedAt DateTime?
+  createdAt      DateTime       @default(now())
+  feature        RoadmapFeature @relation(fields: [featureId], references: [id], onDelete: Cascade)
+
+  @@unique([featureId, email])
+  @@index([email])
+  @@index([featureId])
+}
+
+model RoadmapRequest {
+  id        String               @id @default(uuid())
+  type      RoadmapRequestType
+  title     String
+  details   String
+  email     String?
+  status    RoadmapRequestStatus @default(NEW)
+  createdAt DateTime             @default(now())
+
+  @@index([status, createdAt])
+}

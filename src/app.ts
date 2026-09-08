@@ -75,6 +75,12 @@ import {
 } from "./modules/tournaments";
 import { PrismaTournamentRepository } from "./modules/tournaments/repositories/prisma-tournament.repository";
 import { AdvanceTournamentOnTeamMatchComplete } from "./modules/tournaments/services/advance-on-team-match-complete";
+import {
+  createRoadmapModule,
+  RoadmapEmailSender,
+  RoadmapRateLimiter,
+  RoadmapRepository,
+} from "./modules/roadmap";
 
 export type CreateAppDependencies = {
   venueRepository?: VenueRepository;
@@ -95,6 +101,9 @@ export type CreateAppDependencies = {
   teamRepository?: TeamRepository;
   teamMatchRepository?: TeamMatchRepository;
   tournamentRepository?: TournamentRepository;
+  roadmapRepository?: RoadmapRepository;
+  roadmapEmailSender?: RoadmapEmailSender;
+  roadmapVoteRateLimiter?: RoadmapRateLimiter;
 };
 
 export async function createApp(
@@ -266,6 +275,14 @@ export async function createApp(
     tryGetSessionUserId: identity.tryGetSessionUserId,
     requireAuth: identity.authorizationMiddleware,
   });
+  const roadmap = createRoadmapModule({
+    prisma,
+    config,
+    roadmapRepository: dependencies.roadmapRepository,
+    emailSender: dependencies.roadmapEmailSender,
+    voteRateLimiter: dependencies.roadmapVoteRateLimiter,
+    tryGetSessionUserId: identity.tryGetSessionUserId,
+  });
 
   app.use(identity.router);
   app.use(venue.router);
@@ -284,6 +301,7 @@ export async function createApp(
   app.use(teams.router);
   app.use(teamMatches.router);
   app.use(tournaments.router);
+  app.use(roadmap.router);
 
   app.use(
     (

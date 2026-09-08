@@ -1,8 +1,10 @@
 import { DomainError } from "../../../lib/domain-error";
-import { CoverageIntent } from "../entities/coverage-intent";
+import {
+  CoverageIntent,
+  normalizeCoverageEmail,
+} from "../entities/coverage-intent";
 import { CoverageSportValue } from "../entities/coverage-sport";
 import { CoverageIntentRepository } from "../repositories/coverage-intent.repository";
-import { normalizeCoverageEmail } from "../entities/coverage-intent";
 
 export type PublicCoverageIntent = {
   id: string;

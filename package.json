@@ -11,7 +11,9 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
-    "prisma:deploy": "prisma migrate deploy"
+    "prisma:deploy": "prisma migrate deploy",
+    "roadmap:seed": "ts-node src/modules/roadmap/cli/seed.ts",
+    "roadmap:ship": "ts-node src/modules/roadmap/cli/ship.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.2.0",

@@ -48,6 +48,7 @@ export type CreateTeamMatchesModuleParams = {
   dartsMatchRepository: DartsMatchRepository;
   friendProfileLookup: FriendProfileLookup;
   teamMatchRepository?: TeamMatchRepository;
+  onTeamMatchCompleted?: (match: import("./entities/team-match").TeamMatch) => Promise<void>;
   tryGetSessionUserId: (req: Request) => string | null;
   requireAuth: (req: Request, res: Response, next: NextFunction) => void;
 };
@@ -67,6 +68,7 @@ export function createTeamMatchesModule({
   dartsMatchRepository,
   friendProfileLookup,
   teamMatchRepository: teamMatchRepositoryOverride,
+  onTeamMatchCompleted,
   tryGetSessionUserId,
   requireAuth,
 }: CreateTeamMatchesModuleParams): TeamMatchesModule {
@@ -78,6 +80,7 @@ export function createTeamMatchesModule({
   const getDartsMatchById = new GetDartsMatchById(dartsMatchRepository);
   const completeOnLock = new CompleteTeamMatchOnScorecardLock(
     teamMatchRepository,
+    onTeamMatchCompleted,
   );
 
   const controller = createTeamMatchesController({
@@ -132,6 +135,7 @@ export function createTeamMatchesModule({
       getMatchById,
       getGolfRoundById,
       getDartsMatchById,
+      onTeamMatchCompleted,
     ),
     getTeamMatch: new GetTeamMatch(
       teamRepository,

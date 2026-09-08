@@ -69,6 +69,12 @@ import {
 import { PrismaTeamMatchRepository } from "./modules/team-matches/repositories/prisma-team-match.repository";
 import { CompleteTeamMatchOnScorecardLock } from "./modules/team-matches/services/complete-on-scorecard-lock";
 import { ScorecardLockedEvent } from "./modules/scorecards/on-scorecard-locked";
+import {
+  createTournamentsModule,
+  TournamentRepository,
+} from "./modules/tournaments";
+import { PrismaTournamentRepository } from "./modules/tournaments/repositories/prisma-tournament.repository";
+import { AdvanceTournamentOnTeamMatchComplete } from "./modules/tournaments/services/advance-on-team-match-complete";
 
 export type CreateAppDependencies = {
   venueRepository?: VenueRepository;
@@ -88,6 +94,7 @@ export type CreateAppDependencies = {
   notificationRepository?: NotificationRepository;
   teamRepository?: TeamRepository;
   teamMatchRepository?: TeamMatchRepository;
+  tournamentRepository?: TournamentRepository;
 };
 
 export async function createApp(
@@ -125,8 +132,17 @@ export async function createApp(
   const teamMatchRepository =
     dependencies.teamMatchRepository ??
     new PrismaTeamMatchRepository(prisma);
+  const tournamentRepository =
+    dependencies.tournamentRepository ??
+    new PrismaTournamentRepository(prisma);
+  const advanceTournament = new AdvanceTournamentOnTeamMatchComplete(
+    tournamentRepository,
+  );
+  const onTeamMatchCompleted = (match: import("./modules/team-matches/entities/team-match").TeamMatch) =>
+    advanceTournament.execute(match);
   const completeOnLock = new CompleteTeamMatchOnScorecardLock(
     teamMatchRepository,
+    onTeamMatchCompleted,
   );
   const onScorecardLocked = (event: ScorecardLockedEvent) =>
     completeOnLock.execute(event);
@@ -238,6 +254,15 @@ export async function createApp(
     dartsMatchRepository: darts.dartsMatchRepository,
     friendProfileLookup: friends.friendProfileLookup,
     teamMatchRepository,
+    onTeamMatchCompleted,
+    tryGetSessionUserId: identity.tryGetSessionUserId,
+    requireAuth: identity.authorizationMiddleware,
+  });
+  const tournaments = createTournamentsModule({
+    prisma,
+    teamRepository: teams.teamRepository,
+    teamMatchRepository,
+    tournamentRepository,
     tryGetSessionUserId: identity.tryGetSessionUserId,
     requireAuth: identity.authorizationMiddleware,
   });
@@ -258,6 +283,7 @@ export async function createApp(
   app.use(organisedGames.router);
   app.use(teams.router);
   app.use(teamMatches.router);
+  app.use(tournaments.router);
 
   app.use(
     (

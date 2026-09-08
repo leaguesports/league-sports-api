@@ -4,8 +4,13 @@ import { TeamMatchPersistenceError } from "../entities/team-match-persistence-er
 import { TeamMatchRepository } from "../repositories/team-match.repository";
 import { inferGolfWinner } from "./team-matches.service";
 
+export type TeamMatchCompletedHandler = (match: TeamMatch) => Promise<void>;
+
 export class CompleteTeamMatchOnScorecardLock {
-  constructor(private readonly matches: TeamMatchRepository) {}
+  constructor(
+    private readonly matches: TeamMatchRepository,
+    private readonly onCompleted?: TeamMatchCompletedHandler,
+  ) {}
 
   async execute(event: ScorecardLockedEvent): Promise<void> {
     try {
@@ -14,7 +19,10 @@ export class CompleteTeamMatchOnScorecardLock {
 
       const winnerTeamId = inferWinnerFromEvent(match, event);
       match.complete(winnerTeamId);
-      await this.matches.persist(match);
+      const saved = await this.matches.persist(match);
+      if (this.onCompleted) {
+        await this.onCompleted(saved);
+      }
     } catch (error) {
       if (error instanceof TeamMatchPersistenceError) return;
       console.error("Failed to complete team match from scorecard lock", error);

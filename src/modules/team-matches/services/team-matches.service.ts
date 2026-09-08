@@ -617,6 +617,10 @@ export class StartTeamMatch {
   }
 }
 
+export type TeamMatchCompletedHandler = (
+  match: TeamMatch,
+) => Promise<void>;
+
 export class CompleteTeamMatch {
   constructor(
     private readonly teams: TeamRepository,
@@ -625,6 +629,7 @@ export class CompleteTeamMatch {
     private readonly getPadel?: GetMatchById,
     private readonly getGolf?: GetGolfRoundById,
     private readonly getDarts?: GetDartsMatchById,
+    private readonly onCompleted?: TeamMatchCompletedHandler,
   ) {}
 
   async execute(input: {
@@ -660,6 +665,9 @@ export class CompleteTeamMatch {
 
     match.complete(winnerTeamId);
     const saved = await this.matches.persist(match);
+    if (this.onCompleted) {
+      await this.onCompleted(saved);
+    }
     return {
       match: await toPublicMatch(saved, home, away, this.profiles, userId),
     };

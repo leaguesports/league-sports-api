@@ -1,6 +1,7 @@
 import { Request, Router } from "express";
 
 import { PrismaClient } from "../../generated/prisma/client";
+import { OnScorecardLocked } from "../scorecards/on-scorecard-locked";
 import { VenueRepository } from "../venue/repositories/venue.repository";
 import { createMatchController } from "./controllers/match.controller";
 import { PrismaMatchRepository } from "./repositories/prisma-match.repository";
@@ -20,6 +21,7 @@ export type CreateMatchModuleParams = {
   venueRepository: VenueRepository;
   matchRepository?: MatchRepository;
   tryGetSessionUserId: (req: Request) => string | null;
+  onScorecardLocked?: OnScorecardLocked;
 };
 
 export type MatchModule = {
@@ -32,6 +34,7 @@ export function createMatchModule({
   venueRepository,
   matchRepository: matchRepositoryOverride,
   tryGetSessionUserId,
+  onScorecardLocked,
 }: CreateMatchModuleParams): MatchModule {
   const matchRepository =
     matchRepositoryOverride ?? new PrismaMatchRepository(prisma);
@@ -43,7 +46,7 @@ export function createMatchModule({
       venueRepository,
     ),
     getMatchById: new GetMatchById(matchRepository),
-    lockMatch: new LockMatch(matchRepository),
+    lockMatch: new LockMatch(matchRepository, onScorecardLocked),
     listLockedMatchesByPlayer: new ListLockedMatchesByPlayer(
       matchRepository,
       venueRepository,

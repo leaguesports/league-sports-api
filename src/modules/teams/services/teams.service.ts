@@ -48,6 +48,15 @@ export type PublicTeam = PublicTeamSummary & {
   inviteLink: PublicInviteLink | null;
 };
 
+export type PublicTeamSearchHit = {
+  id: string;
+  name: string;
+  sport: "padel" | "golf" | "darts";
+  homeVenueCmsId: string | null;
+  memberCount: number;
+  source: "friend" | "name";
+};
+
 async function requireAcceptedFriend(
   friendships: FriendshipRepository,
   actorId: string,
@@ -388,6 +397,78 @@ export class LeaveTeam {
     team.leave(userId);
     await this.teams.persist(team);
     return { ok: true as const };
+  }
+}
+
+export class SearchTeams {
+  constructor(
+    private readonly teams: TeamRepository,
+    private readonly friendships: FriendshipRepository,
+  ) {}
+
+  async execute(input: {
+    userId: string;
+    sport: unknown;
+    query?: unknown;
+  }): Promise<{ teams: PublicTeamSearchHit[] }> {
+    const userId = requiredTrimmed(input.userId, "userId");
+    const sport = TeamSport.from(input.sport);
+    const query =
+      typeof input.query === "string" ? input.query.trim() : "";
+
+    const mine = (await this.teams.listForUser(userId)).filter((team) =>
+      team.isActiveMember(userId),
+    );
+    const excludeIds = mine.map((team) => team.id);
+
+    const friendships = await this.friendships.listForUser(userId);
+    const friendIds = friendships
+      .filter((row) => row.status === "accepted")
+      .map((row) =>
+        row.requesterId === userId ? row.addresseeId : row.requesterId,
+      );
+
+    const friendTeams = await this.teams.listActiveForUsers(
+      friendIds,
+      sport.value,
+    );
+    const named =
+      query.length > 0
+        ? await this.teams.search({
+            sport: sport.value,
+            query,
+            excludeTeamIds: excludeIds,
+            limit: 20,
+          })
+        : [];
+
+    const seen = new Set<string>();
+    const teams: PublicTeamSearchHit[] = [];
+    for (const team of friendTeams) {
+      if (excludeIds.includes(team.id) || seen.has(team.id)) continue;
+      seen.add(team.id);
+      teams.push({
+        id: team.id,
+        name: team.name.value,
+        sport: team.sport.value,
+        homeVenueCmsId: team.homeVenueCmsId?.value ?? null,
+        memberCount: team.memberCount,
+        source: "friend",
+      });
+    }
+    for (const team of named) {
+      if (seen.has(team.id)) continue;
+      seen.add(team.id);
+      teams.push({
+        id: team.id,
+        name: team.name.value,
+        sport: team.sport.value,
+        homeVenueCmsId: team.homeVenueCmsId?.value ?? null,
+        memberCount: team.memberCount,
+        source: "name",
+      });
+    }
+    return { teams };
   }
 }
 

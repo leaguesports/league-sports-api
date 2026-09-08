@@ -1,3 +1,4 @@
+import { OnScorecardLocked } from "../../scorecards/on-scorecard-locked";
 import { DartsMatch } from "../entities/darts-match";
 import { DartsMatchRepository } from "../repositories/darts-match.repository";
 
@@ -11,7 +12,10 @@ export type SubmitDartsTurnServiceInput = {
 };
 
 export class SubmitDartsTurn {
-  constructor(private readonly matches: DartsMatchRepository) {}
+  constructor(
+    private readonly matches: DartsMatchRepository,
+    private readonly onScorecardLocked?: OnScorecardLocked,
+  ) {}
 
   async execute(
     input: SubmitDartsTurnServiceInput,
@@ -28,6 +32,14 @@ export class SubmitDartsTurn {
       checkout: input.checkout,
       lockedByUserId: input.lockedByUserId,
     });
-    return this.matches.persist(match);
+    const persisted = await this.matches.persist(match);
+    if (persisted?.isLocked && this.onScorecardLocked) {
+      await this.onScorecardLocked({
+        sport: "darts",
+        scorecardId: persisted.id,
+        dartsWinnerUserId: persisted.toSnapshot().winnerUserId,
+      });
+    }
+    return persisted;
   }
 }

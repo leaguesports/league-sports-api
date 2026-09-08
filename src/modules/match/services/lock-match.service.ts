@@ -1,3 +1,4 @@
+import { OnScorecardLocked } from "../../scorecards/on-scorecard-locked";
 import { Match } from "../entities/match";
 import { MatchRepository } from "../repositories/match.repository";
 import { MatchScore } from "../entities/match-score";
@@ -11,7 +12,10 @@ export type LockMatchInput = {
 };
 
 export class LockMatch {
-  constructor(private readonly matches: MatchRepository) {}
+  constructor(
+    private readonly matches: MatchRepository,
+    private readonly onScorecardLocked?: OnScorecardLocked,
+  ) {}
 
   async execute(input: LockMatchInput): Promise<Match | null> {
     const match = await this.matches.findById(input.matchId);
@@ -25,6 +29,14 @@ export class LockMatch {
       new Date(),
       input.lockedByUserId,
     );
-    return this.matches.persistLock(match);
+    const persisted = await this.matches.persistLock(match);
+    if (persisted?.isLocked && this.onScorecardLocked) {
+      await this.onScorecardLocked({
+        sport: "padel",
+        scorecardId: persisted.id,
+        padelWinner: persisted.winner?.value,
+      });
+    }
+    return persisted;
   }
 }

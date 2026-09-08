@@ -62,6 +62,13 @@ import {
   createTeamsModule,
   TeamRepository,
 } from "./modules/teams";
+import {
+  createTeamMatchesModule,
+  TeamMatchRepository,
+} from "./modules/team-matches";
+import { PrismaTeamMatchRepository } from "./modules/team-matches/repositories/prisma-team-match.repository";
+import { CompleteTeamMatchOnScorecardLock } from "./modules/team-matches/services/complete-on-scorecard-lock";
+import { ScorecardLockedEvent } from "./modules/scorecards/on-scorecard-locked";
 
 export type CreateAppDependencies = {
   venueRepository?: VenueRepository;
@@ -80,6 +87,7 @@ export type CreateAppDependencies = {
   organisedGameRepository?: OrganisedGameRepository;
   notificationRepository?: NotificationRepository;
   teamRepository?: TeamRepository;
+  teamMatchRepository?: TeamMatchRepository;
 };
 
 export async function createApp(
@@ -114,23 +122,35 @@ export async function createApp(
     tryGetSessionUserId: identity.tryGetSessionUserId,
     requireAuth: identity.authorizationMiddleware,
   });
+  const teamMatchRepository =
+    dependencies.teamMatchRepository ??
+    new PrismaTeamMatchRepository(prisma);
+  const completeOnLock = new CompleteTeamMatchOnScorecardLock(
+    teamMatchRepository,
+  );
+  const onScorecardLocked = (event: ScorecardLockedEvent) =>
+    completeOnLock.execute(event);
+
   const match = createMatchModule({
     prisma,
     venueRepository: venue.venueRepository,
     matchRepository: dependencies.matchRepository,
     tryGetSessionUserId: identity.tryGetSessionUserId,
+    onScorecardLocked,
   });
   const golfRound = createGolfRoundModule({
     prisma,
     venueRepository: venue.venueRepository,
     golfRoundRepository: dependencies.golfRoundRepository,
     tryGetSessionUserId: identity.tryGetSessionUserId,
+    onScorecardLocked,
   });
   const darts = createDartsModule({
     prisma,
     venueRepository: venue.venueRepository,
     dartsMatchRepository: dependencies.dartsMatchRepository,
     tryGetSessionUserId: identity.tryGetSessionUserId,
+    onScorecardLocked,
   });
   const friends = createFriendsModule({
     prisma,
@@ -209,6 +229,18 @@ export async function createApp(
     tryGetSessionUserId: identity.tryGetSessionUserId,
     requireAuth: identity.authorizationMiddleware,
   });
+  const teamMatches = createTeamMatchesModule({
+    prisma,
+    teamRepository: teams.teamRepository,
+    venueRepository: venue.venueRepository,
+    matchRepository: match.matchRepository,
+    golfRoundRepository: golfRound.golfRoundRepository,
+    dartsMatchRepository: darts.dartsMatchRepository,
+    friendProfileLookup: friends.friendProfileLookup,
+    teamMatchRepository,
+    tryGetSessionUserId: identity.tryGetSessionUserId,
+    requireAuth: identity.authorizationMiddleware,
+  });
 
   app.use(identity.router);
   app.use(venue.router);
@@ -225,6 +257,7 @@ export async function createApp(
   app.use(notifications.router);
   app.use(organisedGames.router);
   app.use(teams.router);
+  app.use(teamMatches.router);
 
   app.use(
     (

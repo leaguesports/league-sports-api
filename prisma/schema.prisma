@@ -398,6 +398,8 @@ model Team {
   updatedAt      DateTime         @updatedAt
   members        TeamMembership[]
   inviteLinks    TeamInviteLink[]
+  homeMatches    TeamMatch[]      @relation("TeamMatchHome")
+  awayMatches    TeamMatch[]      @relation("TeamMatchAway")
 
   @@index([createdBy])
   @@index([createdAt])
@@ -428,6 +430,62 @@ model TeamInviteLink {
 
   team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
 
+  @@index([teamId])
+}
+
+enum TeamMatchStatus {
+  pending
+  scheduled
+  live
+  completed
+  declined
+  cancelled
+}
+
+// Competitive fixture between two same-sport teams. Not an OrganisedGame.
+// No User FK — same as Team / Friendship. venueCmsId is optional and has
+// no Venue FK so a challenge can exist before a court/course is booked.
+// Lineups are stored as ordered user ids per side.
+model TeamMatch {
+  id             String          @id @default(uuid())
+  homeTeamId     String
+  awayTeamId     String?
+  sport          TeamSport
+  status         TeamMatchStatus @default(pending)
+  venueCmsId     String?
+  startsAt       DateTime?
+  challengeToken String?         @unique @db.VarChar(32)
+  createdBy      String
+  winnerTeamId   String?
+  scorecardSport String?
+  scorecardId    String?
+  scorecardPath  String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  lineups        TeamMatchLineup[]
+
+  homeTeam Team  @relation("TeamMatchHome", fields: [homeTeamId], references: [id])
+  awayTeam Team? @relation("TeamMatchAway", fields: [awayTeamId], references: [id])
+
+  @@index([homeTeamId])
+  @@index([awayTeamId])
+  @@index([status, startsAt])
+  @@index([createdBy])
+  @@index([scorecardId])
+}
+
+model TeamMatchLineup {
+  id          String    @id @default(uuid())
+  teamMatchId String
+  teamId      String
+  userId      String
+  slot        Int
+  createdAt   DateTime  @default(now())
+
+  match TeamMatch @relation(fields: [teamMatchId], references: [id], onDelete: Cascade)
+
+  @@unique([teamMatchId, teamId, userId])
+  @@index([teamMatchId])
   @@index([teamId])
 }
 

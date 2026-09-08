@@ -400,6 +400,7 @@ model Team {
   inviteLinks    TeamInviteLink[]
   homeMatches    TeamMatch[]      @relation("TeamMatchHome")
   awayMatches    TeamMatch[]      @relation("TeamMatchAway")
+  tournamentRegistrations TournamentRegistration[]
 
   @@index([createdBy])
   @@index([createdAt])
@@ -466,6 +467,7 @@ model TeamMatch {
 
   homeTeam Team  @relation("TeamMatchHome", fields: [homeTeamId], references: [id])
   awayTeam Team? @relation("TeamMatchAway", fields: [awayTeamId], references: [id])
+  tournamentSlot TournamentSlot?
 
   @@index([homeTeamId])
   @@index([awayTeamId])
@@ -495,6 +497,90 @@ enum NotificationType {
 
 // In-app inbox. No User FK — same as Friendship / OrganisedGameInvite.
 // Unique (recipientId, type, resourceId) keeps invite notices idempotent.
+enum TournamentStatus {
+  draft
+  registration
+  active
+  completed
+}
+
+enum TournamentRegistrationStatus {
+  pending
+  accepted
+  withdrawn
+}
+
+enum TournamentSlotSide {
+  home
+  away
+}
+
+// One-off single-elim bracket (size 4/8/16, no byes). Organizer need not
+// be on a team. No User FK — same as Team / TeamMatch. winnerTeamId is a
+// plain id like TeamMatch.winnerTeamId. Invite token is the share surface.
+model Tournament {
+  id              String           @id @default(uuid())
+  name            String
+  sport           TeamSport
+  size            Int
+  status          TournamentStatus @default(draft)
+  venueCmsId      String?
+  startsAt        DateTime?
+  organizerUserId String
+  winnerTeamId    String?
+  inviteToken     String           @unique @db.VarChar(32)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  registrations   TournamentRegistration[]
+  slots           TournamentSlot[]
+
+  @@index([organizerUserId])
+  @@index([status, startsAt])
+  @@index([organizerUserId, status])
+}
+
+model TournamentRegistration {
+  id           String                       @id @default(uuid())
+  tournamentId String
+  teamId       String
+  status       TournamentRegistrationStatus @default(pending)
+  seed         Int?
+  registeredBy String
+  createdAt    DateTime                     @default(now())
+  updatedAt    DateTime                     @updatedAt
+
+  tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  team       Team       @relation(fields: [teamId], references: [id])
+
+  @@unique([tournamentId, teamId])
+  @@index([teamId])
+  @@index([tournamentId])
+}
+
+model TournamentSlot {
+  id           String              @id @default(uuid())
+  tournamentId String
+  round        Int
+  position     Int
+  homeTeamId   String?
+  awayTeamId   String?
+  homeSeed     Int?
+  awaySeed     Int?
+  teamMatchId  String?             @unique
+  winnerTeamId String?
+  nextSlotId   String?
+  nextSide     TournamentSlotSide?
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  teamMatch  TeamMatch? @relation(fields: [teamMatchId], references: [id])
+
+  @@unique([tournamentId, round, position])
+  @@index([tournamentId])
+  @@index([teamMatchId])
+}
+
 model Notification {
   id          String           @id @default(uuid())
   recipientId String

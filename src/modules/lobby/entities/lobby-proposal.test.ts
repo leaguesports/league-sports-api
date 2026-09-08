@@ -28,9 +28,10 @@ describe("LobbyProposal", () => {
     expect(proposal.isReadyToConvert()).toBe(false);
     proposal.accept("user-a");
     expect(proposal.isReadyToConvert()).toBe(false);
+    expect(proposal.status.isPending).toBe(true);
     proposal.accept("user-b");
-    expect(proposal.isReadyToConvert()).toBe(true);
     expect(proposal.status.isAccepted).toBe(true);
+    expect(proposal.acceptedSlots()).toBe(2);
   });
 
   test("pass cancels when remaining parties cannot fill", () => {

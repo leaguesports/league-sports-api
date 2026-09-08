@@ -4,6 +4,8 @@ import { LobbySport } from "./lobby-sport";
 import { PartySize } from "./party-size";
 import { TimeWindow } from "./time-window";
 
+const NOW = new Date("2026-09-08T12:00:00.000Z");
+
 function makeOpenGame(overrides: { slotsNeeded?: number } = {}) {
   return LobbyOpenGame.create({
     hostUserId: "host-1",
@@ -18,7 +20,7 @@ function makeOpenGame(overrides: { slotsNeeded?: number } = {}) {
     slotsNeeded: overrides.slotsNeeded ?? 4,
     hostPartySize: PartySize.from(1),
     skill: null,
-    now: new Date("2026-09-08T12:00:00.000Z"),
+    now: NOW,
   });
 }
 
@@ -29,30 +31,32 @@ describe("LobbyOpenGame", () => {
     expect(game.remainingSlots()).toBe(3);
     expect(game.status.isOpen).toBe(true);
 
-    game.join("joiner-1", PartySize.from(2));
+    game.join("joiner-1", PartySize.from(2), NOW);
     expect(game.slotsFilled()).toBe(3);
     expect(game.status.isOpen).toBe(true);
 
-    game.join("joiner-2", PartySize.from(1));
+    game.join("joiner-2", PartySize.from(1), NOW);
     expect(game.slotsFilled()).toBe(4);
     expect(game.status.isFilled).toBe(true);
 
-    expect(() => game.join("late", PartySize.from(1))).toThrow(
+    expect(() => game.join("late", PartySize.from(1), NOW)).toThrow(
       "Open game is not open",
     );
   });
 
   test("host can kick a joiner and reopen a filled game", () => {
     const game = makeOpenGame();
-    game.join("joiner-1", PartySize.from(3));
+    game.join("joiner-1", PartySize.from(3), NOW);
     expect(game.status.isFilled).toBe(true);
 
-    expect(() => game.kick("joiner-1", "host-1")).toThrow(
+    expect(() => game.kick("joiner-1", "host-1", NOW)).toThrow(
       "Only the host can kick a player",
     );
-    expect(() => game.kick("host-1", "host-1")).toThrow("Host cannot be kicked");
+    expect(() => game.kick("host-1", "host-1", NOW)).toThrow(
+      "Host cannot be kicked",
+    );
 
-    game.kick("host-1", "joiner-1");
+    game.kick("host-1", "joiner-1", NOW);
     expect(game.memberOf("joiner-1")).toBeNull();
     expect(game.status.isOpen).toBe(true);
     expect(game.remainingSlots()).toBe(3);
@@ -60,7 +64,7 @@ describe("LobbyOpenGame", () => {
 
   test("does not mark ready until slots are filled", () => {
     const game = makeOpenGame({ slotsNeeded: 4 });
-    game.join("joiner-1", PartySize.from(1));
+    game.join("joiner-1", PartySize.from(1), NOW);
     expect(game.status.isFilled).toBe(false);
     expect(game.remainingSlots()).toBe(2);
   });

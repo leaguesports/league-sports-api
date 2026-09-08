@@ -2,18 +2,28 @@ import { randomUUID } from "node:crypto";
 
 import { DomainError, requiredTrimmed } from "../../../lib/domain-error";
 import {
+  LobbyNotificationPayload,
+  LobbyNotificationPayloadSnapshot,
+} from "./lobby-notification-payload";
+import {
   OrganisedGameInvitePayload,
   OrganisedGameInvitePayloadSnapshot,
 } from "./organised-game-invite-payload";
-import { NotificationType } from "./notification-type";
+import { NotificationType, NotificationTypeValue } from "./notification-type";
+
+export type NotificationPayload =
+  | OrganisedGameInvitePayload
+  | LobbyNotificationPayload;
 
 export type NotificationSnapshot = {
   id: string;
   recipientId: string;
   actorId: string;
-  type: "organised_game_invite";
+  type: NotificationTypeValue;
   resourceId: string;
-  payload: OrganisedGameInvitePayloadSnapshot;
+  payload:
+    | OrganisedGameInvitePayloadSnapshot
+    | LobbyNotificationPayloadSnapshot;
   readAt: string | null;
   createdAt: string;
 };
@@ -27,6 +37,20 @@ export type CreateOrganisedGameInviteNotificationProps = {
   venueCmsId?: unknown;
 };
 
+export type CreateLobbyNotificationProps = {
+  recipientId: string;
+  actorId: string;
+  type: NotificationType;
+  resourceId: string;
+  sport: unknown;
+  city: unknown;
+  windowStart: unknown;
+  windowEnd: unknown;
+  openGameId?: unknown;
+  proposalId?: unknown;
+  organiseGameId?: unknown;
+};
+
 export class Notification {
   private constructor(
     readonly id: string,
@@ -34,7 +58,7 @@ export class Notification {
     readonly actorId: string,
     readonly type: NotificationType,
     readonly resourceId: string,
-    readonly payload: OrganisedGameInvitePayload,
+    readonly payload: NotificationPayload,
     readonly createdAt: Date,
     private readAtValue: Date | null,
   ) {}
@@ -67,13 +91,46 @@ export class Notification {
     );
   }
 
+  static lobby(props: CreateLobbyNotificationProps): Notification {
+    const recipientId = requiredTrimmed(props.recipientId, "recipientId");
+    const actorId = requiredTrimmed(props.actorId, "actorId");
+    if (recipientId === actorId) {
+      throw new DomainError("Cannot notify the actor");
+    }
+    if (!props.type.isLobby) {
+      throw new DomainError("notification type must be a lobby type");
+    }
+
+    const payload = LobbyNotificationPayload.from({
+      source: "lobby",
+      sport: props.sport,
+      city: props.city,
+      windowStart: props.windowStart,
+      windowEnd: props.windowEnd,
+      openGameId: props.openGameId,
+      proposalId: props.proposalId,
+      organiseGameId: props.organiseGameId,
+    });
+
+    return new Notification(
+      randomUUID(),
+      recipientId,
+      actorId,
+      props.type,
+      requiredTrimmed(props.resourceId, "resourceId"),
+      payload,
+      new Date(),
+      null,
+    );
+  }
+
   static rehydrate(props: {
     id: string;
     recipientId: string;
     actorId: string;
     type: NotificationType;
     resourceId: string;
-    payload: OrganisedGameInvitePayload;
+    payload: NotificationPayload;
     createdAt: Date;
     readAt: Date | null;
   }): Notification {
@@ -90,13 +147,14 @@ export class Notification {
   }
 
   static fromSnapshot(snapshot: NotificationSnapshot): Notification {
+    const type = NotificationType.from(snapshot.type);
     return Notification.rehydrate({
       id: snapshot.id,
       recipientId: snapshot.recipientId,
       actorId: snapshot.actorId,
-      type: NotificationType.from(snapshot.type),
+      type,
       resourceId: snapshot.resourceId,
-      payload: OrganisedGameInvitePayload.from(snapshot.payload),
+      payload: payloadFromSnapshot(type, snapshot.payload),
       createdAt: new Date(snapshot.createdAt),
       readAt: snapshot.readAt ? new Date(snapshot.readAt) : null,
     });
@@ -127,4 +185,14 @@ export class Notification {
       createdAt: this.createdAt.toISOString(),
     };
   }
+}
+
+export function payloadFromSnapshot(
+  type: NotificationType,
+  raw: unknown,
+): NotificationPayload {
+  if (type.isOrganisedGameInvite) {
+    return OrganisedGameInvitePayload.from(raw);
+  }
+  return LobbyNotificationPayload.from(raw);
 }

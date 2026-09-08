@@ -141,9 +141,11 @@ describe("notifications application", () => {
 
     const firstPage = await list.execute({ userId: "friend-a", limit: 2 });
     expect(firstPage.unreadCount).toBe(2);
-    expect(firstPage.notifications.map((row) => row.payload.organisedGameId)).toEqual(
-      ["game-mid", "game-new"],
-    );
+    expect(
+      firstPage.notifications.map((row) =>
+        "organisedGameId" in row.payload ? row.payload.organisedGameId : null,
+      ),
+    ).toEqual(["game-mid", "game-new"]);
     expect(firstPage.notifications.every((row) => row.readAt == null)).toBe(true);
     expect(firstPage.nextCursor).toEqual(expect.any(String));
 

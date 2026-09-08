@@ -1,8 +1,10 @@
 import { Prisma, PrismaClient } from "../../../generated/prisma/client";
-import { Notification } from "../entities/notification";
+import { Notification, payloadFromSnapshot } from "../entities/notification";
 import { NotificationPersistenceError } from "../entities/notification-persistence-error";
-import { NotificationType } from "../entities/notification-type";
-import { OrganisedGameInvitePayload } from "../entities/organised-game-invite-payload";
+import {
+  NotificationType,
+  NotificationTypeValue,
+} from "../entities/notification-type";
 import {
   NotificationListPage,
   NotificationListQuery,
@@ -13,7 +15,7 @@ type NotificationRow = {
   id: string;
   recipientId: string;
   actorId: string;
-  type: "organised_game_invite";
+  type: NotificationTypeValue;
   resourceId: string;
   payload: Prisma.JsonValue;
   readAt: Date | null;
@@ -34,7 +36,7 @@ function toDomain(row: NotificationRow): Notification {
     actorId: row.actorId,
     type: NotificationType.from(row.type),
     resourceId: row.resourceId,
-    payload: OrganisedGameInvitePayload.from(row.payload),
+    payload: payloadFromSnapshot(NotificationType.from(row.type), row.payload),
     createdAt: row.createdAt,
     readAt: row.readAt,
   });
@@ -192,7 +194,7 @@ export class PrismaNotificationRepository implements NotificationRepository {
 
   private async findByUnique(
     recipientId: string,
-    type: "organised_game_invite",
+    type: NotificationTypeValue,
     resourceId: string,
   ): Promise<Notification | null> {
     const row = await this.prisma.notification.findUnique({

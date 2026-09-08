@@ -25,11 +25,27 @@ export type PublicOrganisedGameInvitePayload = {
   venueCmsId: string | null;
 };
 
+export type PublicLobbyNotificationPayload = {
+  source: "lobby";
+  sport: "padel" | "darts" | "golf";
+  city: string;
+  windowStart: string;
+  windowEnd: string;
+  openGameId: string | null;
+  proposalId: string | null;
+  organiseGameId: string | null;
+};
+
 export type PublicNotification = {
   id: string;
-  type: "organised_game_invite";
+  type:
+    | "organised_game_invite"
+    | "lobby_open_game_compatible"
+    | "lobby_proposal_ready"
+    | "lobby_open_game_joined"
+    | "lobby_open_game_filled";
   actor: PublicNotificationActor;
-  payload: PublicOrganisedGameInvitePayload;
+  payload: PublicOrganisedGameInvitePayload | PublicLobbyNotificationPayload;
   readAt: string | null;
   createdAt: string;
 };
@@ -49,6 +65,28 @@ export interface OrganisedGameInviteNotifier {
     recipientId: string;
     organisedGameId: string;
   }): Promise<void>;
+}
+
+export type LobbyNotice = {
+  recipientId: string;
+  actorId: string;
+  type:
+    | "lobby_open_game_compatible"
+    | "lobby_proposal_ready"
+    | "lobby_open_game_joined"
+    | "lobby_open_game_filled";
+  resourceId: string;
+  sport: "padel" | "darts" | "golf";
+  city: string;
+  windowStart: string;
+  windowEnd: string;
+  openGameId?: string | null;
+  proposalId?: string | null;
+  organiseGameId?: string | null;
+};
+
+export interface LobbyNotifier {
+  notify(input: LobbyNotice): Promise<void>;
 }
 
 const DEFAULT_LIST_LIMIT = 20;
@@ -127,6 +165,29 @@ async function toPublic(
     readAt: snapshot.readAt,
     createdAt: snapshot.createdAt,
   };
+}
+
+export class NotifyLobby implements LobbyNotifier {
+  constructor(private readonly notifications: NotificationRepository) {}
+
+  async notify(input: LobbyNotice): Promise<void> {
+    if (input.recipientId === input.actorId) return;
+    await this.notifications.create(
+      Notification.lobby({
+        recipientId: input.recipientId,
+        actorId: input.actorId,
+        type: NotificationType.from(input.type),
+        resourceId: input.resourceId,
+        sport: input.sport,
+        city: input.city,
+        windowStart: input.windowStart,
+        windowEnd: input.windowEnd,
+        openGameId: input.openGameId,
+        proposalId: input.proposalId,
+        organiseGameId: input.organiseGameId,
+      }),
+    );
+  }
 }
 
 export class NotifyOrganisedGameInvite implements OrganisedGameInviteNotifier {

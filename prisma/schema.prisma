@@ -493,6 +493,10 @@ model TeamMatchLineup {
 
 enum NotificationType {
   organised_game_invite
+  lobby_open_game_compatible
+  lobby_proposal_ready
+  lobby_open_game_joined
+  lobby_open_game_filled
 }
 
 // In-app inbox. No User FK — same as Friendship / OrganisedGameInvite.
@@ -782,4 +786,129 @@ model CoverageIntent {
   @@unique([email, sport, city])
   @@index([email])
   @@index([unsubscribedAt])
+}
+
+// Hybrid matchmaking lobby (seeker Looking + host open-game + proposal).
+// Not booking. No User FK — same as Friendship / OrganisedGame.
+// organiseGameId is a plain id (OrganisedGame is padel/golf only; darts
+// conversion is blocked until Organise supports it).
+enum LobbySport {
+  padel
+  darts
+  golf
+}
+
+enum LobbySkill {
+  casual
+  intermediate
+  competitive
+}
+
+enum LobbyOpenGameStatus {
+  open
+  filled
+  cancelled
+  expired
+}
+
+enum LobbyProposalStatus {
+  pending
+  accepted
+  expired
+  cancelled
+}
+
+enum LobbyProposalResponse {
+  pending
+  accept
+  pass
+}
+
+model LobbyLooking {
+  id         String     @id @default(uuid())
+  userId     String     @unique
+  sport      LobbySport
+  windowStart DateTime
+  windowEnd   DateTime
+  city       String
+  area       String?
+  venueCmsId String?
+  partySize  Int
+  skill      LobbySkill?
+  expiresAt  DateTime
+  createdAt  DateTime   @default(now())
+
+  @@index([sport, city, expiresAt])
+  @@index([expiresAt])
+}
+
+model LobbyOpenGame {
+  id              String               @id @default(uuid())
+  hostUserId      String
+  sport           LobbySport
+  windowStart     DateTime
+  windowEnd       DateTime
+  city            String
+  area            String?
+  venueCmsId      String?
+  slotsNeeded     Int
+  slotsFilled     Int
+  skill           LobbySkill?
+  status          LobbyOpenGameStatus  @default(open)
+  organiseGameId  String?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  members         LobbyOpenGameMember[]
+
+  @@index([sport, city, status])
+  @@index([hostUserId])
+  @@index([status, windowEnd])
+}
+
+model LobbyOpenGameMember {
+  id         String        @id @default(uuid())
+  openGameId String
+  userId     String
+  partySize  Int
+  createdAt  DateTime      @default(now())
+  openGame   LobbyOpenGame @relation(fields: [openGameId], references: [id], onDelete: Cascade)
+
+  @@unique([openGameId, userId])
+  @@index([userId])
+  @@index([openGameId])
+}
+
+model LobbyProposal {
+  id             String                @id @default(uuid())
+  sport          LobbySport
+  city           String
+  area           String?
+  windowStart    DateTime
+  windowEnd      DateTime
+  venueCmsId     String?
+  skill          LobbySkill?
+  status         LobbyProposalStatus   @default(pending)
+  organiseGameId String?
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+  members        LobbyProposalMember[]
+
+  @@index([sport, city, status])
+  @@index([status, windowEnd])
+}
+
+model LobbyProposalMember {
+  id         String                 @id @default(uuid())
+  proposalId String
+  userId     String
+  partySize  Int
+  response   LobbyProposalResponse  @default(pending)
+  lookingId  String?
+  createdAt  DateTime               @default(now())
+  respondedAt DateTime?
+  proposal   LobbyProposal          @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+
+  @@unique([proposalId, userId])
+  @@index([userId])
+  @@index([proposalId])
 }

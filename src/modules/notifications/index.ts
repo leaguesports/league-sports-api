@@ -13,8 +13,10 @@ import { PrismaNotificationRepository } from "./repositories/prisma-notification
 import { createNotificationsRoutes } from "./routes/notifications.routes";
 import {
   ListMyNotifications,
+  LobbyNotifier,
   MarkAllNotificationsRead,
   MarkNotificationRead,
+  NotifyLobby,
   NotifyOrganisedGameInvite,
   OrganisedGameInviteNotifier,
 } from "./services/notifications.service";
@@ -31,6 +33,7 @@ export type NotificationsModule = {
   router: Router;
   notificationRepository: NotificationRepository;
   organisedGameInviteNotifier: OrganisedGameInviteNotifier;
+  lobbyNotifier: LobbyNotifier;
 };
 
 export function createNotificationsModule({
@@ -46,6 +49,7 @@ export function createNotificationsModule({
   const organisedGameInviteNotifier = new NotifyOrganisedGameInvite(
     notificationRepository,
   );
+  const lobbyNotifier = new NotifyLobby(notificationRepository);
 
   const controller = createNotificationsController({
     listMyNotifications: new ListMyNotifications(
@@ -66,6 +70,7 @@ export function createNotificationsModule({
     router: createNotificationsRoutes(controller, { requireAuth }),
     notificationRepository,
     organisedGameInviteNotifier,
+    lobbyNotifier,
   };
 }
 
@@ -76,17 +81,22 @@ export type { NotificationRepository } from "./repositories/notification.reposit
 export { Notification } from "./entities/notification";
 export { NotificationType } from "./entities/notification-type";
 export { OrganisedGameInvitePayload } from "./entities/organised-game-invite-payload";
+export { LobbyNotificationPayload } from "./entities/lobby-notification-payload";
 export { NotificationNotFoundError } from "./entities/notification-not-found-error";
 export { NotificationPersistenceError } from "./entities/notification-persistence-error";
 export {
   ListMyNotifications,
   MarkAllNotificationsRead,
   MarkNotificationRead,
+  NotifyLobby,
   NotifyOrganisedGameInvite,
 } from "./services/notifications.service";
 export type {
+  LobbyNotice,
+  LobbyNotifier,
   OrganisedGameInviteNotice,
   OrganisedGameInviteNotifier,
+  PublicLobbyNotificationPayload,
   PublicNotification,
   PublicNotificationActor,
   PublicOrganisedGameInvitePayload,

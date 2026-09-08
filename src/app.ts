@@ -86,6 +86,10 @@ import {
   CoverageRateLimiter,
   createIntentsModule,
 } from "./modules/intents";
+import {
+  createLobbyModule,
+  LobbyRepository,
+} from "./modules/lobby";
 
 export type CreateAppDependencies = {
   venueRepository?: VenueRepository;
@@ -111,6 +115,7 @@ export type CreateAppDependencies = {
   roadmapVoteRateLimiter?: RoadmapRateLimiter;
   coverageIntentRepository?: CoverageIntentRepository;
   coverageRateLimiter?: CoverageRateLimiter;
+  lobbyRepository?: LobbyRepository;
 };
 
 export async function createApp(
@@ -296,6 +301,18 @@ export async function createApp(
     coverageIntentRepository: dependencies.coverageIntentRepository,
     coverageRateLimiter: dependencies.coverageRateLimiter,
   });
+  const lobby = createLobbyModule({
+    prisma,
+    lobbyRepository: dependencies.lobbyRepository,
+    organisedGameRepository: organisedGames.organisedGameRepository,
+    venueRepository: venue.venueRepository,
+    friendshipRepository: friends.friendshipRepository,
+    teamRepository: teams.teamRepository,
+    friendProfileLookup: friends.friendProfileLookup,
+    lobbyNotifier: notifications.lobbyNotifier,
+    tryGetSessionUserId: identity.tryGetSessionUserId,
+    requireAuth: identity.authorizationMiddleware,
+  });
 
   app.use(identity.router);
   app.use(venue.router);
@@ -316,6 +333,7 @@ export async function createApp(
   app.use(tournaments.router);
   app.use(roadmap.router);
   app.use(intents.router);
+  app.use(lobby.router);
 
   app.use(
     (

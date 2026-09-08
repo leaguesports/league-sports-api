@@ -765,3 +765,21 @@ model RoadmapRequest {
 
   @@index([status, createdAt])
 }
+
+// SEO landing “notify me when {sport} in {city} fills in.”
+// Unspecified sport/city are stored as "" so (email, sport, city) is unique
+// even when the API omits them. Empty string is never a valid sport/city.
+// Unique rule is Prisma-native; see 20260908180000_coverage_intent.
+model CoverageIntent {
+  id             String    @id @default(uuid())
+  email          String
+  sport          String    @default("")
+  city           String    @default("")
+  sourcePage     String?
+  createdAt      DateTime  @default(now())
+  unsubscribedAt DateTime?
+
+  @@unique([email, sport, city])
+  @@index([email])
+  @@index([unsubscribedAt])
+}

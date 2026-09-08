@@ -81,6 +81,11 @@ import {
   RoadmapRateLimiter,
   RoadmapRepository,
 } from "./modules/roadmap";
+import {
+  CoverageIntentRepository,
+  CoverageRateLimiter,
+  createIntentsModule,
+} from "./modules/intents";
 
 export type CreateAppDependencies = {
   venueRepository?: VenueRepository;
@@ -104,6 +109,8 @@ export type CreateAppDependencies = {
   roadmapRepository?: RoadmapRepository;
   roadmapEmailSender?: RoadmapEmailSender;
   roadmapVoteRateLimiter?: RoadmapRateLimiter;
+  coverageIntentRepository?: CoverageIntentRepository;
+  coverageRateLimiter?: CoverageRateLimiter;
 };
 
 export async function createApp(
@@ -283,6 +290,12 @@ export async function createApp(
     voteRateLimiter: dependencies.roadmapVoteRateLimiter,
     tryGetSessionUserId: identity.tryGetSessionUserId,
   });
+  const intents = createIntentsModule({
+    prisma,
+    config,
+    coverageIntentRepository: dependencies.coverageIntentRepository,
+    coverageRateLimiter: dependencies.coverageRateLimiter,
+  });
 
   app.use(identity.router);
   app.use(venue.router);
@@ -302,6 +315,7 @@ export async function createApp(
   app.use(teamMatches.router);
   app.use(tournaments.router);
   app.use(roadmap.router);
+  app.use(intents.router);
 
   app.use(
     (

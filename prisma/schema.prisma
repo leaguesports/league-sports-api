@@ -70,6 +70,7 @@ model Venue {
   dartsMatches    DartsMatch[]
   follows         VenueFollow[]
   organisedGames  OrganisedGame[]
+  golfTourRounds  GolfTourRound[]
 }
 
 model VenueFollow {
@@ -615,6 +616,7 @@ model GolfRound {
   lockedByUserId String?
   createdAt    DateTime        @default(now())
   players      GolfRoundPlayer[]
+  tourFourball GolfTourFourball?
 
   @@index([venueCmsId])
   @@index([status, startsAt])
@@ -911,4 +913,108 @@ model LobbyProposalMember {
   @@unique([proposalId, userId])
   @@index([userId])
   @@index([proposalId])
+}
+
+enum GolfTourStatus {
+  draft
+  active
+  completed
+}
+
+enum GolfTourFormat {
+  stroke
+}
+
+enum GolfTourFourballStatus {
+  pending
+  live
+  locked
+  cancelled
+}
+
+// Multi-day multi-course friend golf event (Tour + Camp). Not a Tournament.
+// No User FK — same as Team / OrganisedGame. Fourballs link to GolfRound
+// (existing scorecard). format is pluggable; v1 is stroke only.
+model GolfTour {
+  id         String         @id @default(uuid())
+  name       String
+  startDate  DateTime       @db.Date
+  endDate    DateTime       @db.Date
+  status     GolfTourStatus @default(draft)
+  hostUserId String
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+  camps      GolfTourCamp[]
+  rounds     GolfTourRound[]
+  fourballs  GolfTourFourball[]
+
+  @@index([hostUserId])
+  @@index([status, startDate])
+  @@index([hostUserId, status])
+}
+
+model GolfTourCamp {
+  id        String   @id @default(uuid())
+  tourId    String
+  name      String
+  color     String?
+  sortOrder Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  tour      GolfTour @relation(fields: [tourId], references: [id], onDelete: Cascade)
+  fourballs GolfTourFourball[]
+
+  @@index([tourId])
+}
+
+model GolfTourRound {
+  id         String         @id @default(uuid())
+  tourId     String
+  date       DateTime       @db.Date
+  venueCmsId String
+  venue      Venue          @relation(fields: [venueCmsId], references: [cmsId])
+  label      String?
+  format     GolfTourFormat @default(stroke)
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+  tour       GolfTour       @relation(fields: [tourId], references: [id], onDelete: Cascade)
+  fourballs  GolfTourFourball[]
+
+  @@index([tourId])
+  @@index([venueCmsId])
+}
+
+model GolfTourFourball {
+  id          String                 @id @default(uuid())
+  tourId      String
+  roundId     String
+  campId      String
+  golfRoundId String?                @unique
+  status      GolfTourFourballStatus @default(pending)
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @updatedAt
+  tour        GolfTour               @relation(fields: [tourId], references: [id], onDelete: Cascade)
+  round       GolfTourRound          @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  camp        GolfTourCamp           @relation(fields: [campId], references: [id], onDelete: Cascade)
+  golfRound   GolfRound?             @relation(fields: [golfRoundId], references: [id])
+  players     GolfTourFourballPlayer[]
+
+  @@index([tourId])
+  @@index([roundId])
+  @@index([campId])
+  @@index([golfRoundId])
+}
+
+model GolfTourFourballPlayer {
+  id          String           @id @default(uuid())
+  fourballId  String
+  slot        Int
+  userId      String?
+  displayName String
+  isGuest     Boolean
+  fourball    GolfTourFourball @relation(fields: [fourballId], references: [id], onDelete: Cascade)
+
+  @@unique([fourballId, slot])
+  @@index([userId])
+  @@index([fourballId])
 }

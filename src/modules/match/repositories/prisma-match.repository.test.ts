@@ -17,6 +17,7 @@ type StoredMatch = {
   servingTeam: "A" | "B" | null;
   winnerTeam: "A" | "B" | null;
   lockedAt: Date | null;
+  lockedByUserId?: string | null;
   score: unknown;
   createdAt: Date;
 };
@@ -53,13 +54,17 @@ function createPrismaMap() {
           where: {
             status: string;
             venueCmsId?: string;
+            lockedByUserId?: string;
             players?: { some: { userId: string } };
           };
-          orderBy: { startsAt: "asc" | "desc" };
+          orderBy?: { startsAt: "asc" | "desc" };
         }) => {
           let rows = [...matches.values()].filter((row) => row.status === where.status);
           if (where.venueCmsId) {
             rows = rows.filter((row) => row.venueCmsId === where.venueCmsId);
+          }
+          if (where.lockedByUserId) {
+            rows = rows.filter((row) => row.lockedByUserId === where.lockedByUserId);
           }
           if (where.players?.some.userId) {
             const userId = where.players.some.userId;
@@ -67,11 +72,13 @@ function createPrismaMap() {
               (players.get(row.id) ?? []).some((player) => player.userId === userId),
             );
           }
-          rows.sort((a, b) =>
-            orderBy.startsAt === "desc"
-              ? b.startsAt.getTime() - a.startsAt.getTime()
-              : a.startsAt.getTime() - b.startsAt.getTime(),
-          );
+          if (orderBy?.startsAt) {
+            rows.sort((a, b) =>
+              orderBy.startsAt === "desc"
+                ? b.startsAt.getTime() - a.startsAt.getTime()
+                : a.startsAt.getTime() - b.startsAt.getTime(),
+            );
+          }
           return rows.map((row) => ({
             ...row,
             players: players.get(row.id) ?? [],
@@ -167,6 +174,8 @@ describe(PrismaMatchRepository, () => {
         sets: [{ gamesA: 6, gamesB: 4, winner: "A" }],
       }),
       Team.A,
+      new Date(),
+      "user-1",
     );
     const locked = await repository.persistLock(first);
     const again = await repository.persistLock(first);
@@ -177,6 +186,57 @@ describe(PrismaMatchRepository, () => {
 
     const listed = await repository.listLockedByPlayerUserId("user-1");
     expect(listed.map((match) => match.id)).toEqual([first.id]);
+
+    const badgeRows = await repository.listLockedPadelResultsForBadges("user-1");
+    expect(badgeRows).toHaveLength(1);
+
+    const planted = await repository.create(
+      liveMatch("2026-08-02T10:00:00.000Z", "user-1"),
+    );
+    planted.lock(
+      MatchScore.from({
+        sets: [{ gamesA: 6, gamesB: 4, winner: "A" }],
+      }),
+      Team.A,
+    );
+    await repository.persistLock(planted);
+    expect(await repository.listLockedPadelResultsForBadges("user-1")).toHaveLength(
+      1,
+    );
+  });
+
+  test("create persists a captureFinished match as locked", async () => {
+    const prisma = createPrismaMap();
+    const repository = new PrismaMatchRepository(
+      prisma as unknown as PrismaClient,
+    );
+    const match = Match.captureFinished({
+      venueCmsId: CmsId.from("sanity-court-1"),
+      startsAt: StartsAt.from("2026-08-29T10:00:00.000Z"),
+      ruleset: Ruleset.from("golden_point"),
+      pairings: {
+        teamA: [
+          { displayName: "Alex", isGuest: true, userId: null },
+          { displayName: "Sam", isGuest: true, userId: null },
+        ],
+        teamB: [
+          { displayName: "Jordan", isGuest: true, userId: null },
+          { displayName: "Riley", isGuest: false, userId: "user-1" },
+        ],
+      },
+      servingTeam: Team.A,
+      score: { sets: [{ gamesA: 6, gamesB: 4, winner: "A" }] },
+      winner: "A",
+      lockedByUserId: "user-1",
+      lockedAt: new Date("2026-08-29T11:00:00.000Z"),
+    });
+
+    const stored = await repository.create(match);
+
+    expect(stored.status).toBe("locked");
+    expect(prisma.matches.get(match.id)?.status).toBe("locked");
+    expect(prisma.matches.get(match.id)?.winnerTeam).toBe("A");
+    expect(await repository.listLockedByPlayerUserId("user-1")).toHaveLength(1);
   });
 
   test("persistLock conflicts when another result already won the race", async () => {

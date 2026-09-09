@@ -1,4 +1,7 @@
-import { bindSessionUserIdToPairings } from "./bind-session-user";
+import {
+  bindSessionUserIdToPairings,
+  sanitizePairingsForCreate,
+} from "./bind-session-user";
 
 const guest = (displayName: string) => ({
   displayName,
@@ -81,6 +84,50 @@ describe("bindSessionUserIdToPairings", () => {
       displayName: "Sam",
       isGuest: false,
       userId: "user-sam",
+    });
+  });
+});
+
+describe("sanitizePairingsForCreate", () => {
+  test("strips all userIds when there is no session", () => {
+    const sanitized = sanitizePairingsForCreate(
+      {
+        teamA: [named("Alex", "user-alex"), guest("Sam")],
+        teamB: [guest("Jordan"), named("Riley", "user-riley")],
+      },
+      null,
+    );
+
+    expect(sanitized).toEqual({
+      teamA: [
+        { displayName: "Alex", isGuest: true, userId: null },
+        guest("Sam"),
+      ],
+      teamB: [
+        guest("Jordan"),
+        { displayName: "Riley", isGuest: true, userId: null },
+      ],
+    });
+  });
+
+  test("keeps only the session userId and binds an empty non-guest seat", () => {
+    const sanitized = sanitizePairingsForCreate(
+      {
+        teamA: [named("Alex", "user-alex"), guest("Sam")],
+        teamB: [guest("Jordan"), named("Riley", null)],
+      },
+      "user-riley",
+    );
+
+    expect(sanitized.teamA[0]).toEqual({
+      displayName: "Alex",
+      isGuest: true,
+      userId: null,
+    });
+    expect(sanitized.teamB[1]).toEqual({
+      displayName: "Riley",
+      isGuest: false,
+      userId: "user-riley",
     });
   });
 });

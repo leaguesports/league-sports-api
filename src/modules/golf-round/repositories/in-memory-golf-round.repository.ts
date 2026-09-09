@@ -45,6 +45,14 @@ export class InMemoryGolfRoundRepository implements GolfRoundRepository {
     );
   }
 
+
+  async listLockedAtForBadges(userId: string): Promise<Date[]> {
+    const rounds = await this.listLockedByPlayerUserId(userId);
+    return rounds
+      .filter((round) => round.lockedByUserId === userId)
+      .map((round) => round.lockedAt ?? round.startsAt.value);
+  }
+
   private lockedNewestFirst(): GolfRound[] {
     return [...this.byId.values()]
       .filter((round) => round.isLocked)
@@ -71,5 +79,6 @@ function clone(round: GolfRound | null): GolfRound | null {
     players: [...round.players],
     score: round.score,
     lockedAt: round.lockedAt,
+    lockedByUserId: round.lockedByUserId,
   });
 }

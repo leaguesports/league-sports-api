@@ -16,9 +16,18 @@ export type FriendProfile = {
   avatarUrl: string | null;
 };
 
+export type FriendProfileSearchOptions = {
+  limit?: number;
+  excludeUserId?: string;
+};
+
 export interface FriendProfileLookup {
   findByUserId(userId: string): Promise<FriendProfile | null>;
   findByHandle(handle: string): Promise<FriendProfile | null>;
+  search(
+    query: string,
+    options?: FriendProfileSearchOptions,
+  ): Promise<FriendProfile[]>;
 }
 
 export interface FriendshipRepository {

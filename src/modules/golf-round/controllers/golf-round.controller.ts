@@ -5,6 +5,7 @@ import { DomainError } from "../../../lib/domain-error";
 import { GolfRoundLockConflictError } from "../entities/golf-round-lock-conflict-error";
 import { GolfRoundPersistenceError } from "../entities/golf-round-persistence-error";
 import { GolfRoundVenueNotFoundError } from "../entities/golf-round-venue-not-found-error";
+import { CaptureFinishedGolfRound } from "../services/capture-finished-golf-round.service";
 import { CreateGolfRound } from "../services/create-golf-round.service";
 import { GetGolfRoundById } from "../services/get-golf-round-by-id.service";
 import {
@@ -12,7 +13,8 @@ import {
   ListLockedGolfRoundsByVenue,
 } from "../services/list-locked-golf-rounds.service";
 import { LockGolfRound } from "../services/lock-golf-round.service";
-import { bindSessionUserIdToPlayers } from "../utils/bind-session-user";
+import { sanitizePlayersForCreate } from "../utils/bind-session-user";
+import { resolvePlayedAt } from "../utils/played-at";
 
 const playerSchema = z.object({
   slot: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]),
@@ -32,7 +34,7 @@ const createGolfRoundBodySchema = z.object({
   startsAt: z.string(),
   holesPlayed: z.union([z.literal(9), z.literal(18)]),
   startingHole: z.number().optional(),
-  teeName: z.string().nullable().optional(),
+  teeName: z.string(),
   course: z.object({
     name: z.string().nullable().optional(),
     holes: z.array(courseHoleSchema).min(1),
@@ -63,8 +65,24 @@ const lockGolfRoundBodySchema = z.object({
   }),
 });
 
+const captureGolfRoundBodySchema = z.object({
+  venueCmsId: z.string(),
+  startsAt: z.string().optional(),
+  playedAt: z.string().optional(),
+  holesPlayed: z.union([z.literal(9), z.literal(18)]),
+  startingHole: z.number().optional(),
+  teeName: z.string(),
+  course: z.object({
+    name: z.string().nullable().optional(),
+    holes: z.array(courseHoleSchema).min(1),
+  }),
+  players: z.array(playerSchema).min(1).max(4),
+  score: lockGolfRoundBodySchema.shape.score,
+});
+
 export function createGolfRoundController(deps: {
   createGolfRound: CreateGolfRound;
+  captureFinishedGolfRound: CaptureFinishedGolfRound;
   getGolfRoundById: GetGolfRoundById;
   lockGolfRound: LockGolfRound;
   listLockedGolfRoundsByPlayer: ListLockedGolfRoundsByPlayer;
@@ -76,10 +94,46 @@ export function createGolfRoundController(deps: {
       try {
         const body = z.parse(createGolfRoundBodySchema, req.body ?? {});
         const sessionUserId = deps.tryGetSessionUserId(req);
-        const players = sessionUserId
-          ? bindSessionUserIdToPlayers(body.players, sessionUserId)
-          : body.players;
+        const players = sanitizePlayersForCreate(body.players, sessionUserId);
         const round = await deps.createGolfRound.execute({ ...body, players });
+        return res.status(201).json(round.toSnapshot());
+      } catch (error) {
+        return sendGolfRoundError(res, error);
+      }
+    },
+
+    async capture(req: Request, res: Response) {
+      try {
+        const sessionUserId = deps.tryGetSessionUserId(req);
+        if (!sessionUserId) {
+          return res.status(401).json({ error: "Unauthorized" });
+        }
+
+        const body = z.parse(captureGolfRoundBodySchema, req.body ?? {});
+        const startsAt = resolvePlayedAt(body);
+        if (!startsAt) {
+          return res.status(400).json({ error: "startsAt or playedAt is required" });
+        }
+
+        const players = sanitizePlayersForCreate(body.players, sessionUserId);
+        if (!players.some((player) => player.userId === sessionUserId)) {
+          return res.status(403).json({
+            error: "Only a seated player can capture this golf round",
+          });
+        }
+
+        const round = await deps.captureFinishedGolfRound.execute({
+          venueCmsId: body.venueCmsId,
+          startsAt,
+          holesPlayed: body.holesPlayed,
+          startingHole: body.startingHole,
+          teeName: body.teeName,
+          course: body.course,
+          players,
+          score: body.score,
+          lockedByUserId: sessionUserId,
+        });
+
         return res.status(201).json(round.toSnapshot());
       } catch (error) {
         return sendGolfRoundError(res, error);
@@ -103,11 +157,27 @@ export function createGolfRoundController(deps: {
 
     async lock(req: Request, res: Response) {
       try {
+        const sessionUserId = deps.tryGetSessionUserId(req);
+        if (!sessionUserId) {
+          return res.status(401).json({ error: "Unauthorized" });
+        }
+
         const { id } = z.parse(golfRoundIdParamSchema, req.params);
         const body = z.parse(lockGolfRoundBodySchema, req.body ?? {});
+        const existing = await deps.getGolfRoundById.execute(id);
+        if (!existing) {
+          return res.status(404).json({ error: "Golf round not found" });
+        }
+        if (!existing.hasPlayerUserId(sessionUserId)) {
+          return res.status(403).json({
+            error: "Only a seated player can lock this golf round",
+          });
+        }
+
         const round = await deps.lockGolfRound.execute({
           roundId: id,
           score: body.score,
+          lockedByUserId: sessionUserId,
         });
 
         if (!round) {

@@ -12,6 +12,7 @@ import {
   ListFriends,
   RemoveFriend,
   RequestFriend,
+  SearchUsers,
 } from "../services/friends.service";
 
 const requestBodySchema = z.object({
@@ -22,11 +23,18 @@ const userIdParamSchema = z.object({
   userId: z.string(),
 });
 
+const searchQuerySchema = z.object({
+  q: z.string().optional(),
+  query: z.string().optional(),
+  limit: z.string().optional(),
+});
+
 export function createFriendsController(deps: {
   requestFriend: RequestFriend;
   acceptFriend: AcceptFriend;
   removeFriend: RemoveFriend;
   listFriends: ListFriends;
+  searchUsers: SearchUsers;
   tryGetSessionUserId: (req: Request) => string | null;
 }) {
   return {
@@ -91,6 +99,29 @@ export function createFriendsController(deps: {
         const result = await deps.removeFriend.execute({
           userId,
           otherUserId,
+        });
+        return res.status(200).json(result);
+      } catch (error) {
+        return sendFriendsError(res, error);
+      }
+    },
+
+    async search(req: Request, res: Response) {
+      try {
+        const userId = deps.tryGetSessionUserId(req);
+        if (!userId) {
+          return res.status(401).json({ error: "Unauthorized" });
+        }
+
+        const query = z.parse(searchQuerySchema, req.query ?? {});
+        const q = (query.q ?? query.query ?? "").trim();
+        const limitRaw = query.limit ? Number.parseInt(query.limit, 10) : 10;
+        const limit = Number.isFinite(limitRaw) ? limitRaw : 10;
+
+        const result = await deps.searchUsers.execute({
+          userId,
+          query: q,
+          limit,
         });
         return res.status(200).json(result);
       } catch (error) {

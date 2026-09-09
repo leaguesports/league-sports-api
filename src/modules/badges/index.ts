@@ -54,7 +54,7 @@ export function createBadgesModule({
   );
 
   const controller = createBadgesController({
-    listBadges: new ListBadges(evaluate),
+    listBadges: new ListBadges(evaluate, badgeAwardRepository),
     recomputeBadges: new RecomputeBadges(evaluate, badgeAwardRepository),
     tryGetSessionUserId,
   });

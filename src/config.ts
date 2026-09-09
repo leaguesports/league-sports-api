@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import { identityConfigSchema } from "./modules/identity/config";
 import { googleOauthConfigSchema } from "./modules/google-oauth/config";
+import { roadmapConfigSchema } from "./modules/roadmap/config";
 
 const appConfigSchema = z.object({
   PORT: z.number().default(3000),
@@ -13,7 +14,8 @@ const appConfigSchema = z.object({
 
 export const configSchema = appConfigSchema
   .merge(identityConfigSchema)
-  .merge(googleOauthConfigSchema);
+  .merge(googleOauthConfigSchema)
+  .merge(roadmapConfigSchema);
 
 export type Config = z.infer<typeof configSchema>;
 
@@ -102,6 +104,10 @@ export function getConfig(): Config {
       JWT_SECRET: process.env.JWT_SECRET,
       FRONTEND_URL: frontendUrl,
       CORS_ORIGINS: getCorsOrigins(frontendUrl, extraOrigins),
+      ROADMAP_SHIP_SECRET: process.env.ROADMAP_SHIP_SECRET || undefined,
+      ROADMAP_FROM_EMAIL: process.env.ROADMAP_FROM_EMAIL || undefined,
+      RESEND_API_KEY: process.env.RESEND_API_KEY || undefined,
+      SENDGRID_API_KEY: process.env.SENDGRID_API_KEY || undefined,
     });
   } catch (error) {
     console.error(error);

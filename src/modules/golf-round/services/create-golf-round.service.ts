@@ -11,7 +11,7 @@ export type CreateGolfRoundInput = {
   startsAt: unknown;
   holesPlayed: unknown;
   startingHole?: unknown;
-  teeName?: string | null;
+  teeName: unknown;
   course: unknown;
   players: GolfPlayerInput[];
 };

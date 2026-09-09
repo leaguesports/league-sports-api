@@ -1,11 +1,13 @@
 import { Request, Router } from "express";
 
 import { PrismaClient } from "../../generated/prisma/client";
+import { OnScorecardLocked } from "../scorecards/on-scorecard-locked";
 import { VenueRepository } from "../venue/repositories/venue.repository";
 import { createMatchController } from "./controllers/match.controller";
 import { PrismaMatchRepository } from "./repositories/prisma-match.repository";
 import { MatchRepository } from "./repositories/match.repository";
 import { createMatchRoutes } from "./routes/match.routes";
+import { CaptureFinishedMatch } from "./services/capture-finished-match.service";
 import { CreateMatch } from "./services/create-match.service";
 import { GetMatchById } from "./services/get-match-by-id.service";
 import {
@@ -19,6 +21,7 @@ export type CreateMatchModuleParams = {
   venueRepository: VenueRepository;
   matchRepository?: MatchRepository;
   tryGetSessionUserId: (req: Request) => string | null;
+  onScorecardLocked?: OnScorecardLocked;
 };
 
 export type MatchModule = {
@@ -31,14 +34,19 @@ export function createMatchModule({
   venueRepository,
   matchRepository: matchRepositoryOverride,
   tryGetSessionUserId,
+  onScorecardLocked,
 }: CreateMatchModuleParams): MatchModule {
   const matchRepository =
     matchRepositoryOverride ?? new PrismaMatchRepository(prisma);
 
   const controller = createMatchController({
     createMatch: new CreateMatch(matchRepository, venueRepository),
+    captureFinishedMatch: new CaptureFinishedMatch(
+      matchRepository,
+      venueRepository,
+    ),
     getMatchById: new GetMatchById(matchRepository),
-    lockMatch: new LockMatch(matchRepository),
+    lockMatch: new LockMatch(matchRepository, onScorecardLocked),
     listLockedMatchesByPlayer: new ListLockedMatchesByPlayer(
       matchRepository,
       venueRepository,
@@ -61,6 +69,7 @@ export { Match } from "./entities/match";
 export { InMemoryMatchRepository } from "./repositories/in-memory-match.repository";
 export { PrismaMatchRepository } from "./repositories/prisma-match.repository";
 export type { MatchRepository } from "./repositories/match.repository";
+export { CaptureFinishedMatch } from "./services/capture-finished-match.service";
 export { CreateMatch } from "./services/create-match.service";
 export { GetMatchById } from "./services/get-match-by-id.service";
 export { LockMatch } from "./services/lock-match.service";

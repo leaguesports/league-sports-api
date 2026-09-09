@@ -34,5 +34,9 @@ export function createFriendsRoutes(
     void controller.remove(req, res);
   });
 
+  router.get("/api/users/search", options.requireAuth, (req, res) => {
+    void controller.search(req, res);
+  });
+
   return router;
 }

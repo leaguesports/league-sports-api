@@ -28,6 +28,7 @@ type GolfRoundRow = {
   course: Prisma.JsonValue;
   score: Prisma.JsonValue | null;
   lockedAt: Date | null;
+  lockedByUserId: string | null;
   players: GolfRoundPlayerRow[];
 };
 
@@ -55,11 +56,14 @@ export class PrismaGolfRoundRepository implements GolfRoundRepository {
           id: snapshot.id,
           venueCmsId: snapshot.venueCmsId,
           startsAt: round.startsAt.value,
-          status: "live",
+          status: snapshot.status,
           holesPlayed: snapshot.holesPlayed,
           startingHole: snapshot.startingHole,
           teeName: snapshot.teeName,
           course: snapshot.course,
+          lockedAt: round.lockedAt,
+          lockedByUserId: round.lockedByUserId,
+          score: snapshot.score === null ? undefined : snapshot.score,
           players: {
             create: round.players.map((player) => ({
               slot: player.slot,
@@ -91,6 +95,7 @@ export class PrismaGolfRoundRepository implements GolfRoundRepository {
         data: {
           status: "locked",
           lockedAt: round.lockedAt,
+          lockedByUserId: round.lockedByUserId,
           score: snapshot.score === null ? Prisma.JsonNull : snapshot.score,
         },
       });
@@ -158,6 +163,24 @@ export class PrismaGolfRoundRepository implements GolfRoundRepository {
       throw wrapPersistenceError(error, "Unable to load golf round");
     }
   }
+
+  async listLockedAtForBadges(userId: string): Promise<Date[]> {
+    try {
+      const rows = await this.prisma.golfRound.findMany({
+        where: {
+          status: "locked",
+          lockedByUserId: userId,
+        },
+        select: {
+          lockedAt: true,
+          startsAt: true,
+        },
+      });
+      return rows.map((row) => row.lockedAt ?? row.startsAt);
+    } catch (error) {
+      throw wrapPersistenceError(error, "Unable to load golf round");
+    }
+  }
 }
 
 function toDomain(row: GolfRoundRow): GolfRound {
@@ -191,6 +214,7 @@ function toDomain(row: GolfRoundRow): GolfRound {
         })
       : null,
     lockedAt: row.lockedAt,
+    lockedByUserId: row.lockedByUserId,
   });
 }
 

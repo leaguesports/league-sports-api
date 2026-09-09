@@ -6,6 +6,7 @@ import { InMemoryVenueRepository } from "../../venue/repositories/in-memory-venu
 import { DomainError } from "../../../lib/domain-error";
 import { MatchVenueNotFoundError } from "../entities/match-venue-not-found-error";
 import { InMemoryMatchRepository } from "../repositories/in-memory-match.repository";
+import { CaptureFinishedMatch } from "./capture-finished-match.service";
 import { CreateMatch } from "./create-match.service";
 import {
   ListLockedMatchesByPlayer,
@@ -75,6 +76,32 @@ describe("match application", () => {
     expect(second.toSnapshot().servingTeam).toBe("B");
   });
 
+  test("captureFinished persists a locked match that history lists immediately", async () => {
+    const venues = new InMemoryVenueRepository();
+    const matches = new InMemoryMatchRepository();
+    await seedVenue(venues);
+    const capture = new CaptureFinishedMatch(matches, venues);
+
+    const match = await capture.execute({
+      venueCmsId: "sanity-court-1",
+      startsAt: "2026-08-29T10:00:00.000Z",
+      ruleset: "golden_point",
+      pairings: guests,
+      score: scoreA,
+      winner: "A",
+      lockedByUserId: "user-riley",
+    });
+
+    expect(match.status).toBe("locked");
+    expect(match.toSnapshot().score).toEqual(scoreA);
+    expect(match.lockedByUserId).toBe("user-riley");
+
+    const history = await new ListLockedMatchesByPlayer(matches, venues).execute(
+      "user-riley",
+    );
+    expect(history.map((item) => item.id)).toEqual([match.id]);
+  });
+
   test("create fails when the venue cmsId is unknown", async () => {
     const create = new CreateMatch(
       new InMemoryMatchRepository(),
@@ -128,11 +155,13 @@ describe("match application", () => {
       matchId: created.id,
       score: scoreA,
       winner: "A",
+      lockedByUserId: "user-riley",
     });
     const again = await lock.execute({
       matchId: created.id,
       score: scoreA,
       winner: "A",
+      lockedByUserId: "user-riley",
     });
 
     expect(locked?.status).toBe("locked");
@@ -199,9 +228,24 @@ describe("match application", () => {
       },
     });
 
-    await lock.execute({ matchId: older.id, score: scoreA, winner: "A" });
-    await lock.execute({ matchId: newer.id, score: scoreA, winner: "A" });
-    await lock.execute({ matchId: otherCourt.id, score: scoreA, winner: "A" });
+    await lock.execute({
+      matchId: older.id,
+      score: scoreA,
+      winner: "A",
+      lockedByUserId: "user-riley",
+    });
+    await lock.execute({
+      matchId: newer.id,
+      score: scoreA,
+      winner: "A",
+      lockedByUserId: "user-riley",
+    });
+    await lock.execute({
+      matchId: otherCourt.id,
+      score: scoreA,
+      winner: "A",
+      lockedByUserId: "user-pat",
+    });
 
     const playerHistory = await new ListLockedMatchesByPlayer(
       matches,
@@ -244,8 +288,18 @@ describe("match application", () => {
       ruleset: "golden_point",
       pairings: guests,
     });
-    await lock.execute({ matchId: atCourt1.id, score: scoreA, winner: "A" });
-    await lock.execute({ matchId: atCourt2.id, score: scoreA, winner: "A" });
+    await lock.execute({
+      matchId: atCourt1.id,
+      score: scoreA,
+      winner: "A",
+      lockedByUserId: "user-riley",
+    });
+    await lock.execute({
+      matchId: atCourt2.id,
+      score: scoreA,
+      winner: "A",
+      lockedByUserId: "user-riley",
+    });
 
     const findByCmsId = jest.spyOn(venues, "findByCmsId");
     const findByCmsIds = jest.spyOn(venues, "findByCmsIds");

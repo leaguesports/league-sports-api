@@ -129,8 +129,8 @@ describe("matches HTTP", () => {
           {
             slot: "B2",
             displayName: "Riley",
-            isGuest: false,
-            userId: "user-riley",
+            isGuest: true,
+            userId: null,
           },
         ],
       },
@@ -184,7 +184,10 @@ describe("matches HTTP", () => {
 
     const locked = await fetch(`${server.url}/api/matches/${createdBody.id}/lock`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: sessionCookie("user-riley"),
+      },
       body: JSON.stringify({ score: scoreA, winner: "A" }),
     });
     expect(locked.status).toBe(200);
@@ -212,7 +215,7 @@ describe("matches HTTP", () => {
 
     expect(invalid.status).toBe(201);
     expect(invalid.status).not.toBe(401);
-    expect(invalidBody.pairings.teamB[1].userId).toBe("user-riley");
+    expect(invalidBody.pairings.teamB[1].userId).toBeNull();
 
     const guestsOnly = {
       teamA: [
@@ -282,6 +285,133 @@ describe("matches HTTP", () => {
     ).toBe(true);
   });
 
+  test("POST /api/matches/capture writes a locked match from one payload", async () => {
+    const captured = await fetch(`${server.url}/api/matches/capture`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: sessionCookie("user-riley"),
+      },
+      body: JSON.stringify({
+        venueCmsId: "sanity-court-1",
+        playedAt: "2026-08-29T10:00:00.000Z",
+        ruleset: "golden_point",
+        pairings: {
+          teamA: pairings.teamA,
+          teamB: [
+            { displayName: "Jordan", isGuest: true, userId: null },
+            { displayName: "Riley", isGuest: false, userId: null },
+          ],
+        },
+        score: scoreA,
+        winner: "A",
+      }),
+    });
+    const capturedBody = (await captured.json()) as {
+      id: string;
+      status: string;
+      winner: string;
+      score: unknown;
+      startsAt: string;
+    };
+
+    expect(captured.status).toBe(201);
+    expect(capturedBody.status).toBe("locked");
+    expect(capturedBody.winner).toBe("A");
+    expect(capturedBody.score).toEqual(scoreA);
+    expect(capturedBody.startsAt).toBe("2026-08-29T10:00:00.000Z");
+
+    const history = await fetch(
+      `${server.url}/api/matches?playerUserId=user-riley`,
+    );
+    const items = (await history.json()) as { id: string }[];
+    expect(items.map((item) => item.id)).toEqual([capturedBody.id]);
+  });
+
+  test("POST /api/matches/capture requires a seated session player", async () => {
+    const unauth = await fetch(`${server.url}/api/matches/capture`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ...createBody,
+        score: scoreA,
+        winner: "A",
+      }),
+    });
+    expect(unauth.status).toBe(401);
+
+    const guestsOnly = await fetch(`${server.url}/api/matches/capture`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: sessionCookie("user-riley"),
+      },
+      body: JSON.stringify({
+        ...createBody,
+        pairings: {
+          teamA: [
+            { displayName: "Alex", isGuest: true, userId: null },
+            { displayName: "Sam", isGuest: true, userId: null },
+          ],
+          teamB: [
+            { displayName: "Jordan", isGuest: true, userId: null },
+            { displayName: "Riley", isGuest: true, userId: null },
+          ],
+        },
+        score: scoreA,
+        winner: "A",
+      }),
+    });
+    expect(guestsOnly.status).toBe(403);
+
+    const missingWhen = await fetch(`${server.url}/api/matches/capture`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: sessionCookie("user-riley"),
+      },
+      body: JSON.stringify({
+        venueCmsId: "sanity-court-1",
+        ruleset: "golden_point",
+        pairings: {
+          teamA: pairings.teamA,
+          teamB: [
+            { displayName: "Jordan", isGuest: true, userId: null },
+            { displayName: "Riley", isGuest: false, userId: null },
+          ],
+        },
+        score: scoreA,
+        winner: "A",
+      }),
+    });
+    expect(missingWhen.status).toBe(400);
+    expect(await missingWhen.json()).toEqual({
+      error: "startsAt or playedAt is required",
+    });
+
+    const missingVenue = await fetch(`${server.url}/api/matches/capture`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: sessionCookie("user-riley"),
+      },
+      body: JSON.stringify({
+        ...createBody,
+        venueCmsId: "no-such-court",
+        pairings: {
+          teamA: pairings.teamA,
+          teamB: [
+            { displayName: "Jordan", isGuest: true, userId: null },
+            { displayName: "Riley", isGuest: false, userId: null },
+          ],
+        },
+        score: scoreA,
+        winner: "A",
+      }),
+    });
+    expect(missingVenue.status).toBe(404);
+  });
+
   test("GET missing match is 404", async () => {
     const response = await fetch(`${server.url}/api/matches/missing`);
     expect(response.status).toBe(404);
@@ -314,7 +444,7 @@ describe("matches HTTP", () => {
     expect(blankVenue.status).toBe(400);
   });
 
-  test("lock is 200, idempotent for the same score, 409 on conflict", async () => {
+  test("lock requires a seated session player", async () => {
     const created = await fetch(`${server.url}/api/matches`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -322,9 +452,50 @@ describe("matches HTTP", () => {
     });
     const { id } = (await created.json()) as { id: string };
 
-    const locked = await fetch(`${server.url}/api/matches/${id}/lock`, {
+    const unauth = await fetch(`${server.url}/api/matches/${id}/lock`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ score: scoreA, winner: "A" }),
+    });
+    expect(unauth.status).toBe(401);
+
+    const notSeated = await fetch(`${server.url}/api/matches/${id}/lock`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: sessionCookie("user-riley"),
+      },
+      body: JSON.stringify({ score: scoreA, winner: "A" }),
+    });
+    expect(notSeated.status).toBe(403);
+  });
+
+  test("lock is 200, idempotent for the same score, 409 on conflict", async () => {
+    const created = await fetch(`${server.url}/api/matches`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: sessionCookie("user-riley"),
+      },
+      body: JSON.stringify({
+        ...createBody,
+        pairings: {
+          teamA: pairings.teamA,
+          teamB: [
+            { displayName: "Jordan", isGuest: true, userId: null },
+            { displayName: "Riley", isGuest: false, userId: null },
+          ],
+        },
+      }),
+    });
+    const { id } = (await created.json()) as { id: string };
+
+    const locked = await fetch(`${server.url}/api/matches/${id}/lock`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: sessionCookie("user-riley"),
+      },
       body: JSON.stringify({ score: scoreA, winner: "A" }),
     });
     const lockedBody = (await locked.json()) as {
@@ -340,14 +511,20 @@ describe("matches HTTP", () => {
 
     const again = await fetch(`${server.url}/api/matches/${id}/lock`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: sessionCookie("user-riley"),
+      },
       body: JSON.stringify({ score: scoreA, winner: "A" }),
     });
     expect(again.status).toBe(200);
 
     const conflict = await fetch(`${server.url}/api/matches/${id}/lock`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: sessionCookie("user-riley"),
+      },
       body: JSON.stringify({
         score: { sets: [{ gamesA: 4, gamesB: 6, winner: "B" }] },
         winner: "B",
@@ -357,7 +534,10 @@ describe("matches HTTP", () => {
 
     const missing = await fetch(`${server.url}/api/matches/missing/lock`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: sessionCookie("user-riley"),
+      },
       body: JSON.stringify({ score: scoreA, winner: "A" }),
     });
     expect(missing.status).toBe(404);
@@ -366,18 +546,38 @@ describe("matches HTTP", () => {
   test("history lists only locked matches, newest first, with venue details", async () => {
     const older = await fetch(`${server.url}/api/matches`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: sessionCookie("user-riley"),
+      },
       body: JSON.stringify({
         ...createBody,
         startsAt: "2026-08-01T10:00:00.000Z",
+        pairings: {
+          teamA: pairings.teamA,
+          teamB: [
+            { displayName: "Jordan", isGuest: true, userId: null },
+            { displayName: "Riley", isGuest: false, userId: null },
+          ],
+        },
       }),
     });
     const newer = await fetch(`${server.url}/api/matches`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: sessionCookie("user-riley"),
+      },
       body: JSON.stringify({
         ...createBody,
         startsAt: "2026-08-20T10:00:00.000Z",
+        pairings: {
+          teamA: pairings.teamA,
+          teamB: [
+            { displayName: "Jordan", isGuest: true, userId: null },
+            { displayName: "Riley", isGuest: false, userId: null },
+          ],
+        },
       }),
     });
     const olderBody = (await older.json()) as { id: string };
@@ -385,12 +585,18 @@ describe("matches HTTP", () => {
 
     await fetch(`${server.url}/api/matches/${olderBody.id}/lock`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: sessionCookie("user-riley"),
+      },
       body: JSON.stringify({ score: scoreA, winner: "A" }),
     });
     await fetch(`${server.url}/api/matches/${newerBody.id}/lock`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: sessionCookie("user-riley"),
+      },
       body: JSON.stringify({ score: scoreA, winner: "A" }),
     });
 
@@ -467,8 +673,20 @@ describe("matches HTTP", () => {
   test("lock maps persistence failures instead of returning 200", async () => {
     const created = await fetch(`${server.url}/api/matches`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(createBody),
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: sessionCookie("user-riley"),
+      },
+      body: JSON.stringify({
+        ...createBody,
+        pairings: {
+          teamA: pairings.teamA,
+          teamB: [
+            { displayName: "Jordan", isGuest: true, userId: null },
+            { displayName: "Riley", isGuest: false, userId: null },
+          ],
+        },
+      }),
     });
     const { id } = (await created.json()) as { id: string };
 
@@ -486,13 +704,18 @@ describe("matches HTTP", () => {
           matches.listLockedByPlayerUserId(userId),
         listLockedByVenueCmsId: (cmsId) =>
           matches.listLockedByVenueCmsId(cmsId),
+        listLockedPadelResultsForBadges: (userId) =>
+          matches.listLockedPadelResultsForBadges(userId),
       },
     });
     server = await listen(app);
 
     const response = await fetch(`${server.url}/api/matches/${id}/lock`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: sessionCookie("user-riley"),
+      },
       body: JSON.stringify({ score: scoreA, winner: "A" }),
     });
 

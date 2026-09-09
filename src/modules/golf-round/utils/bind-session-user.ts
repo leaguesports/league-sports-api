@@ -16,6 +16,27 @@ function withSessionUser(
   return { ...player, userId: sessionUserId, isGuest: false };
 }
 
+function stripNonSessionUserIds(
+  players: GolfPlayerInput[],
+  sessionUserId: string | null,
+): GolfPlayerInput[] {
+  return players.map((player) => {
+    const id = normalizedUserId(player.userId);
+    if (sessionUserId && id === sessionUserId) {
+      return withSessionUser(player, sessionUserId);
+    }
+    if (id !== null) {
+      return {
+        ...player,
+        displayName: player.displayName,
+        isGuest: true,
+        userId: null,
+      };
+    }
+    return { ...player, userId: null };
+  });
+}
+
 export function bindSessionUserIdToPlayers(
   players: GolfPlayerInput[],
   sessionUserId: string,
@@ -46,4 +67,16 @@ export function bindSessionUserIdToPlayers(
   }
 
   return bound;
+}
+
+/** Sanitize create payload: only the session user may be stamped as a userId. */
+export function sanitizePlayersForCreate(
+  players: GolfPlayerInput[],
+  sessionUserId: string | null,
+): GolfPlayerInput[] {
+  const stripped = stripNonSessionUserIds(players, sessionUserId);
+  if (!sessionUserId) {
+    return stripped;
+  }
+  return bindSessionUserIdToPlayers(stripped, sessionUserId);
 }

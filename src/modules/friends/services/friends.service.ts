@@ -261,3 +261,69 @@ export class FriendRequestNotFoundError extends Error {
     this.name = "FriendRequestNotFoundError";
   }
 }
+
+export type UserSearchRelationship =
+  | "none"
+  | "friend"
+  | "incoming"
+  | "outgoing"
+  | "self";
+
+export type PublicUserSearchResult = {
+  id: string;
+  displayName: string;
+  handle: string;
+  avatarUrl: string | null;
+  relationship: UserSearchRelationship;
+};
+
+export class SearchUsers {
+  constructor(
+    private readonly friendships: FriendshipRepository,
+    private readonly profiles: FriendProfileLookup,
+  ) {}
+
+  async execute(input: {
+    userId: string;
+    query: string;
+    limit?: number;
+  }): Promise<{ users: PublicUserSearchResult[] }> {
+    const userId = input.userId.trim();
+    if (!userId) {
+      throw new DomainError("userId is required");
+    }
+
+    const query = input.query.trim().replace(/^@/, "");
+    if (query.length < 1) {
+      return { users: [] };
+    }
+
+    const profiles = await this.profiles.search(query, {
+      limit: input.limit ?? 10,
+      excludeUserId: userId,
+    });
+
+    const users: PublicUserSearchResult[] = [];
+    for (const profile of profiles) {
+      const existing = await this.friendships.findBetween(
+        userId,
+        profile.userId,
+      );
+      let relationship: UserSearchRelationship = "none";
+      if (existing?.status === "accepted") {
+        relationship = "friend";
+      } else if (existing?.status === "pending") {
+        relationship =
+          existing.requesterId === userId ? "outgoing" : "incoming";
+      }
+
+      users.push({
+        ...toPublicUser(profile),
+        relationship,
+      });
+    }
+
+    return { users };
+  }
+}
+

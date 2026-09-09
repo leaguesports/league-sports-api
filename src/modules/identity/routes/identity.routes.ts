@@ -23,6 +23,18 @@ export function createIdentityRoutes(
     void controller.me(req, res);
   });
 
+  router.patch("/api/auth/me", authorizationMiddleware, (req, res) => {
+    void controller.patchProfile(req, res);
+  });
+
+  router.get("/api/me/profile", authorizationMiddleware, (req, res) => {
+    void controller.getProfile(req, res);
+  });
+
+  router.patch("/api/me/profile", authorizationMiddleware, (req, res) => {
+    void controller.patchProfile(req, res);
+  });
+
   router.post("/api/auth/logout", authorizationMiddleware, (req, res) => {
     void controller.logout(req, res);
   });

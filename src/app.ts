@@ -10,6 +10,7 @@ import {
 } from "./modules/darts";
 import {
   createGolfRoundModule,
+  GolfHandicapIndexLookup,
   GolfRoundRepository,
 } from "./modules/golf-round";
 import { createIdentityModule } from "./modules/identity";
@@ -104,6 +105,7 @@ export type CreateAppDependencies = {
   friendProfileLookup?: FriendProfileLookup;
   matchRepository?: MatchRepository;
   golfRoundRepository?: GolfRoundRepository;
+  golfHandicapIndexLookup?: GolfHandicapIndexLookup;
   dartsMatchRepository?: DartsMatchRepository;
   badgeAwardRepository?: BadgeAwardRepository;
   preferencesRepository?: PreferencesRepository;
@@ -194,6 +196,7 @@ export async function createApp(
     prisma,
     venueRepository: venue.venueRepository,
     golfRoundRepository: dependencies.golfRoundRepository,
+    golfHandicapIndexLookup: dependencies.golfHandicapIndexLookup,
     tryGetSessionUserId: identity.tryGetSessionUserId,
     onScorecardLocked,
   });

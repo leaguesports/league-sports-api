@@ -4,7 +4,12 @@ import { PrismaClient } from "../../generated/prisma/client";
 import { OnScorecardLocked } from "../scorecards/on-scorecard-locked";
 import { VenueRepository } from "../venue/repositories/venue.repository";
 import { createGolfRoundController } from "./controllers/golf-round.controller";
+import {
+  emptyGolfHandicapIndexLookup,
+  GolfHandicapIndexLookup,
+} from "./repositories/golf-handicap-index.lookup";
 import { GolfRoundRepository } from "./repositories/golf-round.repository";
+import { PrismaGolfHandicapIndexLookup } from "./repositories/prisma-golf-handicap-index.lookup";
 import { PrismaGolfRoundRepository } from "./repositories/prisma-golf-round.repository";
 import { createGolfRoundRoutes } from "./routes/golf-round.routes";
 import { CaptureFinishedGolfRound } from "./services/capture-finished-golf-round.service";
@@ -20,6 +25,7 @@ export type CreateGolfRoundModuleParams = {
   prisma: PrismaClient;
   venueRepository: VenueRepository;
   golfRoundRepository?: GolfRoundRepository;
+  golfHandicapIndexLookup?: GolfHandicapIndexLookup;
   tryGetSessionUserId: (req: Request) => string | null;
   onScorecardLocked?: OnScorecardLocked;
 };
@@ -33,17 +39,28 @@ export function createGolfRoundModule({
   prisma,
   venueRepository,
   golfRoundRepository: golfRoundRepositoryOverride,
+  golfHandicapIndexLookup: golfHandicapIndexLookupOverride,
   tryGetSessionUserId,
   onScorecardLocked,
 }: CreateGolfRoundModuleParams): GolfRoundModule {
   const golfRoundRepository =
     golfRoundRepositoryOverride ?? new PrismaGolfRoundRepository(prisma);
+  const golfHandicapIndexLookup =
+    golfHandicapIndexLookupOverride ??
+    (golfRoundRepositoryOverride
+      ? emptyGolfHandicapIndexLookup
+      : new PrismaGolfHandicapIndexLookup(prisma));
 
   const controller = createGolfRoundController({
-    createGolfRound: new CreateGolfRound(golfRoundRepository, venueRepository),
+    createGolfRound: new CreateGolfRound(
+      golfRoundRepository,
+      venueRepository,
+      golfHandicapIndexLookup,
+    ),
     captureFinishedGolfRound: new CaptureFinishedGolfRound(
       golfRoundRepository,
       venueRepository,
+      golfHandicapIndexLookup,
     ),
     getGolfRoundById: new GetGolfRoundById(golfRoundRepository),
     lockGolfRound: new LockGolfRound(golfRoundRepository, onScorecardLocked),
@@ -69,6 +86,11 @@ export { GolfRound } from "./entities/golf-round";
 export { InMemoryGolfRoundRepository } from "./repositories/in-memory-golf-round.repository";
 export { PrismaGolfRoundRepository } from "./repositories/prisma-golf-round.repository";
 export type { GolfRoundRepository } from "./repositories/golf-round.repository";
+export type { GolfHandicapIndexLookup } from "./repositories/golf-handicap-index.lookup";
+export {
+  InMemoryGolfHandicapIndexLookup,
+  emptyGolfHandicapIndexLookup,
+} from "./repositories/golf-handicap-index.lookup";
 export { CaptureFinishedGolfRound } from "./services/capture-finished-golf-round.service";
 export { CreateGolfRound } from "./services/create-golf-round.service";
 export { GetGolfRoundById } from "./services/get-golf-round-by-id.service";

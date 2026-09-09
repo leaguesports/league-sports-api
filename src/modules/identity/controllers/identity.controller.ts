@@ -1,5 +1,7 @@
 import { Request, Response } from "express";
+import { z } from "zod";
 
+import { DomainError } from "../../../lib/domain-error";
 import { IdentityConfig } from "../config";
 import { AuthService } from "../services/auth.service";
 import {
@@ -8,6 +10,12 @@ import {
 } from "../utils/cookie";
 import { makeAuthenticationTokenParser } from "../utils/jwt";
 import { resolvePostAuthRedirect } from "../utils/post-auth-redirect";
+
+const patchProfileBodySchema = z
+  .object({
+    golfHandicapIndex: z.union([z.number(), z.null()]),
+  })
+  .strict();
 
 export type IdentityControllerDeps = {
   config: IdentityConfig;
@@ -57,6 +65,35 @@ export class IdentityController {
     }
 
     res.status(200).json(user);
+  }
+
+  async getProfile(req: Request, res: Response): Promise<void> {
+    await this.me(req, res);
+  }
+
+  async patchProfile(req: Request, res: Response): Promise<void> {
+    try {
+      const { userId } = this.parseAuthenticationToken(req.cookies.token);
+      const body = z.parse(patchProfileBodySchema, req.body ?? {});
+      const user = await this.authService.updateMeProfile(userId, body);
+
+      if (!user) {
+        res.status(401).json({ error: "Unauthorized" });
+        return;
+      }
+
+      res.status(200).json(user);
+    } catch (error) {
+      if (error instanceof DomainError) {
+        res.status(400).json({ error: error.message });
+        return;
+      }
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ error: "Invalid profile payload" });
+        return;
+      }
+      throw error;
+    }
   }
 
   async logout(_req: Request, res: Response): Promise<void> {

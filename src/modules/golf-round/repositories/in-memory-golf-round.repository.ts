@@ -1,4 +1,5 @@
 import { CmsId } from "../../venue/entities/cms-id";
+import { GolfPlayer } from "../entities/golf-player";
 import { GolfRound } from "../entities/golf-round";
 import { GolfRoundLockConflictError } from "../entities/golf-round-lock-conflict-error";
 import { GolfRoundRepository } from "./golf-round.repository";
@@ -75,8 +76,9 @@ function clone(round: GolfRound | null): GolfRound | null {
     holesPlayed: round.holesPlayed,
     startingHole: round.startingHole,
     teeName: round.teeName,
+    tee: round.tee,
     course: round.course,
-    players: [...round.players],
+    players: snapshot.players.map((player) => GolfPlayer.rehydrate(player)),
     score: round.score,
     lockedAt: round.lockedAt,
     lockedByUserId: round.lockedByUserId,

@@ -8,6 +8,8 @@ import { GolfRoundPersistenceError } from "../entities/golf-round-persistence-er
 import { GolfRoundVenueNotFoundError } from "../entities/golf-round-venue-not-found-error";
 import { GolfScore } from "../entities/golf-score";
 import { StartsAt } from "../entities/starts-at";
+import { TeeRatings } from "../entities/tee-ratings";
+import { decimalToNumber } from "./golf-handicap-index.lookup";
 import { GolfRoundRepository } from "./golf-round.repository";
 
 type GolfRoundPlayerRow = {
@@ -15,6 +17,11 @@ type GolfRoundPlayerRow = {
   userId: string | null;
   displayName: string;
   isGuest: boolean;
+  handicapIndexUsed: unknown;
+  courseHandicap: number | null;
+  playingHandicap: number | null;
+  grossTotal: number | null;
+  netTotal: number | null;
 };
 
 type GolfRoundRow = {
@@ -25,6 +32,10 @@ type GolfRoundRow = {
   holesPlayed: number;
   startingHole: number;
   teeName: string | null;
+  teeId: string | null;
+  courseRating: unknown;
+  slopeRating: number | null;
+  teePar: number | null;
   course: Prisma.JsonValue;
   score: Prisma.JsonValue | null;
   lockedAt: Date | null;
@@ -60,16 +71,25 @@ export class PrismaGolfRoundRepository implements GolfRoundRepository {
           holesPlayed: snapshot.holesPlayed,
           startingHole: snapshot.startingHole,
           teeName: snapshot.teeName,
+          teeId: snapshot.teeId,
+          courseRating: snapshot.courseRating,
+          slopeRating: snapshot.slopeRating,
+          teePar: snapshot.teePar,
           course: snapshot.course,
           lockedAt: round.lockedAt,
           lockedByUserId: round.lockedByUserId,
-          score: snapshot.score === null ? undefined : snapshot.score,
+          score: round.score === null ? undefined : round.score.toSnapshot(),
           players: {
-            create: round.players.map((player) => ({
+            create: snapshot.players.map((player) => ({
               slot: player.slot,
               userId: player.userId,
               displayName: player.displayName,
               isGuest: player.isGuest,
+              handicapIndexUsed: player.handicapIndexUsed,
+              courseHandicap: player.courseHandicap,
+              playingHandicap: player.playingHandicap,
+              grossTotal: player.grossTotal,
+              netTotal: player.netTotal,
             })),
           },
         },
@@ -96,11 +116,25 @@ export class PrismaGolfRoundRepository implements GolfRoundRepository {
           status: "locked",
           lockedAt: round.lockedAt,
           lockedByUserId: round.lockedByUserId,
-          score: snapshot.score === null ? Prisma.JsonNull : snapshot.score,
+          score:
+            round.score === null ? Prisma.JsonNull : round.score.toSnapshot(),
         },
       });
 
       if (updated.count === 1) {
+        await this.prisma.$transaction(
+          snapshot.players.map((player) =>
+            this.prisma.golfRoundPlayer.update({
+              where: {
+                roundId_slot: { roundId: round.id, slot: player.slot },
+              },
+              data: {
+                grossTotal: player.grossTotal,
+                netTotal: player.netTotal,
+              },
+            }),
+          ),
+        );
         const locked = await this.findById(round.id);
         if (!locked) {
           throw new GolfRoundPersistenceError("Unable to load golf round");
@@ -184,14 +218,21 @@ export class PrismaGolfRoundRepository implements GolfRoundRepository {
 }
 
 function toDomain(row: GolfRoundRow): GolfRound {
-  const players = GolfPlayer.fromPlayers(
-    row.players.map((player) => ({
-      slot: player.slot,
-      userId: player.userId,
-      displayName: player.displayName,
-      isGuest: player.isGuest,
-    })),
-  );
+  const players = row.players
+    .map((player) =>
+      GolfPlayer.rehydrate({
+        slot: player.slot as 1 | 2 | 3 | 4,
+        userId: player.userId,
+        displayName: player.displayName,
+        isGuest: player.isGuest,
+        handicapIndexUsed: decimalToNumber(player.handicapIndexUsed),
+        courseHandicap: player.courseHandicap,
+        playingHandicap: player.playingHandicap,
+        grossTotal: player.grossTotal,
+        netTotal: player.netTotal,
+      }),
+    )
+    .sort((a, b) => a.slot - b.slot);
   const course = CourseSnapshot.from(row.course, {
     holesPlayed: row.holesPlayed,
     startingHole: row.startingHole,
@@ -205,6 +246,12 @@ function toDomain(row: GolfRoundRow): GolfRound {
     holesPlayed: row.holesPlayed,
     startingHole: row.startingHole,
     teeName: row.teeName,
+    tee: TeeRatings.rehydrate({
+      teeId: row.teeId,
+      courseRating: decimalToNumber(row.courseRating),
+      slopeRating: row.slopeRating,
+      teePar: row.teePar,
+    }),
     course,
     players,
     score: row.score

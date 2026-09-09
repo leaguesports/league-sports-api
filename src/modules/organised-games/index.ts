@@ -11,6 +11,7 @@ import {
   FriendshipRepository,
 } from "../friends/repositories/friendship.repository";
 import { GolfRoundRepository } from "../golf-round/repositories/golf-round.repository";
+import { PrismaGolfHandicapIndexLookup } from "../golf-round/repositories/prisma-golf-handicap-index.lookup";
 import { CreateGolfRound } from "../golf-round/services/create-golf-round.service";
 import { MatchRepository } from "../match/repositories/match.repository";
 import { CreateMatch } from "../match/services/create-match.service";
@@ -114,7 +115,11 @@ export function createOrganisedGamesModule({
       organisedGameRepository,
       friendProfileLookup,
       new CreateMatch(matchRepository, venueRepository),
-      new CreateGolfRound(golfRoundRepository, venueRepository),
+      new CreateGolfRound(
+        golfRoundRepository,
+        venueRepository,
+        new PrismaGolfHandicapIndexLookup(prisma),
+      ),
     ),
     tryGetSessionUserId,
   });

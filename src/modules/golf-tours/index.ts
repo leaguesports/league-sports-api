@@ -7,6 +7,7 @@ import {
 
 import { PrismaClient } from "../../generated/prisma/client";
 import { GolfRoundRepository } from "../golf-round/repositories/golf-round.repository";
+import { PrismaGolfHandicapIndexLookup } from "../golf-round/repositories/prisma-golf-handicap-index.lookup";
 import { CreateGolfRound } from "../golf-round/services/create-golf-round.service";
 import { GetGolfRoundById } from "../golf-round/services/get-golf-round-by-id.service";
 import { VenueRepository } from "../venue/repositories/venue.repository";
@@ -80,7 +81,11 @@ export function createGolfToursModule({
     updateFourball: new UpdateGolfTourFourball(golfTourRepository),
     startFourball: new StartGolfTourFourball(
       golfTourRepository,
-      new CreateGolfRound(golfRoundRepository, venueRepository),
+      new CreateGolfRound(
+        golfRoundRepository,
+        venueRepository,
+        new PrismaGolfHandicapIndexLookup(prisma),
+      ),
     ),
     getLeaderboard: new GetGolfTourLeaderboard(
       golfTourRepository,

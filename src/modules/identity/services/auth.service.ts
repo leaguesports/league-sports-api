@@ -1,4 +1,6 @@
 import { GoogleOauthService, GoogleUserService } from "../../google-oauth";
+import { parseGolfHandicapIndex } from "../../golf-round/entities/handicap";
+import { decimalToNumber } from "../../golf-round/repositories/golf-handicap-index.lookup";
 import { IdentityConfig } from "../config";
 import { AccountRepository } from "../repositories/account.repository";
 import { PlayerRepository } from "../repositories/player.repository";
@@ -21,6 +23,7 @@ export type AuthMeUser = {
   email: string;
   handle: string;
   avatarUrl: string | null;
+  golfHandicapIndex: number | null;
 };
 
 type GoogleUserInfo = {
@@ -152,6 +155,24 @@ export class AuthService {
       email: profile.email || "",
       handle: profile.handle,
       avatarUrl: profile.avatarUrl ?? null,
+      golfHandicapIndex: decimalToNumber(profile.golfHandicapIndex),
     };
+  }
+
+  async updateMeProfile(
+    userId: string,
+    patch: { golfHandicapIndex: unknown },
+  ): Promise<AuthMeUser | null> {
+    const existing = await this.getMeUser(userId);
+    if (!existing) {
+      return null;
+    }
+
+    const golfHandicapIndex = parseGolfHandicapIndex(patch.golfHandicapIndex);
+    await this.profileRepository.updateGolfHandicapIndex(
+      userId,
+      golfHandicapIndex,
+    );
+    return { ...existing, golfHandicapIndex };
   }
 }

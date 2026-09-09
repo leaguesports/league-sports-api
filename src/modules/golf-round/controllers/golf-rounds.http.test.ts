@@ -12,6 +12,7 @@ import { Venue } from "../../venue/entities/venue";
 import { VenueName } from "../../venue/entities/venue-name";
 import { InMemoryVenueRepository } from "../../venue/repositories/in-memory-venue.repository";
 import { GolfRoundPersistenceError } from "../entities/golf-round-persistence-error";
+import { InMemoryGolfHandicapIndexLookup } from "../repositories/golf-handicap-index.lookup";
 import { InMemoryGolfRoundRepository } from "../repositories/in-memory-golf-round.repository";
 
 function makeConfig(): Config {
@@ -146,14 +147,24 @@ describe("golf rounds HTTP", () => {
       startingHole: 1,
       teeName: "White",
       players: [
-        { slot: 1, displayName: "Alex", isGuest: true, userId: null },
-        { slot: 2, displayName: "Sam", isGuest: true, userId: null },
-        {
+        expect.objectContaining({
+          slot: 1,
+          displayName: "Alex",
+          isGuest: true,
+          userId: null,
+        }),
+        expect.objectContaining({
+          slot: 2,
+          displayName: "Sam",
+          isGuest: true,
+          userId: null,
+        }),
+        expect.objectContaining({
           slot: 3,
           displayName: "Riley",
           isGuest: true,
           userId: null,
-        },
+        }),
       ],
     });
 
@@ -197,6 +208,11 @@ describe("golf rounds HTTP", () => {
       displayName: "Riley",
       isGuest: false,
       userId: "user-riley",
+      handicapIndexUsed: null,
+      courseHandicap: null,
+      playingHandicap: null,
+      grossTotal: null,
+      netTotal: null,
     });
 
     const locked = await fetch(
@@ -642,5 +658,152 @@ describe("golf rounds HTTP", () => {
 
     expect(response.status).toBe(503);
     expect(await response.json()).toEqual({ error: "Unable to save golf round" });
+  });
+
+  test("create + lock snapshots WHS-style CH/PH and net when HI + ratings exist", async () => {
+    await server.close();
+    await app.locals.prisma?.$disconnect();
+    const handicaps = new InMemoryGolfHandicapIndexLookup();
+    handicaps.seed("user-riley", 10.4);
+    app = await createApp(config, {
+      venueRepository: venues,
+      golfRoundRepository: rounds,
+      golfHandicapIndexLookup: handicaps,
+    });
+    server = await listen(app);
+
+    const created = await fetch(`${server.url}/api/golf-rounds`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: sessionCookie("user-riley"),
+      },
+      body: JSON.stringify({
+        ...createBody,
+        courseRating: 71.2,
+        slopeRating: 129,
+        teePar: 72,
+        teeId: "tee-white",
+        players: [
+          { slot: 1, displayName: "Alex", isGuest: true, userId: null },
+          { slot: 3, displayName: "Riley", isGuest: false, userId: null },
+        ],
+      }),
+    });
+    const createdBody = (await created.json()) as {
+      id: string;
+      teeId: string;
+      courseRating: number;
+      players: {
+        userId: string | null;
+        playingHandicap: number | null;
+        courseHandicap: number | null;
+        handicapIndexUsed: number | null;
+      }[];
+    };
+
+    expect(created.status).toBe(201);
+    expect(createdBody.teeId).toBe("tee-white");
+    expect(createdBody.courseRating).toBe(71.2);
+    expect(createdBody.players.find((player) => player.userId === "user-riley")).toEqual(
+      expect.objectContaining({
+        handicapIndexUsed: 10.4,
+        courseHandicap: 11,
+        playingHandicap: 11,
+        grossTotal: null,
+        netTotal: null,
+      }),
+    );
+
+    const locked = await fetch(
+      `${server.url}/api/golf-rounds/${createdBody.id}/lock`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: sessionCookie("user-riley"),
+        },
+        body: JSON.stringify({
+          score: scoreForPlayers(
+            courseHoles9.map((hole) => hole.number),
+            [1, 3],
+            4,
+          ),
+        }),
+      },
+    );
+    const lockedBody = (await locked.json()) as {
+      handicapDisclaimer: string;
+      players: {
+        userId: string | null;
+        playingHandicap: number | null;
+        grossTotal: number | null;
+        netTotal: number | null;
+      }[];
+      score: { holes: { netStrokes?: Record<string, number> }[] };
+    };
+
+    expect(locked.status).toBe(200);
+    expect(lockedBody.handicapDisclaimer).toContain("Not official WHS certified");
+    expect(
+      lockedBody.players.find((player) => player.userId === "user-riley"),
+    ).toEqual(
+      expect.objectContaining({
+        playingHandicap: 11,
+        grossTotal: 36,
+        netTotal: 25,
+      }),
+    );
+    expect(lockedBody.score.holes[0].netStrokes).toEqual({ "3": 2 });
+  });
+
+  test("missing HI or ratings stays gross-only", async () => {
+    const created = await fetch(`${server.url}/api/golf-rounds`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: sessionCookie("user-riley"),
+      },
+      body: JSON.stringify({
+        ...createBody,
+        players: [
+          { slot: 3, displayName: "Riley", isGuest: false, userId: null },
+        ],
+      }),
+    });
+    const createdBody = (await created.json()) as {
+      id: string;
+      players: { playingHandicap: number | null }[];
+    };
+    expect(created.status).toBe(201);
+    expect(createdBody.players[0].playingHandicap).toBeNull();
+
+    const locked = await fetch(
+      `${server.url}/api/golf-rounds/${createdBody.id}/lock`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: sessionCookie("user-riley"),
+        },
+        body: JSON.stringify({
+          score: scoreForPlayers(
+            courseHoles9.map((hole) => hole.number),
+            [3],
+            4,
+          ),
+        }),
+      },
+    );
+    const lockedBody = (await locked.json()) as {
+      players: { grossTotal: number | null; netTotal: number | null }[];
+      score: { holes: { netStrokes?: Record<string, number> }[] };
+    };
+    expect(locked.status).toBe(200);
+    expect(lockedBody.players[0]).toMatchObject({
+      grossTotal: 36,
+      netTotal: null,
+    });
+    expect(lockedBody.score.holes[0].netStrokes).toBeUndefined();
   });
 });

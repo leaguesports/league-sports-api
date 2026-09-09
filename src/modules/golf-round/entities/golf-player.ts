@@ -1,4 +1,8 @@
 import { DomainError, requiredTrimmed } from "../../../lib/domain-error";
+import {
+  EMPTY_PLAYER_HANDICAP,
+  PlayerHandicapSnapshot,
+} from "./handicap";
 
 export type GolfPlayerSlot = 1 | 2 | 3 | 4;
 
@@ -14,6 +18,11 @@ export type GolfPlayerSnapshot = {
   userId: string | null;
   displayName: string;
   isGuest: boolean;
+  handicapIndexUsed: number | null;
+  courseHandicap: number | null;
+  playingHandicap: number | null;
+  grossTotal: number | null;
+  netTotal: number | null;
 };
 
 export class GolfPlayer {
@@ -22,6 +31,7 @@ export class GolfPlayer {
     readonly userId: string | null,
     readonly displayName: string,
     readonly isGuest: boolean,
+    private handicapValue: PlayerHandicapSnapshot,
   ) {}
 
   static from(input: GolfPlayerInput): GolfPlayer {
@@ -40,7 +50,7 @@ export class GolfPlayer {
         );
       }
 
-      return new GolfPlayer(slot, null, displayName, true);
+      return new GolfPlayer(slot, null, displayName, true, EMPTY_PLAYER_HANDICAP);
     }
 
     if (userId === null) {
@@ -49,7 +59,7 @@ export class GolfPlayer {
       );
     }
 
-    return new GolfPlayer(slot, userId, displayName, false);
+    return new GolfPlayer(slot, userId, displayName, false, EMPTY_PLAYER_HANDICAP);
   }
 
   static fromPlayers(inputs: GolfPlayerInput[]): GolfPlayer[] {
@@ -66,8 +76,49 @@ export class GolfPlayer {
     return [...players].sort((a, b) => a.slot - b.slot);
   }
 
+  static rehydrate(snapshot: GolfPlayerSnapshot): GolfPlayer {
+    const player = GolfPlayer.from({
+      slot: snapshot.slot,
+      userId: snapshot.userId,
+      displayName: snapshot.displayName,
+      isGuest: snapshot.isGuest,
+    });
+    player.handicapValue = {
+      handicapIndexUsed: snapshot.handicapIndexUsed,
+      courseHandicap: snapshot.courseHandicap,
+      playingHandicap: snapshot.playingHandicap,
+      grossTotal: snapshot.grossTotal,
+      netTotal: snapshot.netTotal,
+    };
+    return player;
+  }
+
+  get handicap(): PlayerHandicapSnapshot {
+    return { ...this.handicapValue };
+  }
+
   hasUserId(userId: string): boolean {
     return this.userId === userId;
+  }
+
+  applyHandicap(snapshot: Pick<
+    PlayerHandicapSnapshot,
+    "handicapIndexUsed" | "courseHandicap" | "playingHandicap"
+  >): void {
+    this.handicapValue = {
+      ...this.handicapValue,
+      handicapIndexUsed: snapshot.handicapIndexUsed,
+      courseHandicap: snapshot.courseHandicap,
+      playingHandicap: snapshot.playingHandicap,
+    };
+  }
+
+  applyLockTotals(grossTotal: number, netTotal: number | null): void {
+    this.handicapValue = {
+      ...this.handicapValue,
+      grossTotal,
+      netTotal,
+    };
   }
 
   toSnapshot(): GolfPlayerSnapshot {
@@ -76,6 +127,7 @@ export class GolfPlayer {
       userId: this.userId,
       displayName: this.displayName,
       isGuest: this.isGuest,
+      ...this.handicapValue,
     };
   }
 }

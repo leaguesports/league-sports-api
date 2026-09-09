@@ -24,6 +24,15 @@ describe("AuthService.getMeUser", () => {
       })),
       getProfileByUserId: jest.fn(),
       isHandleTaken: jest.fn(),
+      updateGolfHandicapIndex: jest.fn(async (_userId: string, golfHandicapIndex: number | null) => ({
+        userId: "user-1",
+        firstName: "Alex",
+        lastName: "Johnson",
+        email: "alex@example.com",
+        handle: "alexj",
+        avatarUrl: null,
+        golfHandicapIndex,
+      })),
     };
 
     const service = new AuthService({
@@ -47,6 +56,7 @@ describe("AuthService.getMeUser", () => {
         email: "alex@example.com",
         handle: "alexj",
         avatarUrl: "https://example.com/a.png",
+        golfHandicapIndex: 12.4,
       },
     });
 
@@ -57,6 +67,7 @@ describe("AuthService.getMeUser", () => {
       email: "alex@example.com",
       handle: "alexj",
       avatarUrl: "https://example.com/a.png",
+      golfHandicapIndex: 12.4,
     });
   });
 
@@ -72,5 +83,30 @@ describe("AuthService.getMeUser", () => {
     expect(profileRepository.createProfile).toHaveBeenCalled();
     expect(me?.handle).toBe("alexj");
     expect(me?.id).toBe("user-1");
+    expect(me?.golfHandicapIndex).toBeNull();
+  });
+
+  test("updateMeProfile writes golfHandicapIndex", async () => {
+    const { service, profileRepository } = makeService({
+      id: "user-1",
+      profile: {
+        firstName: "Alex",
+        lastName: "Johnson",
+        email: "alex@example.com",
+        handle: "alexj",
+        avatarUrl: null,
+        golfHandicapIndex: null,
+      },
+    });
+
+    const updated = await service.updateMeProfile("user-1", {
+      golfHandicapIndex: 8.2,
+    });
+
+    expect(profileRepository.updateGolfHandicapIndex).toHaveBeenCalledWith(
+      "user-1",
+      8.2,
+    );
+    expect(updated?.golfHandicapIndex).toBe(8.2);
   });
 });

@@ -46,6 +46,7 @@ model Profile {
   activeSportSlug        String?
   onboardingCompletedAt  DateTime?
   onboardingSkippedAt    DateTime?
+  golfHandicapIndex      Decimal?  @db.Decimal(4, 1)
 
   user User @relation(fields: [userId], references: [id])
 }
@@ -610,6 +611,10 @@ model GolfRound {
   holesPlayed  Int
   startingHole Int             @default(1)
   teeName      String?
+  teeId        String?
+  courseRating Decimal?        @db.Decimal(4, 1)
+  slopeRating  Int?
+  teePar       Int?
   course       Json
   score        Json?
   lockedAt     DateTime?
@@ -628,9 +633,14 @@ model GolfRoundPlayer {
   roundId     String
   round       GolfRound @relation(fields: [roundId], references: [id], onDelete: Cascade)
   slot        Int
-  userId      String?
-  displayName String
-  isGuest     Boolean
+  userId            String?
+  displayName       String
+  isGuest           Boolean
+  handicapIndexUsed Decimal? @db.Decimal(4, 1)
+  courseHandicap    Int?
+  playingHandicap   Int?
+  grossTotal        Int?
+  netTotal          Int?
 
   @@unique([roundId, slot])
   @@index([userId])

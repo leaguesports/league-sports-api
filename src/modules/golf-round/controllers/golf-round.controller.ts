@@ -29,6 +29,26 @@ const courseHoleSchema = z.object({
   strokeIndex: z.number(),
 });
 
+const teeObjectSchema = z
+  .object({
+    id: z.string().nullable().optional(),
+    teeId: z.string().nullable().optional(),
+    name: z.string().optional(),
+    courseRating: z.number().nullable().optional(),
+    slopeRating: z.number().nullable().optional(),
+    teePar: z.number().nullable().optional(),
+    par: z.number().nullable().optional(),
+  })
+  .optional();
+
+const teeRatingsSchema = {
+  teeId: z.string().nullable().optional(),
+  courseRating: z.number().nullable().optional(),
+  slopeRating: z.number().nullable().optional(),
+  teePar: z.number().nullable().optional(),
+  tee: teeObjectSchema,
+};
+
 const createGolfRoundBodySchema = z.object({
   venueCmsId: z.string(),
   startsAt: z.string(),
@@ -40,6 +60,7 @@ const createGolfRoundBodySchema = z.object({
     holes: z.array(courseHoleSchema).min(1),
   }),
   players: z.array(playerSchema).min(1).max(4),
+  ...teeRatingsSchema,
 });
 
 const golfRoundIdParamSchema = z.object({
@@ -78,6 +99,7 @@ const captureGolfRoundBodySchema = z.object({
   }),
   players: z.array(playerSchema).min(1).max(4),
   score: lockGolfRoundBodySchema.shape.score,
+  ...teeRatingsSchema,
 });
 
 export function createGolfRoundController(deps: {

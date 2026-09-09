@@ -1,7 +1,7 @@
 import { GolfRoundSnapshot } from "../entities/golf-round";
 import { GolfPlayerSnapshot } from "../entities/golf-player";
 import { CourseSnapshotData } from "../entities/course-snapshot";
-import { GolfScoreSnapshot } from "../entities/golf-score";
+import { ApiGolfScoreSnapshot } from "../entities/golf-round";
 
 export type GolfRoundHistoryItem = {
   id: string;
@@ -12,9 +12,14 @@ export type GolfRoundHistoryItem = {
   holesPlayed: number;
   startingHole: number;
   teeName: string | null;
+  teeId: string | null;
+  courseRating: number | null;
+  slopeRating: number | null;
+  teePar: number | null;
   course: CourseSnapshotData;
   players: GolfPlayerSnapshot[];
-  score: GolfScoreSnapshot | null;
+  score: ApiGolfScoreSnapshot | null;
+  handicapDisclaimer: string;
 };
 
 export function toHistoryItem(
@@ -30,8 +35,13 @@ export function toHistoryItem(
     holesPlayed: snapshot.holesPlayed,
     startingHole: snapshot.startingHole,
     teeName: snapshot.teeName,
+    teeId: snapshot.teeId,
+    courseRating: snapshot.courseRating,
+    slopeRating: snapshot.slopeRating,
+    teePar: snapshot.teePar,
     course: snapshot.course,
     players: snapshot.players,
     score: snapshot.score,
+    handicapDisclaimer: snapshot.handicapDisclaimer,
   };
 }

@@ -11,6 +11,7 @@ import { CreateDartsMatch } from "../darts/services/create-darts-match.service";
 import { GetDartsMatchById } from "../darts/services/get-darts-match-by-id.service";
 import { FriendProfileLookup } from "../friends/repositories/friendship.repository";
 import { GolfRoundRepository } from "../golf-round/repositories/golf-round.repository";
+import { PrismaGolfHandicapIndexLookup } from "../golf-round/repositories/prisma-golf-handicap-index.lookup";
 import { CreateGolfRound } from "../golf-round/services/create-golf-round.service";
 import { GetGolfRoundById } from "../golf-round/services/get-golf-round-by-id.service";
 import { MatchRepository } from "../match/repositories/match.repository";
@@ -120,7 +121,11 @@ export function createTeamMatchesModule({
       friendProfileLookup,
       venueRepository,
       new CreateMatch(matchRepository, venueRepository),
-      new CreateGolfRound(golfRoundRepository, venueRepository),
+      new CreateGolfRound(
+        golfRoundRepository,
+        venueRepository,
+        new PrismaGolfHandicapIndexLookup(prisma),
+      ),
       new CreateDartsMatch(dartsMatchRepository, venueRepository),
     ),
     cancelTeamMatch: new CancelTeamMatch(

@@ -43,6 +43,13 @@ export class ProfileRepository {
     });
   }
 
+  async updateGolfHandicapIndex(userId: string, golfHandicapIndex: number | null) {
+    return this.prisma.profile.update({
+      where: { userId },
+      data: { golfHandicapIndex },
+    });
+  }
+
   async isHandleTaken(handle: string, excludeUserId?: string) {
     const existing = await this.prisma.profile.findUnique({
       where: { handle },

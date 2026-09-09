@@ -36,25 +36,40 @@ model Account {
 }
 
 model Profile {
-  id        String  @id @default(uuid())
-  userId    String  @unique
-  firstName String
-  lastName  String
-  email     String  @unique @default("")
-  handle    String  @unique
-  avatarUrl String?
+  id                     String    @id @default(uuid())
+  userId                 String    @unique
+  firstName              String
+  lastName               String
+  email                  String    @unique @default("")
+  handle                 String    @unique
+  avatarUrl              String?
+  activeSportSlug        String?
+  onboardingCompletedAt  DateTime?
+  onboardingSkippedAt    DateTime?
 
   user User @relation(fields: [userId], references: [id])
 }
 
+model SportFollow {
+  id        String   @id @default(uuid())
+  userId    String
+  sportSlug String
+  createdAt DateTime @default(now())
+
+  @@unique([userId, sportSlug])
+  @@index([userId])
+}
+
 model Venue {
-  id         String        @id @default(uuid())
-  cmsId      String        @unique
-  name       String
-  slug       String
-  matches    Match[]
-  golfRounds GolfRound[]
-  follows    VenueFollow[]
+  id              String           @id @default(uuid())
+  cmsId           String           @unique
+  name            String
+  slug            String
+  matches         Match[]
+  golfRounds      GolfRound[]
+  dartsMatches    DartsMatch[]
+  follows         VenueFollow[]
+  organisedGames  OrganisedGame[]
 }
 
 model VenueFollow {
@@ -99,6 +114,37 @@ model Friendship {
   @@index([addresseeId, status])
 }
 
+enum CommunityMemberRole {
+  owner
+  member
+}
+
+model Community {
+  id        String            @id @default(uuid())
+  name      String
+  city      String
+  sport     String?
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+  members   CommunityMember[]
+
+  @@index([createdAt])
+}
+
+model CommunityMember {
+  id          String              @id @default(uuid())
+  communityId String
+  // No FK to User — same as Friendship/BadgeAward. Harden later if identity requires it.
+  userId      String
+  role        CommunityMemberRole @default(member)
+  createdAt   DateTime            @default(now())
+
+  community Community @relation(fields: [communityId], references: [id], onDelete: Cascade)
+
+  @@unique([communityId, userId])
+  @@index([userId])
+  @@index([communityId])
+}
 
 model BadgeAward {
   id        String   @id @default(uuid())
@@ -109,6 +155,110 @@ model BadgeAward {
 
   @@unique([userId, badgeId])
   @@index([userId])
+}
+
+// Curated training plans live in code (src/modules/training/catalog), not this table.
+// This model is session-owned enrollment + progress only. No User FK — same as
+// Friendship / BadgeAward / CommunityMember.
+// Partial unique (userId, planId) WHERE status = active is in
+// 20260906083000_training_enrollment — keep that SQL as source of truth.
+enum TrainingEnrollmentStatus {
+  active
+  completed
+}
+
+model TrainingEnrollment {
+  id               String                    @id @default(uuid())
+  userId           String
+  planId           String
+  status           TrainingEnrollmentStatus  @default(active)
+  completedStepIds String[]
+  percentComplete  Int                       @default(0)
+  currentStepIndex Int                       @default(0)
+  startedAt        DateTime                  @default(now())
+  updatedAt        DateTime                  @updatedAt
+  completedAt      DateTime?
+
+  @@index([userId])
+  @@index([userId, planId, status])
+}
+
+// Session-owned provider connection + import history. Catalog (Trackman /
+// Autodarts / generic-import) lives in src/modules/integrations/catalog.
+// No User FK — same as Friendship / BadgeAward / TrainingEnrollment.
+enum IntegrationConnectionStatus {
+  connected
+  disconnected
+}
+
+model IntegrationConnection {
+  id                   String                      @id @default(uuid())
+  userId               String
+  providerId           String
+  status               IntegrationConnectionStatus @default(disconnected)
+  lastSyncedAt         DateTime?
+  importedSessionCount Int                         @default(0)
+  importedSessions     Json                        @default("[]")
+  encryptedToken       String?
+  tokenHint            String?
+  connectedAt          DateTime?
+  disconnectedAt       DateTime?
+  createdAt            DateTime                    @default(now())
+  updatedAt            DateTime                    @updatedAt
+
+  @@unique([userId, providerId])
+  @@index([userId])
+}
+
+// Fixture-scoped friends tip pool. No User FK — same as Friendship /
+// CommunityMember. Invite link is the share surface (WhatsApp). No money.
+enum PredictionPoolMemberRole {
+  owner
+  member
+}
+
+enum PredictionWinner {
+  home
+  away
+  draw
+}
+
+model PredictionPool {
+  id              String        @id @default(uuid())
+  fixtureSlug     String        @db.VarChar(80)
+  title           String?
+  inviteCode      String        @unique @db.VarChar(16)
+  createdByUserId String
+  kicksOffAt      DateTime?
+  lockedAt        DateTime?
+  resultHomeScore Int?
+  resultAwayScore Int?
+  resultWinner    PredictionWinner?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  entries         PredictionPoolEntry[]
+
+  @@index([fixtureSlug])
+  @@index([createdByUserId])
+}
+
+model PredictionPoolEntry {
+  id        String                   @id @default(uuid())
+  poolId    String
+  userId    String
+  role      PredictionPoolMemberRole @default(member)
+  tip       String?
+  homeScore Int?
+  awayScore Int?
+  winner    PredictionWinner?
+  createdAt DateTime                 @default(now())
+  updatedAt DateTime                 @updatedAt
+
+  pool PredictionPool @relation(fields: [poolId], references: [id], onDelete: Cascade)
+
+  @@unique([poolId, userId])
+  @@index([userId])
+  @@index([poolId])
 }
 
 
@@ -144,12 +294,14 @@ model Match {
   servingTeam MatchTeam?
   winnerTeam  MatchTeam?
   lockedAt    DateTime?
+  lockedByUserId String?
   score       Json?
   createdAt   DateTime      @default(now())
   players     MatchPlayer[]
 
   @@index([venueCmsId])
   @@index([status, startsAt])
+  @@index([lockedByUserId])
 }
 
 model MatchPlayer {
@@ -170,6 +322,295 @@ enum GolfRoundStatus {
   locked
 }
 
+enum OrganisedGameSport {
+  padel
+  golf
+}
+
+enum OrganisedGameStatus {
+  open
+  started
+  cancelled
+}
+
+enum OrganisedGameRsvp {
+  pending
+  accepted
+  declined
+}
+
+// Host-scheduled padel/golf gathering. No User FK — same as Friendship /
+// CommunityMember. Share token is the unguessable invite surface.
+model OrganisedGame {
+  id              String              @id @default(uuid())
+  hostUserId      String
+  sport           OrganisedGameSport
+  status          OrganisedGameStatus @default(open)
+  venueCmsId      String
+  venue           Venue               @relation(fields: [venueCmsId], references: [cmsId])
+  startsAt        DateTime
+  notes           String?
+  capacity        Int
+  inviteToken     String              @unique @db.VarChar(32)
+  liveScorecardId String?
+  livePath        String?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  invites         OrganisedGameInvite[]
+
+  @@index([hostUserId])
+  @@index([venueCmsId])
+  @@index([status, startsAt])
+  @@index([hostUserId, status])
+}
+
+model OrganisedGameInvite {
+  id          String            @id @default(uuid())
+  gameId      String
+  game        OrganisedGame     @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  userId      String
+  rsvp        OrganisedGameRsvp @default(pending)
+  createdAt   DateTime          @default(now())
+  respondedAt DateTime?
+
+  @@unique([gameId, userId])
+  @@index([userId])
+  @@index([gameId])
+}
+
+enum TeamSport {
+  padel
+  golf
+  darts
+}
+
+enum TeamMemberRole {
+  owner
+  captain
+  member
+}
+
+enum TeamMemberStatus {
+  active
+  invited
+}
+
+// Competitive squad (primary sport + roster). Not a Community.
+// No User FK — same as Friendship / CommunityMember. homeVenueCmsId is
+// optional and unused in UI v1; no Venue FK so teams can exist without
+// a registered venue.
+model Team {
+  id             String           @id @default(uuid())
+  name           String
+  sport          TeamSport
+  homeVenueCmsId String?
+  createdBy      String
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  members        TeamMembership[]
+  inviteLinks    TeamInviteLink[]
+  homeMatches    TeamMatch[]      @relation("TeamMatchHome")
+  awayMatches    TeamMatch[]      @relation("TeamMatchAway")
+  tournamentRegistrations TournamentRegistration[]
+
+  @@index([createdBy])
+  @@index([createdAt])
+}
+
+model TeamMembership {
+  id       String           @id @default(uuid())
+  teamId   String
+  userId   String
+  role     TeamMemberRole   @default(member)
+  status   TeamMemberStatus @default(active)
+  joinedAt DateTime         @default(now())
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, userId])
+  @@index([userId])
+  @@index([teamId])
+}
+
+model TeamInviteLink {
+  id        String    @id @default(uuid())
+  teamId    String
+  token     String    @unique @db.VarChar(32)
+  createdBy String
+  createdAt DateTime  @default(now())
+  revokedAt DateTime?
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@index([teamId])
+}
+
+enum TeamMatchStatus {
+  pending
+  scheduled
+  live
+  completed
+  declined
+  cancelled
+}
+
+// Competitive fixture between two same-sport teams. Not an OrganisedGame.
+// No User FK — same as Team / Friendship. venueCmsId is optional and has
+// no Venue FK so a challenge can exist before a court/course is booked.
+// Lineups are stored as ordered user ids per side.
+model TeamMatch {
+  id             String          @id @default(uuid())
+  homeTeamId     String
+  awayTeamId     String?
+  sport          TeamSport
+  status         TeamMatchStatus @default(pending)
+  venueCmsId     String?
+  startsAt       DateTime?
+  challengeToken String?         @unique @db.VarChar(32)
+  createdBy      String
+  winnerTeamId   String?
+  scorecardSport String?
+  scorecardId    String?
+  scorecardPath  String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  lineups        TeamMatchLineup[]
+
+  homeTeam Team  @relation("TeamMatchHome", fields: [homeTeamId], references: [id])
+  awayTeam Team? @relation("TeamMatchAway", fields: [awayTeamId], references: [id])
+  tournamentSlot TournamentSlot?
+
+  @@index([homeTeamId])
+  @@index([awayTeamId])
+  @@index([status, startsAt])
+  @@index([createdBy])
+  @@index([scorecardId])
+}
+
+model TeamMatchLineup {
+  id          String    @id @default(uuid())
+  teamMatchId String
+  teamId      String
+  userId      String
+  slot        Int
+  createdAt   DateTime  @default(now())
+
+  match TeamMatch @relation(fields: [teamMatchId], references: [id], onDelete: Cascade)
+
+  @@unique([teamMatchId, teamId, userId])
+  @@index([teamMatchId])
+  @@index([teamId])
+}
+
+enum NotificationType {
+  organised_game_invite
+  lobby_open_game_compatible
+  lobby_proposal_ready
+  lobby_open_game_joined
+  lobby_open_game_filled
+}
+
+// In-app inbox. No User FK — same as Friendship / OrganisedGameInvite.
+// Unique (recipientId, type, resourceId) keeps invite notices idempotent.
+enum TournamentStatus {
+  draft
+  registration
+  active
+  completed
+}
+
+enum TournamentRegistrationStatus {
+  pending
+  accepted
+  withdrawn
+}
+
+enum TournamentSlotSide {
+  home
+  away
+}
+
+// One-off single-elim bracket (size 4/8/16, no byes). Organizer need not
+// be on a team. No User FK — same as Team / TeamMatch. winnerTeamId is a
+// plain id like TeamMatch.winnerTeamId. Invite token is the share surface.
+model Tournament {
+  id              String           @id @default(uuid())
+  name            String
+  sport           TeamSport
+  size            Int
+  status          TournamentStatus @default(draft)
+  venueCmsId      String?
+  startsAt        DateTime?
+  organizerUserId String
+  winnerTeamId    String?
+  inviteToken     String           @unique @db.VarChar(32)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  registrations   TournamentRegistration[]
+  slots           TournamentSlot[]
+
+  @@index([organizerUserId])
+  @@index([status, startsAt])
+  @@index([organizerUserId, status])
+}
+
+model TournamentRegistration {
+  id           String                       @id @default(uuid())
+  tournamentId String
+  teamId       String
+  status       TournamentRegistrationStatus @default(pending)
+  seed         Int?
+  registeredBy String
+  createdAt    DateTime                     @default(now())
+  updatedAt    DateTime                     @updatedAt
+
+  tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  team       Team       @relation(fields: [teamId], references: [id])
+
+  @@unique([tournamentId, teamId])
+  @@index([teamId])
+  @@index([tournamentId])
+}
+
+model TournamentSlot {
+  id           String              @id @default(uuid())
+  tournamentId String
+  round        Int
+  position     Int
+  homeTeamId   String?
+  awayTeamId   String?
+  homeSeed     Int?
+  awaySeed     Int?
+  teamMatchId  String?             @unique
+  winnerTeamId String?
+  nextSlotId   String?
+  nextSide     TournamentSlotSide?
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  teamMatch  TeamMatch? @relation(fields: [teamMatchId], references: [id])
+
+  @@unique([tournamentId, round, position])
+  @@index([tournamentId])
+  @@index([teamMatchId])
+}
+
+model Notification {
+  id          String           @id @default(uuid())
+  recipientId String
+  actorId     String
+  type        NotificationType
+  resourceId  String
+  payload     Json
+  readAt      DateTime?
+  createdAt   DateTime         @default(now())
+
+  @@unique([recipientId, type, resourceId])
+  @@index([recipientId, createdAt])
+  @@index([recipientId, readAt])
+}
+
 model GolfRound {
   id           String          @id @default(uuid())
   venueCmsId   String
@@ -182,11 +623,13 @@ model GolfRound {
   course       Json
   score        Json?
   lockedAt     DateTime?
+  lockedByUserId String?
   createdAt    DateTime        @default(now())
   players      GolfRoundPlayer[]
 
   @@index([venueCmsId])
   @@index([status, startsAt])
+  @@index([lockedByUserId])
 }
 
 model GolfRoundPlayer {
@@ -200,4 +643,283 @@ model GolfRoundPlayer {
 
   @@unique([roundId, slot])
   @@index([userId])
+}
+
+enum DartsMatchStatus {
+  live
+  locked
+}
+
+// 501 double-out, single leg. venueCmsId is nullable so pub/home games
+// do not need a registered Venue. startingScore is stored for history
+// even though v1 is always 501.
+model DartsMatch {
+  id             String           @id @default(uuid())
+  venueCmsId     String?
+  venue          Venue?           @relation(fields: [venueCmsId], references: [cmsId])
+  startsAt       DateTime
+  startingScore  Int              @default(501)
+  status         DartsMatchStatus @default(live)
+  winnerSlot     Int?
+  lockedAt       DateTime?
+  lockedByUserId String?
+  createdAt      DateTime         @default(now())
+  players        DartsMatchPlayer[]
+  turns          DartsTurn[]
+
+  @@index([venueCmsId])
+  @@index([status, startsAt])
+  @@index([lockedByUserId])
+}
+
+model DartsMatchPlayer {
+  id          String     @id @default(uuid())
+  matchId     String
+  match       DartsMatch @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  slot        Int
+  userId      String?
+  displayName String
+  isGuest     Boolean
+  remaining   Int
+
+  @@unique([matchId, slot])
+  @@index([userId])
+}
+
+model DartsTurn {
+  id             String     @id @default(uuid())
+  matchId        String
+  match          DartsMatch @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  turnNumber     Int
+  playerSlot     Int
+  score          Int
+  bust           Boolean
+  checkout       Boolean
+  remainingAfter Int
+  createdAt      DateTime   @default(now())
+
+  @@unique([matchId, turnNumber])
+  @@index([matchId])
+}
+
+// Public roadmap / waitlist. githubIssueUrl is DB-only for eng ops —
+// never serialize it on public API responses.
+enum RoadmapFeatureStatus {
+  PLANNED
+  IN_PROGRESS
+  SHIPPED
+}
+
+enum RoadmapRequestType {
+  FEATURE_REQUEST
+  BUG
+}
+
+enum RoadmapRequestStatus {
+  NEW
+  PLANNED
+  DONE
+  ARCHIVED
+}
+
+model RoadmapFeature {
+  id             String               @id @default(uuid())
+  slug           String?              @unique
+  title          String
+  description    String
+  status         RoadmapFeatureStatus @default(PLANNED)
+  shippedAt      DateTime?
+  githubIssueUrl String?
+  voteCount      Int                  @default(0)
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+  archivedAt     DateTime?
+  votes          RoadmapVote[]
+  notifies       RoadmapNotify[]
+
+  @@index([status])
+  @@index([createdAt])
+  @@index([voteCount])
+}
+
+model RoadmapVote {
+  id        String         @id @default(uuid())
+  featureId String
+  voterKey  String
+  createdAt DateTime       @default(now())
+  feature   RoadmapFeature @relation(fields: [featureId], references: [id], onDelete: Cascade)
+
+  @@unique([featureId, voterKey])
+  @@index([featureId])
+  @@index([voterKey])
+}
+
+// (featureId, email) is always unique. Soft-unsubscribe sets unsubscribedAt;
+// a later notify for the same pair reactivates the row (clears unsubscribedAt).
+model RoadmapNotify {
+  id             String         @id @default(uuid())
+  featureId      String
+  email          String
+  unsubscribedAt DateTime?
+  createdAt      DateTime       @default(now())
+  feature        RoadmapFeature @relation(fields: [featureId], references: [id], onDelete: Cascade)
+
+  @@unique([featureId, email])
+  @@index([email])
+  @@index([featureId])
+}
+
+model RoadmapRequest {
+  id        String               @id @default(uuid())
+  type      RoadmapRequestType
+  title     String
+  details   String
+  email     String?
+  status    RoadmapRequestStatus @default(NEW)
+  createdAt DateTime             @default(now())
+
+  @@index([status, createdAt])
+}
+
+// SEO landing “notify me when {sport} in {city} fills in.”
+// Unspecified sport/city are stored as "" so (email, sport, city) is unique
+// even when the API omits them. Empty string is never a valid sport/city.
+// Unique rule is Prisma-native; see 20260908180000_coverage_intent.
+model CoverageIntent {
+  id             String    @id @default(uuid())
+  email          String
+  sport          String    @default("")
+  city           String    @default("")
+  sourcePage     String?
+  createdAt      DateTime  @default(now())
+  unsubscribedAt DateTime?
+
+  @@unique([email, sport, city])
+  @@index([email])
+  @@index([unsubscribedAt])
+}
+
+// Hybrid matchmaking lobby (seeker Looking + host open-game + proposal).
+// Not booking. No User FK — same as Friendship / OrganisedGame.
+// organiseGameId is a plain id (OrganisedGame is padel/golf only; darts
+// conversion is blocked until Organise supports it).
+enum LobbySport {
+  padel
+  darts
+  golf
+}
+
+enum LobbySkill {
+  casual
+  intermediate
+  competitive
+}
+
+enum LobbyOpenGameStatus {
+  open
+  filled
+  cancelled
+  expired
+}
+
+enum LobbyProposalStatus {
+  pending
+  accepted
+  expired
+  cancelled
+}
+
+enum LobbyProposalResponse {
+  pending
+  accept
+  pass
+}
+
+model LobbyLooking {
+  id         String     @id @default(uuid())
+  userId     String     @unique
+  sport      LobbySport
+  windowStart DateTime
+  windowEnd   DateTime
+  city       String
+  area       String?
+  venueCmsId String?
+  partySize  Int
+  skill      LobbySkill?
+  expiresAt  DateTime
+  createdAt  DateTime   @default(now())
+
+  @@index([sport, city, expiresAt])
+  @@index([expiresAt])
+}
+
+model LobbyOpenGame {
+  id              String               @id @default(uuid())
+  hostUserId      String
+  sport           LobbySport
+  windowStart     DateTime
+  windowEnd       DateTime
+  city            String
+  area            String?
+  venueCmsId      String?
+  slotsNeeded     Int
+  slotsFilled     Int
+  skill           LobbySkill?
+  status          LobbyOpenGameStatus  @default(open)
+  organiseGameId  String?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  members         LobbyOpenGameMember[]
+
+  @@index([sport, city, status])
+  @@index([hostUserId])
+  @@index([status, windowEnd])
+}
+
+model LobbyOpenGameMember {
+  id         String        @id @default(uuid())
+  openGameId String
+  userId     String
+  partySize  Int
+  createdAt  DateTime      @default(now())
+  openGame   LobbyOpenGame @relation(fields: [openGameId], references: [id], onDelete: Cascade)
+
+  @@unique([openGameId, userId])
+  @@index([userId])
+  @@index([openGameId])
+}
+
+model LobbyProposal {
+  id             String                @id @default(uuid())
+  sport          LobbySport
+  city           String
+  area           String?
+  windowStart    DateTime
+  windowEnd      DateTime
+  venueCmsId     String?
+  skill          LobbySkill?
+  status         LobbyProposalStatus   @default(pending)
+  organiseGameId String?
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+  members        LobbyProposalMember[]
+
+  @@index([sport, city, status])
+  @@index([status, windowEnd])
+}
+
+model LobbyProposalMember {
+  id         String                 @id @default(uuid())
+  proposalId String
+  userId     String
+  partySize  Int
+  response   LobbyProposalResponse  @default(pending)
+  lookingId  String?
+  createdAt  DateTime               @default(now())
+  respondedAt DateTime?
+  proposal   LobbyProposal          @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+
+  @@unique([proposalId, userId])
+  @@index([userId])
+  @@index([proposalId])
 }

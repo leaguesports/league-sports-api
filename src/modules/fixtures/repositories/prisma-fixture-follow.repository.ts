@@ -1,5 +1,5 @@
 import { PrismaClient } from "../../../generated/prisma/client";
-import { FixtureSlug } from "../entities/fixture-slug";
+import { FixtureSlug } from "../../pools/entities/fixture-slug";
 import { FixtureFollowPersistenceError } from "./fixture-follow-persistence-error";
 import {
   FixtureFollowRecord,

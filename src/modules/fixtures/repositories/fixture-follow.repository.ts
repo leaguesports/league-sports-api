@@ -1,4 +1,4 @@
-import { FixtureSlug } from "../entities/fixture-slug";
+import { FixtureSlug } from "../../pools/entities/fixture-slug";
 
 export type FixtureFollowRecord = {
   userId: string;

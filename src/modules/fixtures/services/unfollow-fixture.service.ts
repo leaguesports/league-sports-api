@@ -1,5 +1,5 @@
 import { DomainError } from "../../../lib/domain-error";
-import { FixtureSlug } from "../entities/fixture-slug";
+import { FixtureSlug } from "../../pools/entities/fixture-slug";
 import { FixtureFollowRepository } from "../repositories/fixture-follow.repository";
 
 export class UnfollowFixture {

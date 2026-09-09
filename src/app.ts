@@ -90,6 +90,12 @@ import {
   createLobbyModule,
   LobbyRepository,
 } from "./modules/lobby";
+import {
+  createGolfToursModule,
+  GolfTourRepository,
+} from "./modules/golf-tours";
+import { PrismaGolfTourRepository } from "./modules/golf-tours/repositories/prisma-golf-tour.repository";
+import { LockGolfTourFourballOnScorecardLock } from "./modules/golf-tours/services/lock-fourball-on-scorecard-lock";
 
 export type CreateAppDependencies = {
   venueRepository?: VenueRepository;
@@ -116,6 +122,7 @@ export type CreateAppDependencies = {
   coverageIntentRepository?: CoverageIntentRepository;
   coverageRateLimiter?: CoverageRateLimiter;
   lobbyRepository?: LobbyRepository;
+  golfTourRepository?: GolfTourRepository;
 };
 
 export async function createApp(
@@ -165,8 +172,16 @@ export async function createApp(
     teamMatchRepository,
     onTeamMatchCompleted,
   );
-  const onScorecardLocked = (event: ScorecardLockedEvent) =>
-    completeOnLock.execute(event);
+  const golfTourRepository =
+    dependencies.golfTourRepository ??
+    new PrismaGolfTourRepository(prisma);
+  const lockFourballOnScorecardLock = new LockGolfTourFourballOnScorecardLock(
+    golfTourRepository,
+  );
+  const onScorecardLocked = async (event: ScorecardLockedEvent) => {
+    await completeOnLock.execute(event);
+    await lockFourballOnScorecardLock.execute(event);
+  };
 
   const match = createMatchModule({
     prisma,
@@ -313,6 +328,14 @@ export async function createApp(
     tryGetSessionUserId: identity.tryGetSessionUserId,
     requireAuth: identity.authorizationMiddleware,
   });
+  const golfTours = createGolfToursModule({
+    prisma,
+    venueRepository: venue.venueRepository,
+    golfRoundRepository: golfRound.golfRoundRepository,
+    golfTourRepository,
+    tryGetSessionUserId: identity.tryGetSessionUserId,
+    requireAuth: identity.authorizationMiddleware,
+  });
 
   app.use(identity.router);
   app.use(venue.router);
@@ -334,6 +357,7 @@ export async function createApp(
   app.use(roadmap.router);
   app.use(intents.router);
   app.use(lobby.router);
+  app.use(golfTours.router);
 
   app.use(
     (

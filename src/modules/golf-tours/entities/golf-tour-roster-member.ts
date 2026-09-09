@@ -10,8 +10,8 @@ export type GolfTourRosterMemberSnapshot = {
 
 export type GolfTourRosterMemberInput = {
   userId?: string | null;
-  displayName: unknown;
-  isGuest: unknown;
+  displayName?: unknown;
+  isGuest?: unknown;
 };
 
 export class GolfTourRosterMember {

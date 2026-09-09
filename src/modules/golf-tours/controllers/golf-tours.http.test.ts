@@ -619,8 +619,8 @@ describe("golf tours HTTP", () => {
     const startedBody = (await started.json()) as { golfRoundId: string };
     const lock = await json(`/api/golf-rounds/${startedBody.golfRoundId}/lock`, {
       method: "POST",
-      userId: "user-host",
-      body: JSON.stringify({ score: scoreForSlots([1, 2], 4) }),
+      userId: "user-sam",
+      body: JSON.stringify({ score: scoreForSlots([1], 4) }),
     });
     expect(lock.status).toBe(200);
 

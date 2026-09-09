@@ -399,7 +399,7 @@ describe("golf tours application", () => {
     await ctx.lockGolf.execute({
       roundId: started.golfRoundId,
       lockedByUserId: "user-host",
-      score: scoreForSlots([1, 2], 4),
+      score: scoreForSlots([1], 4),
     });
 
     const { leaderboard } = await ctx.leaderboard.execute({

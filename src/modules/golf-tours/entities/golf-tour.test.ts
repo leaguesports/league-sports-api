@@ -179,4 +179,94 @@ describe(GolfTour, () => {
     expect(tour.canRead("user-alex")).toBe(true);
     expect(tour.canRead("user-stranger")).toBe(false);
   });
+
+  test("roster members can read; host-only roster and template writes", () => {
+    const tour = draft();
+    const campId = tour.camps[0]!.id;
+    expect(() =>
+      tour.addRosterMember("user-z", campId, {
+        displayName: "Alex",
+        isGuest: false,
+        userId: "user-alex",
+      }),
+    ).toThrow(GolfTourForbiddenError);
+
+    tour.addRosterMember("user-host", campId, {
+      displayName: "Alex",
+      isGuest: false,
+      userId: "user-alex",
+    });
+    expect(tour.canRead("user-alex")).toBe(true);
+
+    expect(() =>
+      tour.addStandingFourball("user-z", { campId }),
+    ).toThrow(GolfTourForbiddenError);
+  });
+
+  test("prepare is idempotent and custom players do not mutate the template", () => {
+    const tour = draft();
+    const campId = tour.camps[0]!.id;
+    const template = tour.addStandingFourball("user-host", {
+      campId,
+      name: "Group 1",
+      players: parseFourballPlayers([
+        { slot: 1, displayName: "Alex", isGuest: false, userId: "user-alex" },
+      ]),
+    });
+    const round = tour.addRound("user-host", {
+      date: TourDate.from("2026-09-12", "date"),
+      venueCmsId: CmsId.from("course-1"),
+    });
+    expect(tour.fourballs).toHaveLength(1);
+    expect(tour.fourballs[0]!.standingFourballId).toBe(template.id);
+
+    const again = tour.prepareRound("user-host", round.id);
+    expect(again).toHaveLength(0);
+    expect(tour.fourballs).toHaveLength(1);
+
+    tour.assignFourballPlayers("user-host", tour.fourballs[0]!.id, [
+      GolfPlayer.from({
+        slot: 1,
+        displayName: "Pat",
+        isGuest: true,
+        userId: null,
+      }),
+    ]);
+    expect(tour.standingFourballById(template.id)?.players[0]?.displayName).toBe(
+      "Alex",
+    );
+    expect(tour.fourballs[0]!.players[0]?.displayName).toBe("Pat");
+  });
+
+  test("copy from previous round clones groups without sit-out", () => {
+    const tour = draft();
+    const campId = tour.camps[0]!.id;
+    const first = tour.addRound("user-host", {
+      date: TourDate.from("2026-09-12", "date"),
+      venueCmsId: CmsId.from("course-1"),
+    });
+    const source = tour.addFourball("user-host", {
+      roundId: first.id,
+      campId,
+      players: parseFourballPlayers([
+        { slot: 1, displayName: "Alex", isGuest: false, userId: "user-alex" },
+      ]),
+    });
+    tour.setFourballSitOut("user-host", source.id, true);
+
+    const second = tour.addRound("user-host", {
+      date: TourDate.from("2026-09-13", "date"),
+      venueCmsId: CmsId.from("course-1"),
+    });
+    tour.copyRoundInstances("user-host", second.id, first.id);
+    const copied = tour.fourballs.filter((fourball) => fourball.roundId === second.id);
+    expect(copied).toHaveLength(1);
+    expect(copied[0]!.players[0]?.displayName).toBe("Alex");
+    expect(copied[0]!.sitOut).toBe(false);
+
+    tour.copyRoundInstances("user-host", second.id, first.id);
+    expect(
+      tour.fourballs.filter((fourball) => fourball.roundId === second.id),
+    ).toHaveLength(1);
+  });
 });

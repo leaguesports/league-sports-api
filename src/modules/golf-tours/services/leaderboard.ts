@@ -70,7 +70,9 @@ export function buildLeaderboard(
     const byKey = new Map<string, Accumulator>();
     const fourballs = tour.fourballs.filter(
       (fourball) =>
-        fourball.campId === camp.id && fourball.status.isLocked,
+        fourball.campId === camp.id &&
+        fourball.status.isLocked &&
+        !fourball.sitOut,
     );
 
     for (const fourball of fourballs) {
@@ -115,6 +117,7 @@ function addLockedFourball(
 
   const gross = grossStrokesBySlot(round.score);
   for (const player of fourball.players) {
+    if (fourball.playerSitsOut(player.slot)) continue;
     const strokes = gross.get(player.slot);
     if (strokes == null) continue;
     const playerKey = playerIdentityKey(player);

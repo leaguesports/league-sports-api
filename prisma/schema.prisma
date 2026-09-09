@@ -936,17 +936,18 @@ enum GolfTourFourballStatus {
 // No User FK — same as Team / OrganisedGame. Fourballs link to GolfRound
 // (existing scorecard). format is pluggable; v1 is stroke only.
 model GolfTour {
-  id         String         @id @default(uuid())
-  name       String
-  startDate  DateTime       @db.Date
-  endDate    DateTime       @db.Date
-  status     GolfTourStatus @default(draft)
-  hostUserId String
-  createdAt  DateTime       @default(now())
-  updatedAt  DateTime       @updatedAt
-  camps      GolfTourCamp[]
-  rounds     GolfTourRound[]
-  fourballs  GolfTourFourball[]
+  id                String                     @id @default(uuid())
+  name              String
+  startDate         DateTime                   @db.Date
+  endDate           DateTime                   @db.Date
+  status            GolfTourStatus             @default(draft)
+  hostUserId        String
+  createdAt         DateTime                   @default(now())
+  updatedAt         DateTime                   @updatedAt
+  camps             GolfTourCamp[]
+  rounds            GolfTourRound[]
+  fourballs         GolfTourFourball[]
+  standingFourballs GolfTourStandingFourball[]
 
   @@index([hostUserId])
   @@index([status, startDate])
@@ -954,17 +955,69 @@ model GolfTour {
 }
 
 model GolfTourCamp {
-  id        String   @id @default(uuid())
-  tourId    String
-  name      String
-  color     String?
-  sortOrder Int
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  tour      GolfTour @relation(fields: [tourId], references: [id], onDelete: Cascade)
-  fourballs GolfTourFourball[]
+  id                String                     @id @default(uuid())
+  tourId            String
+  name              String
+  color             String?
+  sortOrder         Int
+  createdAt         DateTime                   @default(now())
+  updatedAt         DateTime                   @updatedAt
+  tour              GolfTour                   @relation(fields: [tourId], references: [id], onDelete: Cascade)
+  fourballs         GolfTourFourball[]
+  roster            GolfTourCampMember[]
+  standingFourballs GolfTourStandingFourball[]
 
   @@index([tourId])
+}
+
+// Camp roster (registered user and/or guest display name). No User FK —
+// same as GolfTourFourballPlayer. Unique registered user per camp is a
+// partial index in 20260909180000_golf_tour_setup_v2.
+model GolfTourCampMember {
+  id          String       @id @default(uuid())
+  campId      String
+  userId      String?
+  displayName String
+  isGuest     Boolean
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  camp        GolfTourCamp @relation(fields: [campId], references: [id], onDelete: Cascade)
+
+  @@index([campId])
+  @@index([userId])
+}
+
+// Tour-scoped standing fourball template. Instances are GolfTourFourball
+// rows with standingFourballId. Deleting a template nulls that link.
+model GolfTourStandingFourball {
+  id        String                           @id @default(uuid())
+  tourId    String
+  campId    String
+  name      String?
+  sortOrder Int
+  createdAt DateTime                         @default(now())
+  updatedAt DateTime                         @updatedAt
+  tour      GolfTour                         @relation(fields: [tourId], references: [id], onDelete: Cascade)
+  camp      GolfTourCamp                     @relation(fields: [campId], references: [id], onDelete: Cascade)
+  players   GolfTourStandingFourballPlayer[]
+  instances GolfTourFourball[]
+
+  @@index([tourId])
+  @@index([campId])
+}
+
+model GolfTourStandingFourballPlayer {
+  id          String                   @id @default(uuid())
+  templateId  String
+  slot        Int
+  userId      String?
+  displayName String
+  isGuest     Boolean
+  template    GolfTourStandingFourball @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@unique([templateId, slot])
+  @@index([templateId])
+  @@index([userId])
 }
 
 model GolfTourRound {
@@ -985,24 +1038,28 @@ model GolfTourRound {
 }
 
 model GolfTourFourball {
-  id          String                 @id @default(uuid())
-  tourId      String
-  roundId     String
-  campId      String
-  golfRoundId String?                @unique
-  status      GolfTourFourballStatus @default(pending)
-  createdAt   DateTime               @default(now())
-  updatedAt   DateTime               @updatedAt
-  tour        GolfTour               @relation(fields: [tourId], references: [id], onDelete: Cascade)
-  round       GolfTourRound          @relation(fields: [roundId], references: [id], onDelete: Cascade)
-  camp        GolfTourCamp           @relation(fields: [campId], references: [id], onDelete: Cascade)
-  golfRound   GolfRound?             @relation(fields: [golfRoundId], references: [id])
-  players     GolfTourFourballPlayer[]
+  id                 String                   @id @default(uuid())
+  tourId             String
+  roundId            String
+  campId             String
+  golfRoundId        String?                  @unique
+  standingFourballId String?
+  sitOut             Boolean                  @default(false)
+  status             GolfTourFourballStatus   @default(pending)
+  createdAt          DateTime                 @default(now())
+  updatedAt          DateTime                 @updatedAt
+  tour               GolfTour                 @relation(fields: [tourId], references: [id], onDelete: Cascade)
+  round              GolfTourRound            @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  camp               GolfTourCamp             @relation(fields: [campId], references: [id], onDelete: Cascade)
+  golfRound          GolfRound?               @relation(fields: [golfRoundId], references: [id])
+  standingFourball   GolfTourStandingFourball? @relation(fields: [standingFourballId], references: [id], onDelete: SetNull)
+  players            GolfTourFourballPlayer[]
 
   @@index([tourId])
   @@index([roundId])
   @@index([campId])
   @@index([golfRoundId])
+  @@index([standingFourballId])
 }
 
 model GolfTourFourballPlayer {
@@ -1012,6 +1069,7 @@ model GolfTourFourballPlayer {
   userId      String?
   displayName String
   isGuest     Boolean
+  sitOut      Boolean          @default(false)
   fourball    GolfTourFourball @relation(fields: [fourballId], references: [id], onDelete: Cascade)
 
   @@unique([fourballId, slot])

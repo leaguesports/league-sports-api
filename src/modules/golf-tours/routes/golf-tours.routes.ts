@@ -90,5 +90,77 @@ export function createGolfToursRoutes(
     },
   );
 
+  router.get(
+    "/api/golf-tours/:id/camps/:campId/roster",
+    options.requireAuth,
+    (req, res) => {
+      void controller.listRoster(req, res);
+    },
+  );
+
+  router.post(
+    "/api/golf-tours/:id/camps/:campId/roster",
+    options.requireAuth,
+    (req, res) => {
+      void controller.addRosterMember(req, res);
+    },
+  );
+
+  router.patch(
+    "/api/golf-tours/:id/camps/:campId/roster/:memberId",
+    options.requireAuth,
+    (req, res) => {
+      void controller.updateRosterMember(req, res);
+    },
+  );
+
+  router.delete(
+    "/api/golf-tours/:id/camps/:campId/roster/:memberId",
+    options.requireAuth,
+    (req, res) => {
+      void controller.removeRosterMember(req, res);
+    },
+  );
+
+  router.post(
+    "/api/golf-tours/:id/standing-fourballs",
+    options.requireAuth,
+    (req, res) => {
+      void controller.addStandingFourball(req, res);
+    },
+  );
+
+  router.patch(
+    "/api/golf-tours/:id/standing-fourballs/:templateId",
+    options.requireAuth,
+    (req, res) => {
+      void controller.updateStandingFourball(req, res);
+    },
+  );
+
+  router.delete(
+    "/api/golf-tours/:id/standing-fourballs/:templateId",
+    options.requireAuth,
+    (req, res) => {
+      void controller.removeStandingFourball(req, res);
+    },
+  );
+
+  router.post(
+    "/api/golf-tours/:id/rounds/:roundId/prepare",
+    options.requireAuth,
+    (req, res) => {
+      void controller.prepareRound(req, res);
+    },
+  );
+
+  router.post(
+    "/api/golf-tours/:id/rounds/:roundId/copy-from/:sourceRoundId",
+    options.requireAuth,
+    (req, res) => {
+      void controller.copyFromRound(req, res);
+    },
+  );
+
   return router;
 }

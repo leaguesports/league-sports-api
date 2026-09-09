@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import { DomainError, requiredTrimmed } from "../../../lib/domain-error";
-import type { GolfPlayer } from "../../golf-round/entities/golf-player";
+import { GolfPlayer } from "../../golf-round/entities/golf-player";
 import { CmsId } from "../../venue/entities/cms-id";
 import { GolfTourCamp } from "./golf-tour-camp";
 import { GolfTourCampName } from "./golf-tour-camp-name";
@@ -11,8 +11,11 @@ import { GolfTourFormat } from "./golf-tour-format";
 import { GolfTourFourball } from "./golf-tour-fourball";
 import { GolfTourFourballNotFoundError } from "./golf-tour-fourball-not-found-error";
 import { GolfTourName } from "./golf-tour-name";
+import { GolfTourRosterMember } from "./golf-tour-roster-member";
 import { GolfTourRound } from "./golf-tour-round";
 import { GolfTourRoundNotFoundError } from "./golf-tour-round-not-found-error";
+import { GolfTourStandingFourball } from "./golf-tour-standing-fourball";
+import { GolfTourStandingFourballNotFoundError } from "./golf-tour-standing-fourball-not-found-error";
 import { GolfTourStatus } from "./golf-tour-status";
 import { TourDate } from "./tour-date";
 
@@ -30,6 +33,7 @@ export type GolfTourSnapshot = {
   camps: ReturnType<GolfTourCamp["toSnapshot"]>[];
   rounds: ReturnType<GolfTourRound["toSnapshot"]>[];
   fourballs: ReturnType<GolfTourFourball["toSnapshot"]>[];
+  standingFourballs: ReturnType<GolfTourStandingFourball["toSnapshot"]>[];
 };
 
 export type CreateGolfTourProps = {
@@ -59,6 +63,7 @@ export class GolfTour {
     private campsValue: GolfTourCamp[],
     private roundsValue: GolfTourRound[],
     private fourballsValue: GolfTourFourball[],
+    private standingFourballsValue: GolfTourStandingFourball[],
   ) {}
 
   static create(props: CreateGolfTourProps): GolfTour {
@@ -91,6 +96,7 @@ export class GolfTour {
       camps,
       [],
       [],
+      [],
     );
   }
 
@@ -106,6 +112,7 @@ export class GolfTour {
     camps: GolfTourCamp[];
     rounds: GolfTourRound[];
     fourballs: GolfTourFourball[];
+    standingFourballs?: GolfTourStandingFourball[];
   }): GolfTour {
     return new GolfTour(
       props.id,
@@ -119,6 +126,9 @@ export class GolfTour {
       [...props.camps].sort((a, b) => a.sortOrder - b.sortOrder),
       [...props.rounds],
       [...props.fourballs],
+      [...(props.standingFourballs ?? [])].sort(
+        (a, b) => a.sortOrder - b.sortOrder,
+      ),
     );
   }
 
@@ -136,6 +146,9 @@ export class GolfTour {
       rounds: snapshot.rounds.map((round) => GolfTourRound.fromSnapshot(round)),
       fourballs: snapshot.fourballs.map((fourball) =>
         GolfTourFourball.fromSnapshot(fourball),
+      ),
+      standingFourballs: (snapshot.standingFourballs ?? []).map((template) =>
+        GolfTourStandingFourball.fromSnapshot(template),
       ),
     });
   }
@@ -172,13 +185,25 @@ export class GolfTour {
     return this.fourballsValue;
   }
 
+  get standingFourballs(): readonly GolfTourStandingFourball[] {
+    return this.standingFourballsValue;
+  }
+
   isHost(userId: string): boolean {
     return this.hostUserId === userId.trim();
   }
 
   isPlayer(userId: string): boolean {
     const id = userId.trim();
-    return this.fourballsValue.some((fourball) => fourball.hasPlayerUserId(id));
+    if (this.fourballsValue.some((fourball) => fourball.hasPlayerUserId(id))) {
+      return true;
+    }
+    if (this.campsValue.some((camp) => camp.hasPlayerUserId(id))) {
+      return true;
+    }
+    return this.standingFourballsValue.some((template) =>
+      template.hasPlayerUserId(id),
+    );
   }
 
   canRead(userId: string): boolean {
@@ -204,6 +229,14 @@ export class GolfTour {
     return (
       this.fourballsValue.find((fourball) => fourball.golfRoundId === id) ??
       null
+    );
+  }
+
+  standingFourballById(templateId: string): GolfTourStandingFourball | null {
+    return (
+      this.standingFourballsValue.find(
+        (template) => template.id === templateId,
+      ) ?? null
     );
   }
 
@@ -298,6 +331,7 @@ export class GolfTour {
       format: props.format,
     });
     this.roundsValue = [...this.roundsValue, round];
+    this.spawnInstancesFromTemplates(round.id);
     this.touch();
     return round;
   }
@@ -353,13 +387,227 @@ export class GolfTour {
     actorId: string,
     fourballId: string,
     players: GolfPlayer[],
+    sitOutBySlot?: Map<number, boolean>,
   ): GolfTourFourball {
     this.assertHost(actorId);
     this.assertMutable();
     const fourball = this.requireFourball(fourballId);
-    fourball.assignPlayers(players);
+    fourball.assignPlayers(players, sitOutBySlot);
     this.touch();
     return fourball;
+  }
+
+  setFourballSitOut(
+    actorId: string,
+    fourballId: string,
+    sitOut: boolean,
+  ): GolfTourFourball {
+    this.assertHost(actorId);
+    this.assertMutable();
+    const fourball = this.requireFourball(fourballId);
+    fourball.setSitOut(sitOut);
+    this.touch();
+    return fourball;
+  }
+
+  setFourballPlayerSitOuts(
+    actorId: string,
+    fourballId: string,
+    updates: Map<number, boolean>,
+  ): GolfTourFourball {
+    this.assertHost(actorId);
+    this.assertMutable();
+    const fourball = this.requireFourball(fourballId);
+    fourball.setPlayerSitOuts(updates);
+    this.touch();
+    return fourball;
+  }
+
+  addRosterMember(
+    actorId: string,
+    campId: string,
+    props: { userId?: string | null; displayName: unknown; isGuest: unknown },
+  ): GolfTourRosterMember {
+    this.assertHost(actorId);
+    this.assertMutable();
+    const camp = this.requireCamp(campId);
+    const member = GolfTourRosterMember.create({
+      id: randomUUID(),
+      campId: camp.id,
+      userId: props.userId,
+      displayName: props.displayName,
+      isGuest: props.isGuest,
+    });
+    camp.addMember(member);
+    this.touch();
+    return member;
+  }
+
+  updateRosterMember(
+    actorId: string,
+    campId: string,
+    memberId: string,
+    details: {
+      userId?: string | null;
+      displayName?: unknown;
+      isGuest?: unknown;
+    },
+  ): GolfTourRosterMember {
+    this.assertHost(actorId);
+    this.assertMutable();
+    const camp = this.requireCamp(campId);
+    if (
+      details.displayName === undefined &&
+      !("userId" in details) &&
+      details.isGuest === undefined
+    ) {
+      throw new DomainError("At least one field is required");
+    }
+    const member = camp.updateMember(memberId, details);
+    this.touch();
+    return member;
+  }
+
+  removeRosterMember(
+    actorId: string,
+    campId: string,
+    memberId: string,
+  ): GolfTourRosterMember {
+    this.assertHost(actorId);
+    this.assertMutable();
+    const camp = this.requireCamp(campId);
+    const member = camp.removeMember(memberId);
+    this.touch();
+    return member;
+  }
+
+  addStandingFourball(
+    actorId: string,
+    props: {
+      campId: string;
+      name?: string | null;
+      players?: GolfPlayer[];
+      sortOrder?: number;
+    },
+  ): GolfTourStandingFourball {
+    this.assertHost(actorId);
+    this.assertMutable();
+    this.requireCamp(props.campId);
+    const sortOrder =
+      props.sortOrder ??
+      this.standingFourballsValue.reduce(
+        (max, template) => Math.max(max, template.sortOrder),
+        -1,
+      ) + 1;
+    const template = GolfTourStandingFourball.create({
+      id: randomUUID(),
+      campId: props.campId,
+      name: props.name,
+      sortOrder,
+      players: props.players,
+    });
+    this.standingFourballsValue = [...this.standingFourballsValue, template];
+    this.touch();
+    return template;
+  }
+
+  updateStandingFourball(
+    actorId: string,
+    templateId: string,
+    details: {
+      campId?: string;
+      name?: string | null;
+      players?: GolfPlayer[];
+    },
+  ): GolfTourStandingFourball {
+    this.assertHost(actorId);
+    this.assertMutable();
+    const template = this.requireStandingFourball(templateId);
+    if (
+      !details.campId &&
+      !("name" in details) &&
+      details.players === undefined
+    ) {
+      throw new DomainError("At least one field is required");
+    }
+    if (details.campId) this.requireCamp(details.campId);
+    template.update(details);
+    this.touch();
+    return template;
+  }
+
+  removeStandingFourball(
+    actorId: string,
+    templateId: string,
+  ): GolfTourStandingFourball {
+    this.assertHost(actorId);
+    this.assertMutable();
+    const template = this.requireStandingFourball(templateId);
+    for (const fourball of this.fourballsValue) {
+      if (fourball.standingFourballId === template.id) {
+        fourball.detachStandingTemplate();
+      }
+    }
+    this.standingFourballsValue = this.standingFourballsValue.filter(
+      (row) => row.id !== template.id,
+    );
+    this.touch();
+    return template;
+  }
+
+  prepareRound(actorId: string, roundId: string): GolfTourFourball[] {
+    this.assertHost(actorId);
+    this.assertMutable();
+    const created = this.spawnInstancesFromTemplates(roundId);
+    this.touch();
+    return created;
+  }
+
+  copyRoundInstances(
+    actorId: string,
+    targetRoundId: string,
+    sourceRoundId: string,
+  ): GolfTourFourball[] {
+    this.assertHost(actorId);
+    this.assertMutable();
+    const target = this.requireRound(targetRoundId);
+    const source = this.requireRound(sourceRoundId);
+    if (target.id === source.id) {
+      throw new DomainError("Cannot copy a round onto itself");
+    }
+
+    const createdOrUpdated: GolfTourFourball[] = [];
+    const sources = this.fourballsValue.filter(
+      (fourball) =>
+        fourball.roundId === source.id && !fourball.status.isCancelled,
+    );
+
+    for (const sourceFourball of sources) {
+      const clonedPlayers = sourceFourball.players.map((player) =>
+        GolfPlayer.from(player.toSnapshot()),
+      );
+      const existing = this.findCopyTarget(target.id, sourceFourball);
+      if (existing) {
+        if (existing.status.isPending) {
+          existing.assignPlayers(clonedPlayers);
+        }
+        createdOrUpdated.push(existing);
+        continue;
+      }
+
+      const copy = GolfTourFourball.create({
+        id: randomUUID(),
+        roundId: target.id,
+        campId: sourceFourball.campId,
+        players: clonedPlayers,
+        standingFourballId: sourceFourball.standingFourballId,
+      });
+      this.fourballsValue = [...this.fourballsValue, copy];
+      createdOrUpdated.push(copy);
+    }
+
+    this.touch();
+    return createdOrUpdated;
   }
 
   moveFourballCamp(
@@ -416,7 +664,7 @@ export class GolfTour {
 
   shouldAutoComplete(): boolean {
     const playable = this.fourballsValue.filter(
-      (fourball) => !fourball.status.isCancelled,
+      (fourball) => !fourball.status.isCancelled && !fourball.sitOut,
     );
     if (playable.length === 0) return false;
     return playable.every((fourball) => fourball.status.isLocked);
@@ -435,6 +683,9 @@ export class GolfTour {
       camps: this.campsValue.map((camp) => camp.toSnapshot()),
       rounds: this.roundsValue.map((round) => round.toSnapshot()),
       fourballs: this.fourballsValue.map((fourball) => fourball.toSnapshot()),
+      standingFourballs: this.standingFourballsValue.map((template) =>
+        template.toSnapshot(),
+      ),
     };
   }
 
@@ -454,6 +705,57 @@ export class GolfTour {
     const fourball = this.fourballById(fourballId.trim());
     if (!fourball) throw new GolfTourFourballNotFoundError();
     return fourball;
+  }
+
+  private requireStandingFourball(
+    templateId: string,
+  ): GolfTourStandingFourball {
+    const template = this.standingFourballById(templateId.trim());
+    if (!template) throw new GolfTourStandingFourballNotFoundError();
+    return template;
+  }
+
+  private spawnInstancesFromTemplates(roundId: string): GolfTourFourball[] {
+    this.requireRound(roundId);
+    const created: GolfTourFourball[] = [];
+    for (const template of this.standingFourballsValue) {
+      const existing = this.fourballsValue.find(
+        (fourball) =>
+          fourball.roundId === roundId &&
+          fourball.standingFourballId === template.id,
+      );
+      if (existing) continue;
+      const fourball = GolfTourFourball.create({
+        id: randomUUID(),
+        roundId,
+        campId: template.campId,
+        players: template.clonedPlayers(),
+        standingFourballId: template.id,
+      });
+      this.fourballsValue = [...this.fourballsValue, fourball];
+      created.push(fourball);
+    }
+    return created;
+  }
+
+  private findCopyTarget(
+    targetRoundId: string,
+    sourceFourball: GolfTourFourball,
+  ): GolfTourFourball | undefined {
+    if (sourceFourball.standingFourballId) {
+      return this.fourballsValue.find(
+        (fourball) =>
+          fourball.roundId === targetRoundId &&
+          fourball.standingFourballId === sourceFourball.standingFourballId,
+      );
+    }
+    const sourceKeys = playerKeys(sourceFourball);
+    return this.fourballsValue.find((fourball) => {
+      if (fourball.roundId !== targetRoundId) return false;
+      if (fourball.standingFourballId) return false;
+      if (fourball.campId !== sourceFourball.campId) return false;
+      return playerKeys(fourball) === sourceKeys;
+    });
   }
 
   private assertMutable(): void {
@@ -477,4 +779,17 @@ function assertDateRange(start: TourDate, end: TourDate): void {
   if (end.isBefore(start)) {
     throw new DomainError("endDate must be on or after startDate");
   }
+}
+
+function playerKeys(fourball: GolfTourFourball): string {
+  return fourball.players
+    .map((player) => {
+      const snapshot = player.toSnapshot();
+      const key =
+        !snapshot.isGuest && snapshot.userId
+          ? `user:${snapshot.userId}`
+          : `guest:${snapshot.displayName.trim().toLowerCase()}`;
+      return `${snapshot.slot}:${key}`;
+    })
+    .join("|");
 }

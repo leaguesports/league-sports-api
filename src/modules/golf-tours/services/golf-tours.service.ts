@@ -7,10 +7,15 @@ import { CmsId } from "../../venue/entities/cms-id";
 import { VenueRepository } from "../../venue/repositories/venue.repository";
 import { GolfTour } from "../entities/golf-tour";
 import { GolfTourCampName } from "../entities/golf-tour-camp-name";
+import { GolfTourCampNotFoundError } from "../entities/golf-tour-camp-not-found-error";
 import { GolfTourFormat } from "../entities/golf-tour-format";
+import { GolfTourRosterMemberNotFoundError } from "../entities/golf-tour-roster-member-not-found-error";
+import { GolfTourStandingFourballNotFoundError } from "../entities/golf-tour-standing-fourball-not-found-error";
 import {
   golfRoundPath,
   parseFourballPlayers,
+  parseFourballSeats,
+  parsePlayerSitOuts,
 } from "../entities/golf-tour-fourball";
 import { GolfTourName } from "../entities/golf-tour-name";
 import { GolfTourNotFoundError } from "../entities/golf-tour-not-found-error";
@@ -28,6 +33,28 @@ export type PublicGolfTourPlayer = {
   userId: string | null;
   displayName: string;
   isGuest: boolean;
+  sitOut: boolean;
+};
+
+export type PublicGolfTourRosterMember = {
+  id: string;
+  campId: string;
+  userId: string | null;
+  displayName: string;
+  isGuest: boolean;
+};
+
+export type PublicGolfTourStandingFourball = {
+  id: string;
+  campId: string;
+  name: string | null;
+  sortOrder: number;
+  players: Array<{
+    slot: 1 | 2 | 3 | 4;
+    userId: string | null;
+    displayName: string;
+    isGuest: boolean;
+  }>;
 };
 
 export type PublicGolfTourFourball = {
@@ -37,6 +64,8 @@ export type PublicGolfTourFourball = {
   status: "pending" | "live" | "locked" | "cancelled";
   golfRoundId: string | null;
   path: string | null;
+  standingFourballId: string | null;
+  sitOut: boolean;
   players: PublicGolfTourPlayer[];
 };
 
@@ -45,6 +74,7 @@ export type PublicGolfTourCamp = {
   name: string;
   color: string | null;
   sortOrder: number;
+  roster: PublicGolfTourRosterMember[];
 };
 
 export type PublicGolfTourRound = {
@@ -66,6 +96,7 @@ export type PublicGolfTour = {
   camps: PublicGolfTourCamp[];
   rounds: PublicGolfTourRound[];
   fourballs: PublicGolfTourFourball[];
+  standingFourballs: PublicGolfTourStandingFourball[];
   createdAt: string;
   updatedAt: string;
 };
@@ -103,8 +134,11 @@ function toPublicTour(tour: GolfTour, userId: string): PublicGolfTour {
       status: fourball.status,
       golfRoundId: fourball.golfRoundId,
       path: fourball.golfRoundId ? golfRoundPath(fourball.golfRoundId) : null,
+      standingFourballId: fourball.standingFourballId,
+      sitOut: fourball.sitOut,
       players: fourball.players,
     })),
+    standingFourballs: snapshot.standingFourballs,
     createdAt: snapshot.createdAt,
     updatedAt: snapshot.updatedAt,
   };
@@ -405,21 +439,40 @@ export class UpdateGolfTourFourball {
     players?: unknown;
     campId?: unknown;
     status?: unknown;
+    sitOut?: unknown;
+    playerSitOuts?: unknown;
   }) {
     const userId = requiredTrimmed(input.userId, "userId");
     const tour = await requireHostTour(this.tours, input.tourId, userId);
     if (
       input.players === undefined &&
       input.campId === undefined &&
-      input.status === undefined
+      input.status === undefined &&
+      input.sitOut === undefined &&
+      input.playerSitOuts === undefined
     ) {
       throw new DomainError("At least one field is required");
     }
     if (input.players !== undefined) {
+      const seats = parseFourballSeats(input.players);
       tour.assignFourballPlayers(
         userId,
         input.fourballId,
-        parseFourballPlayers(input.players),
+        seats.players,
+        seats.sitOutBySlot,
+      );
+    }
+    if (input.sitOut !== undefined) {
+      if (typeof input.sitOut !== "boolean") {
+        throw new DomainError("sitOut must be a boolean");
+      }
+      tour.setFourballSitOut(userId, input.fourballId, input.sitOut);
+    }
+    if (input.playerSitOuts !== undefined) {
+      tour.setFourballPlayerSitOuts(
+        userId,
+        input.fourballId,
+        parsePlayerSitOuts(input.playerSitOuts),
       );
     }
     if (input.campId !== undefined) {
@@ -484,7 +537,7 @@ export class StartGolfTourFourball {
 
     const players =
       input.players ??
-      fourball.players.map((player) => player.toSnapshot());
+      fourball.scoringPlayers().map((player) => player.toSnapshot());
     const holesPlayed = input.holesPlayed ?? 9;
     const course =
       input.course ??
@@ -538,4 +591,246 @@ export class GetGolfTourLeaderboard {
     }
     return { leaderboard: buildLeaderboard(tour, lockedRounds) };
   }
+}
+
+export class ListGolfTourRoster {
+  constructor(private readonly tours: GolfTourRepository) {}
+
+  async execute(input: { userId: string; tourId: string; campId: string }) {
+    const userId = requiredTrimmed(input.userId, "userId");
+    const tour = await requireReadableTour(this.tours, input.tourId, userId);
+    const camp = tour.campById(input.campId.trim());
+    if (!camp) throw new GolfTourCampNotFoundError();
+    return {
+      roster: camp.toSnapshot().roster,
+    };
+  }
+}
+
+export class AddGolfTourRosterMember {
+  constructor(private readonly tours: GolfTourRepository) {}
+
+  async execute(input: {
+    userId: string;
+    tourId: string;
+    campId: string;
+    displayName: unknown;
+    isGuest: unknown;
+    memberUserId?: unknown;
+  }) {
+    const userId = requiredTrimmed(input.userId, "userId");
+    const tour = await requireHostTour(this.tours, input.tourId, userId);
+    const member = tour.addRosterMember(userId, input.campId, {
+      userId:
+        input.memberUserId === undefined
+          ? undefined
+          : (input.memberUserId as string | null),
+      displayName: input.displayName,
+      isGuest: input.isGuest,
+    });
+    const saved = await this.tours.persist(tour);
+    return {
+      tour: toPublicTour(saved, userId),
+      member: member.toSnapshot(),
+    };
+  }
+}
+
+export class UpdateGolfTourRosterMember {
+  constructor(private readonly tours: GolfTourRepository) {}
+
+  async execute(input: {
+    userId: string;
+    tourId: string;
+    campId: string;
+    memberId: string;
+    displayName?: unknown;
+    isGuest?: unknown;
+    memberUserId?: unknown;
+  }) {
+    const userId = requiredTrimmed(input.userId, "userId");
+    const tour = await requireHostTour(this.tours, input.tourId, userId);
+    const details: {
+      displayName?: unknown;
+      isGuest?: unknown;
+      userId?: string | null;
+    } = {};
+    if (input.displayName !== undefined) details.displayName = input.displayName;
+    if (input.isGuest !== undefined) details.isGuest = input.isGuest;
+    if ("memberUserId" in input) {
+      details.userId = input.memberUserId as string | null;
+    }
+    tour.updateRosterMember(userId, input.campId, input.memberId, details);
+    const saved = await this.tours.persist(tour);
+    return { tour: toPublicTour(saved, userId) };
+  }
+}
+
+export class RemoveGolfTourRosterMember {
+  constructor(private readonly tours: GolfTourRepository) {}
+
+  async execute(input: {
+    userId: string;
+    tourId: string;
+    campId: string;
+    memberId: string;
+  }) {
+    const userId = requiredTrimmed(input.userId, "userId");
+    const tour = await requireHostTour(this.tours, input.tourId, userId);
+    tour.removeRosterMember(userId, input.campId, input.memberId);
+    const saved = await this.tours.persist(tour);
+    return { tour: toPublicTour(saved, userId) };
+  }
+}
+
+export class AddGolfTourStandingFourball {
+  constructor(private readonly tours: GolfTourRepository) {}
+
+  async execute(input: {
+    userId: string;
+    tourId: string;
+    campId: unknown;
+    name?: unknown;
+    players?: unknown;
+    sortOrder?: unknown;
+  }) {
+    const userId = requiredTrimmed(input.userId, "userId");
+    const tour = await requireHostTour(this.tours, input.tourId, userId);
+    const campId = requiredTrimmed(input.campId, "campId");
+    const template = tour.addStandingFourball(userId, {
+      campId,
+      name: input.name as string | null | undefined,
+      players: resolveStandingPlayers(tour, campId, input.players),
+      sortOrder:
+        typeof input.sortOrder === "number" ? input.sortOrder : undefined,
+    });
+    const saved = await this.tours.persist(tour);
+    return {
+      tour: toPublicTour(saved, userId),
+      standingFourball: toPublicTour(saved, userId).standingFourballs.find(
+        (row) => row.id === template.id,
+      )!,
+    };
+  }
+}
+
+export class UpdateGolfTourStandingFourball {
+  constructor(private readonly tours: GolfTourRepository) {}
+
+  async execute(input: {
+    userId: string;
+    tourId: string;
+    templateId: string;
+    campId?: unknown;
+    name?: unknown;
+    players?: unknown;
+  }) {
+    const userId = requiredTrimmed(input.userId, "userId");
+    const tour = await requireHostTour(this.tours, input.tourId, userId);
+    const details: {
+      campId?: string;
+      name?: string | null;
+      players?: ReturnType<typeof resolveStandingPlayers>;
+    } = {};
+    if (input.campId !== undefined) {
+      details.campId = requiredTrimmed(input.campId, "campId");
+    }
+    if ("name" in input) details.name = input.name as string | null;
+    if (input.players !== undefined) {
+      const campId = details.campId ?? tour.standingFourballById(input.templateId)?.campId;
+      if (!campId) throw new GolfTourStandingFourballNotFoundError();
+      details.players = resolveStandingPlayers(tour, campId, input.players);
+    }
+    tour.updateStandingFourball(userId, input.templateId, details);
+    const saved = await this.tours.persist(tour);
+    return { tour: toPublicTour(saved, userId) };
+  }
+}
+
+export class RemoveGolfTourStandingFourball {
+  constructor(private readonly tours: GolfTourRepository) {}
+
+  async execute(input: {
+    userId: string;
+    tourId: string;
+    templateId: string;
+  }) {
+    const userId = requiredTrimmed(input.userId, "userId");
+    const tour = await requireHostTour(this.tours, input.tourId, userId);
+    tour.removeStandingFourball(userId, input.templateId);
+    const saved = await this.tours.persist(tour);
+    return { tour: toPublicTour(saved, userId) };
+  }
+}
+
+export class PrepareGolfTourRound {
+  constructor(private readonly tours: GolfTourRepository) {}
+
+  async execute(input: { userId: string; tourId: string; roundId: string }) {
+    const userId = requiredTrimmed(input.userId, "userId");
+    const tour = await requireHostTour(this.tours, input.tourId, userId);
+    const created = tour.prepareRound(userId, input.roundId);
+    const saved = await this.tours.persist(tour);
+    const publicTour = toPublicTour(saved, userId);
+    return {
+      tour: publicTour,
+      createdIds: created.map((fourball) => fourball.id),
+      fourballs: publicTour.fourballs.filter(
+        (fourball) => fourball.roundId === input.roundId.trim(),
+      ),
+    };
+  }
+}
+
+export class CopyGolfTourRoundInstances {
+  constructor(private readonly tours: GolfTourRepository) {}
+
+  async execute(input: {
+    userId: string;
+    tourId: string;
+    roundId: string;
+    sourceRoundId: string;
+  }) {
+    const userId = requiredTrimmed(input.userId, "userId");
+    const tour = await requireHostTour(this.tours, input.tourId, userId);
+    tour.copyRoundInstances(userId, input.roundId, input.sourceRoundId);
+    const saved = await this.tours.persist(tour);
+    return { tour: toPublicTour(saved, userId) };
+  }
+}
+
+function resolveStandingPlayers(
+  tour: GolfTour,
+  campId: string,
+  raw: unknown,
+) {
+  if (raw == null) return parseFourballPlayers(raw);
+  if (!Array.isArray(raw)) {
+    throw new DomainError("players must be an array");
+  }
+  const camp = tour.campById(campId);
+  if (!camp) throw new GolfTourCampNotFoundError();
+  const resolved = raw.map((row) => {
+    if (
+      row &&
+      typeof row === "object" &&
+      "rosterMemberId" in row &&
+      (row as { rosterMemberId?: unknown }).rosterMemberId
+    ) {
+      const rosterMemberId = requiredTrimmed(
+        (row as { rosterMemberId: unknown }).rosterMemberId,
+        "rosterMemberId",
+      );
+      const member = camp.rosterMemberById(rosterMemberId);
+      if (!member) throw new GolfTourRosterMemberNotFoundError();
+      return {
+        slot: (row as { slot: unknown }).slot,
+        userId: member.userId,
+        displayName: member.displayName,
+        isGuest: member.isGuest,
+      };
+    }
+    return row;
+  });
+  return parseFourballPlayers(resolved);
 }

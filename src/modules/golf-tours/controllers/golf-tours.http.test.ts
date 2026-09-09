@@ -55,10 +55,25 @@ type PublicTour = {
   fourballs: Array<{
     id: string;
     campId: string;
+    roundId: string;
     status: string;
     golfRoundId: string | null;
     path: string | null;
-    players: Array<{ slot: number; userId: string | null; isGuest: boolean }>;
+    standingFourballId: string | null;
+    sitOut: boolean;
+    players: Array<{
+      slot: number;
+      userId: string | null;
+      isGuest: boolean;
+      displayName: string;
+      sitOut: boolean;
+    }>;
+  }>;
+  standingFourballs: Array<{
+    id: string;
+    campId: string;
+    name: string | null;
+    players: Array<{ displayName: string }>;
   }>;
 };
 
@@ -411,5 +426,278 @@ describe("golf tours HTTP", () => {
     const body = (await read.json()) as { tour: PublicTour };
     expect(body.tour.fourballs[0]!.status).toBe("locked");
     expect(body.tour.status).toBe("completed");
+  });
+
+  test("setup v2 roster, standing templates, prepare, sit-out, copy, custom, permissions", async () => {
+    const created = await json("/api/golf-tours", {
+      method: "POST",
+      userId: "user-host",
+      body: JSON.stringify({
+        name: "Friends Cup",
+        startDate: "2026-09-12",
+        endDate: "2026-09-14",
+      }),
+    });
+    const { tour } = (await created.json()) as { tour: PublicTour };
+    const tourId = tour.id;
+    const campA = tour.camps[0]!.id;
+
+    const forbiddenRoster = await json(
+      `/api/golf-tours/${tourId}/camps/${campA}/roster`,
+      {
+        method: "POST",
+        userId: "user-other",
+        body: JSON.stringify({
+          displayName: "Alex",
+          isGuest: false,
+          userId: "user-alex",
+        }),
+      },
+    );
+    expect(forbiddenRoster.status).toBe(403);
+
+    const rosterRes = await json(
+      `/api/golf-tours/${tourId}/camps/${campA}/roster`,
+      {
+        method: "POST",
+        userId: "user-host",
+        body: JSON.stringify({
+          displayName: "Alex",
+          isGuest: false,
+          userId: "user-alex",
+        }),
+      },
+    );
+    expect(rosterRes.status).toBe(201);
+    const rosterBody = (await rosterRes.json()) as {
+      tour: PublicTour;
+      member: { id: string; displayName: string };
+    };
+    const memberId = rosterBody.member.id;
+
+    const guestRoster = await json(
+      `/api/golf-tours/${tourId}/camps/${campA}/roster`,
+      {
+        method: "POST",
+        userId: "user-host",
+        body: JSON.stringify({ displayName: "Pat", isGuest: true }),
+      },
+    );
+    expect(guestRoster.status).toBe(201);
+
+    const listRoster = await json(
+      `/api/golf-tours/${tourId}/camps/${campA}/roster`,
+      { userId: "user-alex" },
+    );
+    expect(listRoster.status).toBe(200);
+    expect(
+      ((await listRoster.json()) as { roster: Array<{ id: string }> }).roster,
+    ).toHaveLength(2);
+
+    const patchedRoster = await json(
+      `/api/golf-tours/${tourId}/camps/${campA}/roster/${memberId}`,
+      {
+        method: "PATCH",
+        userId: "user-host",
+        body: JSON.stringify({ displayName: "Alexander" }),
+      },
+    );
+    expect(patchedRoster.status).toBe(200);
+
+    const standingRes = await json(
+      `/api/golf-tours/${tourId}/standing-fourballs`,
+      {
+        method: "POST",
+        userId: "user-host",
+        body: JSON.stringify({
+          campId: campA,
+          name: "Morning group",
+          players: [
+            { slot: 1, rosterMemberId: memberId },
+            { slot: 2, displayName: "Pat", isGuest: true },
+          ],
+        }),
+      },
+    );
+    expect(standingRes.status).toBe(201);
+    const standingBody = (await standingRes.json()) as {
+      standingFourball: { id: string; players: Array<{ displayName: string }> };
+    };
+    expect(standingBody.standingFourball.players[0]!.displayName).toBe(
+      "Alexander",
+    );
+    const templateId = standingBody.standingFourball.id;
+
+    const forbiddenTemplate = await json(
+      `/api/golf-tours/${tourId}/standing-fourballs`,
+      {
+        method: "POST",
+        userId: "user-other",
+        body: JSON.stringify({ campId: campA }),
+      },
+    );
+    expect(forbiddenTemplate.status).toBe(403);
+
+    const round1 = await json(`/api/golf-tours/${tourId}/rounds`, {
+      method: "POST",
+      userId: "user-host",
+      body: JSON.stringify({
+        date: "2026-09-12",
+        venueCmsId: "sanity-course-1",
+      }),
+    });
+    const withRound1 = (await round1.json()) as { tour: PublicTour };
+    expect(withRound1.tour.fourballs).toHaveLength(1);
+    expect(withRound1.tour.fourballs[0]!.standingFourballId).toBe(templateId);
+    const round1Id = withRound1.tour.rounds[0]!.id;
+    const instanceId = withRound1.tour.fourballs[0]!.id;
+
+    const prepareAgain = await json(
+      `/api/golf-tours/${tourId}/rounds/${round1Id}/prepare`,
+      { method: "POST", userId: "user-host" },
+    );
+    expect(prepareAgain.status).toBe(200);
+    expect(
+      ((await prepareAgain.json()) as { createdIds: string[] }).createdIds,
+    ).toEqual([]);
+
+    const custom = await json(
+      `/api/golf-tours/${tourId}/fourballs/${instanceId}`,
+      {
+        method: "PATCH",
+        userId: "user-host",
+        body: JSON.stringify({
+          players: [
+            {
+              slot: 1,
+              displayName: "Sam",
+              isGuest: false,
+              userId: "user-sam",
+            },
+            { slot: 2, displayName: "Pat", isGuest: true, sitOut: true },
+          ],
+        }),
+      },
+    );
+    expect(custom.status).toBe(200);
+    const customTour = ((await custom.json()) as { tour: PublicTour }).tour;
+    expect(customTour.fourballs[0]!.players[0]!.displayName).toBe("Sam");
+    const templateStill = customTour.standingFourballs.find(
+      (row) => row.id === templateId,
+    );
+    expect(templateStill?.players[0]?.displayName).toBe("Alexander");
+
+    const extra = await json(
+      `/api/golf-tours/${tourId}/rounds/${round1Id}/fourballs`,
+      {
+        method: "POST",
+        userId: "user-host",
+        body: JSON.stringify({
+          campId: campA,
+          players: [
+            {
+              slot: 1,
+              displayName: "Open",
+              isGuest: false,
+              userId: "user-open",
+            },
+          ],
+        }),
+      },
+    );
+    expect(extra.status).toBe(201);
+
+    const started = await json(
+      `/api/golf-tours/${tourId}/fourballs/${instanceId}/start`,
+      {
+        method: "POST",
+        userId: "user-host",
+        body: JSON.stringify({ teeName: "White" }),
+      },
+    );
+    expect(started.status).toBe(201);
+    const startedBody = (await started.json()) as { golfRoundId: string };
+    const lock = await json(`/api/golf-rounds/${startedBody.golfRoundId}/lock`, {
+      method: "POST",
+      userId: "user-host",
+      body: JSON.stringify({ score: scoreForSlots([1, 2], 4) }),
+    });
+    expect(lock.status).toBe(200);
+
+    const board = await json(`/api/golf-tours/${tourId}/leaderboard`, {
+      userId: "user-host",
+    });
+    const campBoard = (
+      (await board.json()) as {
+        leaderboard: {
+          camps: Array<{
+            campId: string;
+            players: Array<{ playerKey: string }>;
+          }>;
+        };
+      }
+    ).leaderboard.camps.find((camp) => camp.campId === campA)!;
+    expect(campBoard.players.map((player) => player.playerKey)).toEqual([
+      "user:user-sam",
+    ]);
+
+    const sitOut = await json(
+      `/api/golf-tours/${tourId}/fourballs/${instanceId}`,
+      {
+        method: "PATCH",
+        userId: "user-host",
+        body: JSON.stringify({ sitOut: true }),
+      },
+    );
+    expect(sitOut.status).toBe(200);
+
+    const boardSitOut = await json(`/api/golf-tours/${tourId}/leaderboard`, {
+      userId: "user-host",
+    });
+    expect(
+      (
+        (await boardSitOut.json()) as {
+          leaderboard: {
+            camps: Array<{ campId: string; players: unknown[] }>;
+          };
+        }
+      ).leaderboard.camps.find((camp) => camp.campId === campA)!.players,
+    ).toEqual([]);
+
+    const round2 = await json(`/api/golf-tours/${tourId}/rounds`, {
+      method: "POST",
+      userId: "user-host",
+      body: JSON.stringify({
+        date: "2026-09-13",
+        venueCmsId: "sanity-course-1",
+      }),
+    });
+    const withRound2 = (await round2.json()) as { tour: PublicTour };
+    const round2Id = withRound2.tour.rounds[1]!.id;
+    expect(
+      withRound2.tour.fourballs.filter((fourball) => fourball.roundId === round2Id),
+    ).toHaveLength(1);
+
+    const copy = await json(
+      `/api/golf-tours/${tourId}/rounds/${round2Id}/copy-from/${round1Id}`,
+      { method: "POST", userId: "user-host" },
+    );
+    expect(copy.status).toBe(200);
+    const copiedTour = ((await copy.json()) as { tour: PublicTour }).tour;
+    const copied = copiedTour.fourballs.filter(
+      (fourball) => fourball.roundId === round2Id,
+    );
+    expect(copied.length).toBeGreaterThanOrEqual(1);
+    expect(
+      copied.some((fourball) =>
+        fourball.players.some((player) => player.displayName === "Sam"),
+      ),
+    ).toBe(true);
+
+    const deleted = await json(
+      `/api/golf-tours/${tourId}/camps/${campA}/roster/${memberId}`,
+      { method: "DELETE", userId: "user-host" },
+    );
+    expect(deleted.status).toBe(200);
   });
 });

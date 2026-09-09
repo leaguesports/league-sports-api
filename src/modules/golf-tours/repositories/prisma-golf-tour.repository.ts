@@ -9,7 +9,9 @@ import { GolfTourFourball } from "../entities/golf-tour-fourball";
 import { GolfTourFourballStatus } from "../entities/golf-tour-fourball-status";
 import { GolfTourName } from "../entities/golf-tour-name";
 import { GolfTourPersistenceError } from "../entities/golf-tour-persistence-error";
+import { GolfTourRosterMember } from "../entities/golf-tour-roster-member";
 import { GolfTourRound } from "../entities/golf-tour-round";
+import { GolfTourStandingFourball } from "../entities/golf-tour-standing-fourball";
 import { GolfTourStatus } from "../entities/golf-tour-status";
 import { TourDate } from "../entities/tour-date";
 import { GolfTourRepository } from "./golf-tour.repository";
@@ -19,6 +21,7 @@ type PlayerRow = {
   userId: string | null;
   displayName: string;
   isGuest: boolean;
+  sitOut?: boolean;
 };
 
 type FourballRow = {
@@ -26,8 +29,18 @@ type FourballRow = {
   roundId: string;
   campId: string;
   golfRoundId: string | null;
+  standingFourballId?: string | null;
+  sitOut?: boolean;
   status: "pending" | "live" | "locked" | "cancelled";
   players: PlayerRow[];
+};
+
+type RosterRow = {
+  id: string;
+  campId: string;
+  userId: string | null;
+  displayName: string;
+  isGuest: boolean;
 };
 
 type CampRow = {
@@ -35,6 +48,22 @@ type CampRow = {
   name: string;
   color: string | null;
   sortOrder: number;
+  roster?: RosterRow[];
+};
+
+type StandingPlayerRow = {
+  slot: number;
+  userId: string | null;
+  displayName: string;
+  isGuest: boolean;
+};
+
+type StandingFourballRow = {
+  id: string;
+  campId: string;
+  name: string | null;
+  sortOrder: number;
+  players: StandingPlayerRow[];
 };
 
 type RoundRow = {
@@ -57,13 +86,21 @@ type TourRow = {
   camps: CampRow[];
   rounds: RoundRow[];
   fourballs: FourballRow[];
+  standingFourballs?: StandingFourballRow[];
 };
 
 const includeRelations = {
-  camps: { orderBy: { sortOrder: "asc" as const } },
+  camps: {
+    orderBy: { sortOrder: "asc" as const },
+    include: { roster: { orderBy: { createdAt: "asc" as const } } },
+  },
   rounds: { orderBy: { date: "asc" as const } },
   fourballs: {
     orderBy: { createdAt: "asc" as const },
+    include: { players: { orderBy: { slot: "asc" as const } } },
+  },
+  standingFourballs: {
+    orderBy: { sortOrder: "asc" as const },
     include: { players: { orderBy: { slot: "asc" as const } } },
   },
 };
@@ -84,6 +121,15 @@ function toDomain(row: TourRow): GolfTour {
         name: GolfTourCampName.from(camp.name),
         color: camp.color,
         sortOrder: camp.sortOrder,
+        roster: (camp.roster ?? []).map((member) =>
+          GolfTourRosterMember.rehydrate({
+            id: member.id,
+            campId: member.campId,
+            userId: member.userId,
+            displayName: member.displayName,
+            isGuest: member.isGuest,
+          }),
+        ),
       }),
     ),
     rounds: row.rounds.map((round) =>
@@ -102,7 +148,28 @@ function toDomain(row: TourRow): GolfTour {
         campId: fourball.campId,
         golfRoundId: fourball.golfRoundId,
         status: GolfTourFourballStatus.from(fourball.status),
+        standingFourballId: fourball.standingFourballId ?? null,
+        sitOut: fourball.sitOut === true,
+        sitOutSlots: fourball.players
+          .filter((player) => player.sitOut)
+          .map((player) => player.slot),
         players: fourball.players.map((player) =>
+          GolfPlayer.from({
+            slot: player.slot,
+            userId: player.userId,
+            displayName: player.displayName,
+            isGuest: player.isGuest,
+          }),
+        ),
+      }),
+    ),
+    standingFourballs: (row.standingFourballs ?? []).map((template) =>
+      GolfTourStandingFourball.rehydrate({
+        id: template.id,
+        campId: template.campId,
+        name: template.name,
+        sortOrder: template.sortOrder,
+        players: template.players.map((player) =>
           GolfPlayer.from({
             slot: player.slot,
             userId: player.userId,
@@ -210,6 +277,72 @@ export class PrismaGolfTourRepository implements GolfTourRepository {
               sortOrder: camp.sortOrder,
             },
           });
+
+          const memberIds = camp.roster.map((member) => member.id);
+          await tx.golfTourCampMember.deleteMany({
+            where: {
+              campId: camp.id,
+              id: { notIn: memberIds },
+            },
+          });
+          for (const member of camp.roster) {
+            await tx.golfTourCampMember.upsert({
+              where: { id: member.id },
+              create: {
+                id: member.id,
+                campId: camp.id,
+                userId: member.userId,
+                displayName: member.displayName,
+                isGuest: member.isGuest,
+              },
+              update: {
+                userId: member.userId,
+                displayName: member.displayName,
+                isGuest: member.isGuest,
+              },
+            });
+          }
+        }
+
+        const templateIds = snapshot.standingFourballs.map(
+          (template) => template.id,
+        );
+        await tx.golfTourStandingFourball.deleteMany({
+          where: {
+            tourId: snapshot.id,
+            id: { notIn: templateIds },
+          },
+        });
+        for (const template of snapshot.standingFourballs) {
+          await tx.golfTourStandingFourball.upsert({
+            where: { id: template.id },
+            create: {
+              id: template.id,
+              tourId: snapshot.id,
+              campId: template.campId,
+              name: template.name,
+              sortOrder: template.sortOrder,
+            },
+            update: {
+              campId: template.campId,
+              name: template.name,
+              sortOrder: template.sortOrder,
+            },
+          });
+          await tx.golfTourStandingFourballPlayer.deleteMany({
+            where: { templateId: template.id },
+          });
+          if (template.players.length > 0) {
+            await tx.golfTourStandingFourballPlayer.createMany({
+              data: template.players.map((player) => ({
+                templateId: template.id,
+                slot: player.slot,
+                userId: player.userId,
+                displayName: player.displayName,
+                isGuest: player.isGuest,
+              })),
+            });
+          }
         }
 
         for (const round of snapshot.rounds) {
@@ -249,11 +382,15 @@ export class PrismaGolfTourRepository implements GolfTourRepository {
               roundId: fourball.roundId,
               campId: fourball.campId,
               golfRoundId: fourball.golfRoundId,
+              standingFourballId: fourball.standingFourballId,
+              sitOut: fourball.sitOut,
               status: fourball.status,
             },
             update: {
               campId: fourball.campId,
               golfRoundId: fourball.golfRoundId,
+              standingFourballId: fourball.standingFourballId,
+              sitOut: fourball.sitOut,
               status: fourball.status,
             },
           });
@@ -269,6 +406,7 @@ export class PrismaGolfTourRepository implements GolfTourRepository {
                 userId: player.userId,
                 displayName: player.displayName,
                 isGuest: player.isGuest,
+                sitOut: player.sitOut,
               })),
             });
           }
@@ -307,7 +445,15 @@ export class PrismaGolfTourRepository implements GolfTourRepository {
     try {
       const rows = await this.prisma.golfTour.findMany({
         where: {
-          fourballs: { some: { players: { some: { userId } } } },
+          OR: [
+            { fourballs: { some: { players: { some: { userId } } } } },
+            { camps: { some: { roster: { some: { userId } } } } },
+            {
+              standingFourballs: {
+                some: { players: { some: { userId } } },
+              },
+            },
+          ],
         },
         include: includeRelations,
         orderBy: { updatedAt: "desc" },

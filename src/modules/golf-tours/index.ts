@@ -18,17 +18,26 @@ import { LockGolfTourFourballOnScorecardLock } from "./services/lock-fourball-on
 import {
   AddGolfTourCamp,
   AddGolfTourFourball,
+  AddGolfTourRosterMember,
   AddGolfTourRound,
+  AddGolfTourStandingFourball,
   CompleteGolfTour,
+  CopyGolfTourRoundInstances,
   CreateGolfTour,
   GetGolfTour,
   GetGolfTourLeaderboard,
+  ListGolfTourRoster,
   ListMyGolfTours,
+  PrepareGolfTourRound,
+  RemoveGolfTourRosterMember,
+  RemoveGolfTourStandingFourball,
   StartGolfTourFourball,
   UpdateGolfTour,
   UpdateGolfTourCamp,
   UpdateGolfTourFourball,
+  UpdateGolfTourRosterMember,
   UpdateGolfTourRound,
+  UpdateGolfTourStandingFourball,
 } from "./services/golf-tours.service";
 
 export type CreateGolfToursModuleParams = {
@@ -77,6 +86,19 @@ export function createGolfToursModule({
       golfTourRepository,
       new GetGolfRoundById(golfRoundRepository),
     ),
+    listRoster: new ListGolfTourRoster(golfTourRepository),
+    addRosterMember: new AddGolfTourRosterMember(golfTourRepository),
+    updateRosterMember: new UpdateGolfTourRosterMember(golfTourRepository),
+    removeRosterMember: new RemoveGolfTourRosterMember(golfTourRepository),
+    addStandingFourball: new AddGolfTourStandingFourball(golfTourRepository),
+    updateStandingFourball: new UpdateGolfTourStandingFourball(
+      golfTourRepository,
+    ),
+    removeStandingFourball: new RemoveGolfTourStandingFourball(
+      golfTourRepository,
+    ),
+    prepareRound: new PrepareGolfTourRound(golfTourRepository),
+    copyRoundInstances: new CopyGolfTourRoundInstances(golfTourRepository),
     tryGetSessionUserId,
   });
 
@@ -98,17 +120,26 @@ export { LockGolfTourFourballOnScorecardLock } from "./services/lock-fourball-on
 export {
   AddGolfTourCamp,
   AddGolfTourFourball,
+  AddGolfTourRosterMember,
   AddGolfTourRound,
+  AddGolfTourStandingFourball,
   CompleteGolfTour,
+  CopyGolfTourRoundInstances,
   CreateGolfTour,
   GetGolfTour,
   GetGolfTourLeaderboard,
+  ListGolfTourRoster,
   ListMyGolfTours,
+  PrepareGolfTourRound,
+  RemoveGolfTourRosterMember,
+  RemoveGolfTourStandingFourball,
   StartGolfTourFourball,
   UpdateGolfTour,
   UpdateGolfTourCamp,
   UpdateGolfTourFourball,
+  UpdateGolfTourRosterMember,
   UpdateGolfTourRound,
+  UpdateGolfTourStandingFourball,
 } from "./services/golf-tours.service";
 export type {
   PublicGolfTour,

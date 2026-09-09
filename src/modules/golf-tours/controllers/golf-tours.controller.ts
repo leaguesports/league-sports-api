@@ -10,22 +10,33 @@ import { GolfTourFourballNotFoundError } from "../entities/golf-tour-fourball-no
 import { GolfTourNotFoundError } from "../entities/golf-tour-not-found-error";
 import { GolfTourNotReadyError } from "../entities/golf-tour-not-ready-error";
 import { GolfTourPersistenceError } from "../entities/golf-tour-persistence-error";
+import { GolfTourRosterMemberNotFoundError } from "../entities/golf-tour-roster-member-not-found-error";
 import { GolfTourRoundNotFoundError } from "../entities/golf-tour-round-not-found-error";
+import { GolfTourStandingFourballNotFoundError } from "../entities/golf-tour-standing-fourball-not-found-error";
 import { GolfTourVenueNotFoundError } from "../entities/golf-tour-venue-not-found-error";
 import {
   AddGolfTourCamp,
   AddGolfTourFourball,
+  AddGolfTourRosterMember,
   AddGolfTourRound,
+  AddGolfTourStandingFourball,
   CompleteGolfTour,
+  CopyGolfTourRoundInstances,
   CreateGolfTour,
   GetGolfTour,
   GetGolfTourLeaderboard,
+  ListGolfTourRoster,
   ListMyGolfTours,
+  PrepareGolfTourRound,
+  RemoveGolfTourRosterMember,
+  RemoveGolfTourStandingFourball,
   StartGolfTourFourball,
   UpdateGolfTour,
   UpdateGolfTourCamp,
   UpdateGolfTourFourball,
+  UpdateGolfTourRosterMember,
   UpdateGolfTourRound,
+  UpdateGolfTourStandingFourball,
 } from "../services/golf-tours.service";
 
 const playerSchema = z.object({
@@ -33,6 +44,20 @@ const playerSchema = z.object({
   userId: z.string().nullable().optional(),
   displayName: z.string(),
   isGuest: z.boolean(),
+  sitOut: z.boolean().optional(),
+});
+
+const standingPlayerSchema = z.object({
+  slot: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]),
+  rosterMemberId: z.string().optional(),
+  userId: z.string().nullable().optional(),
+  displayName: z.string().optional(),
+  isGuest: z.boolean().optional(),
+});
+
+const playerSitOutSchema = z.object({
+  slot: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]),
+  sitOut: z.boolean(),
 });
 
 const courseHoleSchema = z.object({
@@ -81,6 +106,23 @@ const fourballParamSchema = z.object({
   fourballId: z.string(),
 });
 
+const rosterMemberParamSchema = z.object({
+  id: z.string(),
+  campId: z.string(),
+  memberId: z.string(),
+});
+
+const standingFourballParamSchema = z.object({
+  id: z.string(),
+  templateId: z.string(),
+});
+
+const copyFromParamSchema = z.object({
+  id: z.string(),
+  roundId: z.string(),
+  sourceRoundId: z.string(),
+});
+
 const campBodySchema = z.object({
   name: z.string(),
   color: z.string().nullable().optional(),
@@ -114,6 +156,33 @@ const updateFourballBodySchema = z.object({
   campId: z.string().optional(),
   players: z.array(playerSchema).max(4).optional(),
   status: z.string().optional(),
+  sitOut: z.boolean().optional(),
+  playerSitOuts: z.array(playerSitOutSchema).optional(),
+});
+
+const rosterBodySchema = z.object({
+  displayName: z.string(),
+  isGuest: z.boolean(),
+  userId: z.string().nullable().optional(),
+});
+
+const updateRosterBodySchema = z.object({
+  displayName: z.string().optional(),
+  isGuest: z.boolean().optional(),
+  userId: z.string().nullable().optional(),
+});
+
+const standingFourballBodySchema = z.object({
+  campId: z.string(),
+  name: z.string().nullable().optional(),
+  players: z.array(standingPlayerSchema).max(4).optional(),
+  sortOrder: z.number().optional(),
+});
+
+const updateStandingFourballBodySchema = z.object({
+  campId: z.string().optional(),
+  name: z.string().nullable().optional(),
+  players: z.array(standingPlayerSchema).max(4).optional(),
 });
 
 const startFourballBodySchema = z.object({
@@ -143,6 +212,15 @@ export function createGolfToursController(deps: {
   updateFourball: UpdateGolfTourFourball;
   startFourball: StartGolfTourFourball;
   getLeaderboard: GetGolfTourLeaderboard;
+  listRoster: ListGolfTourRoster;
+  addRosterMember: AddGolfTourRosterMember;
+  updateRosterMember: UpdateGolfTourRosterMember;
+  removeRosterMember: RemoveGolfTourRosterMember;
+  addStandingFourball: AddGolfTourStandingFourball;
+  updateStandingFourball: UpdateGolfTourStandingFourball;
+  removeStandingFourball: RemoveGolfTourStandingFourball;
+  prepareRound: PrepareGolfTourRound;
+  copyRoundInstances: CopyGolfTourRoundInstances;
   tryGetSessionUserId: (req: Request) => string | null;
 }) {
   return {
@@ -353,6 +431,179 @@ export function createGolfToursController(deps: {
         return sendGolfTourError(res, error);
       }
     },
+
+    async listRoster(req: Request, res: Response) {
+      try {
+        const userId = deps.tryGetSessionUserId(req);
+        if (!userId) return res.status(401).json({ error: "Unauthorized" });
+        const { id, campId } = z.parse(campParamSchema, req.params);
+        const result = await deps.listRoster.execute({
+          userId,
+          tourId: id,
+          campId,
+        });
+        return res.status(200).json(result);
+      } catch (error) {
+        return sendGolfTourError(res, error);
+      }
+    },
+
+    async addRosterMember(req: Request, res: Response) {
+      try {
+        const userId = deps.tryGetSessionUserId(req);
+        if (!userId) return res.status(401).json({ error: "Unauthorized" });
+        const { id, campId } = z.parse(campParamSchema, req.params);
+        const body = z.parse(rosterBodySchema, req.body ?? {});
+        const result = await deps.addRosterMember.execute({
+          userId,
+          tourId: id,
+          campId,
+          displayName: body.displayName,
+          isGuest: body.isGuest,
+          memberUserId: body.userId,
+        });
+        return res.status(201).json(result);
+      } catch (error) {
+        return sendGolfTourError(res, error);
+      }
+    },
+
+    async updateRosterMember(req: Request, res: Response) {
+      try {
+        const userId = deps.tryGetSessionUserId(req);
+        if (!userId) return res.status(401).json({ error: "Unauthorized" });
+        const { id, campId, memberId } = z.parse(
+          rosterMemberParamSchema,
+          req.params,
+        );
+        const body = z.parse(updateRosterBodySchema, req.body ?? {});
+        const result = await deps.updateRosterMember.execute({
+          userId,
+          tourId: id,
+          campId,
+          memberId,
+          displayName: body.displayName,
+          isGuest: body.isGuest,
+          ...("userId" in body ? { memberUserId: body.userId } : {}),
+        });
+        return res.status(200).json(result);
+      } catch (error) {
+        return sendGolfTourError(res, error);
+      }
+    },
+
+    async removeRosterMember(req: Request, res: Response) {
+      try {
+        const userId = deps.tryGetSessionUserId(req);
+        if (!userId) return res.status(401).json({ error: "Unauthorized" });
+        const { id, campId, memberId } = z.parse(
+          rosterMemberParamSchema,
+          req.params,
+        );
+        const result = await deps.removeRosterMember.execute({
+          userId,
+          tourId: id,
+          campId,
+          memberId,
+        });
+        return res.status(200).json(result);
+      } catch (error) {
+        return sendGolfTourError(res, error);
+      }
+    },
+
+    async addStandingFourball(req: Request, res: Response) {
+      try {
+        const userId = deps.tryGetSessionUserId(req);
+        if (!userId) return res.status(401).json({ error: "Unauthorized" });
+        const { id } = z.parse(idParamSchema, req.params);
+        const body = z.parse(standingFourballBodySchema, req.body ?? {});
+        const result = await deps.addStandingFourball.execute({
+          userId,
+          tourId: id,
+          ...body,
+        });
+        return res.status(201).json(result);
+      } catch (error) {
+        return sendGolfTourError(res, error);
+      }
+    },
+
+    async updateStandingFourball(req: Request, res: Response) {
+      try {
+        const userId = deps.tryGetSessionUserId(req);
+        if (!userId) return res.status(401).json({ error: "Unauthorized" });
+        const { id, templateId } = z.parse(
+          standingFourballParamSchema,
+          req.params,
+        );
+        const body = z.parse(updateStandingFourballBodySchema, req.body ?? {});
+        const result = await deps.updateStandingFourball.execute({
+          userId,
+          tourId: id,
+          templateId,
+          ...body,
+        });
+        return res.status(200).json(result);
+      } catch (error) {
+        return sendGolfTourError(res, error);
+      }
+    },
+
+    async removeStandingFourball(req: Request, res: Response) {
+      try {
+        const userId = deps.tryGetSessionUserId(req);
+        if (!userId) return res.status(401).json({ error: "Unauthorized" });
+        const { id, templateId } = z.parse(
+          standingFourballParamSchema,
+          req.params,
+        );
+        const result = await deps.removeStandingFourball.execute({
+          userId,
+          tourId: id,
+          templateId,
+        });
+        return res.status(200).json(result);
+      } catch (error) {
+        return sendGolfTourError(res, error);
+      }
+    },
+
+    async prepareRound(req: Request, res: Response) {
+      try {
+        const userId = deps.tryGetSessionUserId(req);
+        if (!userId) return res.status(401).json({ error: "Unauthorized" });
+        const { id, roundId } = z.parse(roundParamSchema, req.params);
+        const result = await deps.prepareRound.execute({
+          userId,
+          tourId: id,
+          roundId,
+        });
+        return res.status(200).json(result);
+      } catch (error) {
+        return sendGolfTourError(res, error);
+      }
+    },
+
+    async copyFromRound(req: Request, res: Response) {
+      try {
+        const userId = deps.tryGetSessionUserId(req);
+        if (!userId) return res.status(401).json({ error: "Unauthorized" });
+        const { id, roundId, sourceRoundId } = z.parse(
+          copyFromParamSchema,
+          req.params,
+        );
+        const result = await deps.copyRoundInstances.execute({
+          userId,
+          tourId: id,
+          roundId,
+          sourceRoundId,
+        });
+        return res.status(200).json(result);
+      } catch (error) {
+        return sendGolfTourError(res, error);
+      }
+    },
   };
 }
 
@@ -362,6 +613,8 @@ function sendGolfTourError(res: Response, error: unknown) {
     error instanceof GolfTourCampNotFoundError ||
     error instanceof GolfTourRoundNotFoundError ||
     error instanceof GolfTourFourballNotFoundError ||
+    error instanceof GolfTourRosterMemberNotFoundError ||
+    error instanceof GolfTourStandingFourballNotFoundError ||
     error instanceof GolfTourVenueNotFoundError ||
     error instanceof GolfRoundVenueNotFoundError
   ) {

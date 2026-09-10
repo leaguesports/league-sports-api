@@ -97,6 +97,10 @@ import {
 } from "./modules/golf-tours";
 import { PrismaGolfTourRepository } from "./modules/golf-tours/repositories/prisma-golf-tour.repository";
 import { LockGolfTourFourballOnScorecardLock } from "./modules/golf-tours/services/lock-fourball-on-scorecard-lock";
+import {
+  createOpenF1Module,
+  OpenF1Client,
+} from "./modules/openf1";
 
 export type CreateAppDependencies = {
   venueRepository?: VenueRepository;
@@ -125,6 +129,7 @@ export type CreateAppDependencies = {
   coverageRateLimiter?: CoverageRateLimiter;
   lobbyRepository?: LobbyRepository;
   golfTourRepository?: GolfTourRepository;
+  openF1Client?: OpenF1Client;
 };
 
 export async function createApp(
@@ -339,6 +344,10 @@ export async function createApp(
     tryGetSessionUserId: identity.tryGetSessionUserId,
     requireAuth: identity.authorizationMiddleware,
   });
+  const openF1 = createOpenF1Module({
+    config,
+    openF1Client: dependencies.openF1Client,
+  });
 
   app.use(identity.router);
   app.use(venue.router);
@@ -361,6 +370,7 @@ export async function createApp(
   app.use(intents.router);
   app.use(lobby.router);
   app.use(golfTours.router);
+  app.use(openF1.router);
 
   app.use(
     (

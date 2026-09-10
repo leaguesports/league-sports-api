@@ -237,6 +237,9 @@ export async function createApp(
   const communities = createCommunitiesModule({
     prisma,
     communityRepository: dependencies.communityRepository,
+    matchRepository: match.matchRepository,
+    golfRoundRepository: golfRound.golfRoundRepository,
+    venueRepository: venue.venueRepository,
     friendProfileLookup: friends.friendProfileLookup,
     tryGetSessionUserId: identity.tryGetSessionUserId,
     requireAuth: identity.authorizationMiddleware,

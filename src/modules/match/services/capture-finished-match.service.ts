@@ -1,3 +1,4 @@
+import { OnScorecardLocked } from "../../scorecards/on-scorecard-locked";
 import { CmsId } from "../../venue/entities/cms-id";
 import { VenueRepository } from "../../venue/repositories/venue.repository";
 import { Match } from "../entities/match";
@@ -23,6 +24,7 @@ export class CaptureFinishedMatch {
   constructor(
     private readonly matches: MatchRepository,
     private readonly venues: VenueRepository,
+    private readonly onScorecardLocked?: OnScorecardLocked,
   ) {}
 
   async execute(input: CaptureFinishedMatchInput): Promise<Match> {
@@ -46,6 +48,14 @@ export class CaptureFinishedMatch {
       lockedByUserId: input.lockedByUserId,
     });
 
-    return this.matches.create(match);
+    const persisted = await this.matches.create(match);
+    if (persisted.isLocked && this.onScorecardLocked) {
+      await this.onScorecardLocked({
+        sport: "padel",
+        scorecardId: persisted.id,
+        padelWinner: persisted.winner?.value,
+      });
+    }
+    return persisted;
   }
 }

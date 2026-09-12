@@ -61,6 +61,7 @@ export function createGolfRoundModule({
       golfRoundRepository,
       venueRepository,
       golfHandicapIndexLookup,
+      onScorecardLocked,
     ),
     getGolfRoundById: new GetGolfRoundById(golfRoundRepository),
     lockGolfRound: new LockGolfRound(golfRoundRepository, onScorecardLocked),

@@ -12,6 +12,7 @@ export type PublicPreferences = {
   activeSport: string | null;
   onboardingCompletedAt: string | null;
   onboardingSkippedAt: string | null;
+  appearOnVenueLeaderboards: boolean;
 };
 
 export function toPublicPreferences(
@@ -22,6 +23,7 @@ export function toPublicPreferences(
     activeSport: prefs.activeSport,
     onboardingCompletedAt: prefs.onboardingCompletedAt?.toISOString() ?? null,
     onboardingSkippedAt: prefs.onboardingSkippedAt?.toISOString() ?? null,
+    appearOnVenueLeaderboards: prefs.appearOnVenueLeaderboards,
   };
 }
 
@@ -68,6 +70,7 @@ export type UpdatePreferencesInput = {
   activeSport?: string | null;
   completeOnboarding?: boolean;
   skipOnboarding?: boolean;
+  appearOnVenueLeaderboards?: boolean;
 };
 
 export class UpdatePreferences {
@@ -98,11 +101,16 @@ export class UpdatePreferences {
       patch.onboardingSkippedAt = new Date();
     }
 
+    if (input.appearOnVenueLeaderboards !== undefined) {
+      patch.appearOnVenueLeaderboards = input.appearOnVenueLeaderboards;
+    }
+
     if (
       patch.sports === undefined &&
       patch.activeSport === undefined &&
       patch.onboardingCompletedAt === undefined &&
-      patch.onboardingSkippedAt === undefined
+      patch.onboardingSkippedAt === undefined &&
+      patch.appearOnVenueLeaderboards === undefined
     ) {
       throw new DomainError("No preference fields to update");
     }

@@ -4,6 +4,7 @@ export type UserPreferences = {
   activeSport: string | null;
   onboardingCompletedAt: Date | null;
   onboardingSkippedAt: Date | null;
+  appearOnVenueLeaderboards: boolean;
 };
 
 export type UpdateUserPreferencesInput = {
@@ -11,6 +12,7 @@ export type UpdateUserPreferencesInput = {
   activeSport?: string | null;
   onboardingCompletedAt?: Date | null;
   onboardingSkippedAt?: Date | null;
+  appearOnVenueLeaderboards?: boolean;
 };
 
 export interface PreferencesRepository {

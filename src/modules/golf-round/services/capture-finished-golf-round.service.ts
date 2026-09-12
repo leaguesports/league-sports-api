@@ -1,3 +1,4 @@
+import { OnScorecardLocked } from "../../scorecards/on-scorecard-locked";
 import { CmsId } from "../../venue/entities/cms-id";
 import { VenueRepository } from "../../venue/repositories/venue.repository";
 import { GolfPlayerInput } from "../entities/golf-player";
@@ -29,6 +30,7 @@ export class CaptureFinishedGolfRound {
     private readonly rounds: GolfRoundRepository,
     private readonly venues: VenueRepository,
     private readonly handicaps: GolfHandicapIndexLookup = emptyGolfHandicapIndexLookup,
+    private readonly onScorecardLocked?: OnScorecardLocked,
   ) {}
 
   async execute(input: CaptureFinishedGolfRoundInput): Promise<GolfRound> {
@@ -58,6 +60,20 @@ export class CaptureFinishedGolfRound {
       lockedByUserId: input.lockedByUserId,
     });
 
-    return this.rounds.create(round);
+    const persisted = await this.rounds.create(round);
+    if (persisted.isLocked && persisted.score && this.onScorecardLocked) {
+      await this.onScorecardLocked({
+        sport: "golf",
+        scorecardId: persisted.id,
+        golf: {
+          players: persisted.players.map((player) => ({
+            slot: player.slot,
+            userId: player.userId,
+          })),
+          holes: persisted.score.toSnapshot().holes,
+        },
+      });
+    }
+    return persisted;
   }
 }

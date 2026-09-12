@@ -47,6 +47,7 @@ export function createDartsModule({
     captureFinishedDartsMatch: new CaptureFinishedDartsMatch(
       dartsMatchRepository,
       venueRepository,
+      onScorecardLocked,
     ),
     getDartsMatchById: new GetDartsMatchById(dartsMatchRepository),
     submitDartsTurn: new SubmitDartsTurn(

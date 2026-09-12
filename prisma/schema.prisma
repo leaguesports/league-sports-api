@@ -47,6 +47,7 @@ model Profile {
   onboardingCompletedAt  DateTime?
   onboardingSkippedAt    DateTime?
   golfHandicapIndex      Decimal?  @db.Decimal(4, 1)
+  appearOnVenueLeaderboards Boolean @default(true)
 
   user User @relation(fields: [userId], references: [id])
 }
@@ -70,8 +71,10 @@ model Venue {
   golfRounds      GolfRound[]
   dartsMatches    DartsMatch[]
   follows         VenueFollow[]
-  organisedGames  OrganisedGame[]
-  golfTourRounds  GolfTourRound[]
+  organisedGames         OrganisedGame[]
+  golfTourRounds         GolfTourRound[]
+  leaderboardFacts       VenueLeaderboardEventFact[]
+  leaderboardSnapshots   VenueLeaderboardSnapshot[]
 }
 
 model VenueFollow {
@@ -1085,4 +1088,55 @@ model GolfTourFourballPlayer {
   @@unique([fourballId, slot])
   @@index([userId])
   @@index([fourballId])
+}
+
+enum VenueLeaderboardSport {
+  padel
+  golf
+  darts
+}
+
+enum VenueLeaderboardBoard {
+  records
+  potm
+  grinder
+  streak
+}
+
+// One signed-in player × locked event at a venue. Lock hooks upsert; nightly
+// reconcile rebuilds from locked padel / golf / darts scorecards.
+model VenueLeaderboardEventFact {
+  id              String                @id @default(uuid())
+  venueCmsId      String
+  venue           Venue                 @relation(fields: [venueCmsId], references: [cmsId])
+  sport           VenueLeaderboardSport
+  eventId         String
+  userId          String
+  lockedAt        DateTime
+  won             Boolean?
+  golfGross       Int?
+  golfNet         Int?
+  golfTeeId       String?
+  golfTeeName     String?
+  golfHolesPlayed Int?
+  createdAt       DateTime              @default(now())
+
+  @@unique([venueCmsId, sport, eventId, userId])
+  @@index([venueCmsId, sport])
+  @@index([userId])
+  @@index([venueCmsId, lockedAt])
+}
+
+// Computed board payload for a venue + board + window (YYYY-MM or "all").
+model VenueLeaderboardSnapshot {
+  id         String                @id @default(uuid())
+  venueCmsId String
+  venue      Venue                 @relation(fields: [venueCmsId], references: [cmsId])
+  board      VenueLeaderboardBoard
+  windowKey  String
+  payload    Json
+  computedAt DateTime
+
+  @@unique([venueCmsId, board, windowKey])
+  @@index([venueCmsId])
 }

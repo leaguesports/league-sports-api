@@ -13,7 +13,8 @@
     "test:coverage": "jest --coverage",
     "prisma:deploy": "prisma migrate deploy",
     "roadmap:seed": "ts-node src/modules/roadmap/cli/seed.ts",
-    "roadmap:ship": "ts-node src/modules/roadmap/cli/ship.ts"
+    "roadmap:ship": "ts-node src/modules/roadmap/cli/ship.ts",
+    "leaderboards:reconcile": "ts-node src/modules/venue-leaderboards/cli/reconcile.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.2.0",

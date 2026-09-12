@@ -13,6 +13,7 @@ function emptyPrefs(userId: string): UserPreferences {
     activeSport: null,
     onboardingCompletedAt: null,
     onboardingSkippedAt: null,
+    appearOnVenueLeaderboards: true,
   };
 }
 
@@ -28,6 +29,7 @@ export class PrismaPreferencesRepository implements PreferencesRepository {
             activeSportSlug: true,
             onboardingCompletedAt: true,
             onboardingSkippedAt: true,
+            appearOnVenueLeaderboards: true,
           },
         }),
         this.prisma.sportFollow.findMany({
@@ -47,6 +49,8 @@ export class PrismaPreferencesRepository implements PreferencesRepository {
         activeSport: profile?.activeSportSlug ?? null,
         onboardingCompletedAt: profile?.onboardingCompletedAt ?? null,
         onboardingSkippedAt: profile?.onboardingSkippedAt ?? null,
+        appearOnVenueLeaderboards:
+          profile?.appearOnVenueLeaderboards ?? true,
       };
     } catch (error) {
       throw new PreferencesPersistenceError("Failed to load preferences", {
@@ -75,6 +79,7 @@ export class PrismaPreferencesRepository implements PreferencesRepository {
           activeSportSlug?: string | null;
           onboardingCompletedAt?: Date | null;
           onboardingSkippedAt?: Date | null;
+          appearOnVenueLeaderboards?: boolean;
         } = {};
 
         if (input.activeSport !== undefined) {
@@ -85,6 +90,10 @@ export class PrismaPreferencesRepository implements PreferencesRepository {
         }
         if (input.onboardingSkippedAt !== undefined) {
           profileData.onboardingSkippedAt = input.onboardingSkippedAt;
+        }
+        if (input.appearOnVenueLeaderboards !== undefined) {
+          profileData.appearOnVenueLeaderboards =
+            input.appearOnVenueLeaderboards;
         }
 
         if (Object.keys(profileData).length > 0) {

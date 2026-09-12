@@ -11,6 +11,7 @@ function emptyPrefs(userId: string): UserPreferences {
     activeSport: null,
     onboardingCompletedAt: null,
     onboardingSkippedAt: null,
+    appearOnVenueLeaderboards: true,
   };
 }
 
@@ -50,6 +51,10 @@ export class InMemoryPreferencesRepository implements PreferencesRepository {
         input.onboardingSkippedAt !== undefined
           ? input.onboardingSkippedAt
           : current.onboardingSkippedAt,
+      appearOnVenueLeaderboards:
+        input.appearOnVenueLeaderboards !== undefined
+          ? input.appearOnVenueLeaderboards
+          : current.appearOnVenueLeaderboards,
     };
     this.byUserId.set(userId, next);
     return { ...next, sports: [...next.sports] };

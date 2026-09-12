@@ -14,13 +14,15 @@ const updateBodySchema = z
     activeSport: z.union([z.string(), z.null()]).optional(),
     completeOnboarding: z.boolean().optional(),
     skipOnboarding: z.boolean().optional(),
+    appearOnVenueLeaderboards: z.boolean().optional(),
   })
   .refine(
     (body) =>
       body.sports !== undefined ||
       body.activeSport !== undefined ||
       body.completeOnboarding === true ||
-      body.skipOnboarding === true,
+      body.skipOnboarding === true ||
+      body.appearOnVenueLeaderboards !== undefined,
     { message: "No preference fields to update" },
   );
 
@@ -58,6 +60,7 @@ export function createPreferencesController(deps: {
           activeSport: body.activeSport,
           completeOnboarding: body.completeOnboarding,
           skipOnboarding: body.skipOnboarding,
+          appearOnVenueLeaderboards: body.appearOnVenueLeaderboards,
         });
         return res.status(200).json(result);
       } catch (error) {

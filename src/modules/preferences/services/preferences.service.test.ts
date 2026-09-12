@@ -21,6 +21,7 @@ describe("preferences service", () => {
       activeSport: null,
       onboardingCompletedAt: null,
       onboardingSkippedAt: null,
+      appearOnVenueLeaderboards: true,
     });
   });
 
@@ -39,6 +40,7 @@ describe("preferences service", () => {
     expect(saved.activeSport).toBe("padel");
     expect(saved.onboardingCompletedAt).toEqual(expect.any(String));
     expect(saved.onboardingSkippedAt).toBeNull();
+    expect(saved.appearOnVenueLeaderboards).toBe(true);
 
     const loaded = await new GetPreferences(repo).execute({ userId: "u1" });
     expect(loaded).toEqual(saved);
@@ -51,5 +53,14 @@ describe("preferences service", () => {
       skipOnboarding: true,
     });
     expect(saved.onboardingSkippedAt).toEqual(expect.any(String));
+  });
+
+  test("updates appearOnVenueLeaderboards opt-out", async () => {
+    const repo = new InMemoryPreferencesRepository();
+    const saved = await new UpdatePreferences(repo).execute({
+      userId: "u1",
+      appearOnVenueLeaderboards: false,
+    });
+    expect(saved.appearOnVenueLeaderboards).toBe(false);
   });
 });

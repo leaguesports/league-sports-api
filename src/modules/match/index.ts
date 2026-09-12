@@ -44,6 +44,7 @@ export function createMatchModule({
     captureFinishedMatch: new CaptureFinishedMatch(
       matchRepository,
       venueRepository,
+      onScorecardLocked,
     ),
     getMatchById: new GetMatchById(matchRepository),
     lockMatch: new LockMatch(matchRepository, onScorecardLocked),

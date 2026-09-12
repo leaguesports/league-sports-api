@@ -1,3 +1,4 @@
+import { OnScorecardLocked } from "../../scorecards/on-scorecard-locked";
 import { VenueRepository } from "../../venue/repositories/venue.repository";
 import { DartsMatch } from "../entities/darts-match";
 import { DartsMatchVenueNotFoundError } from "../entities/darts-match-venue-not-found-error";
@@ -22,6 +23,7 @@ export class CaptureFinishedDartsMatch {
   constructor(
     private readonly matches: DartsMatchRepository,
     private readonly venues: VenueRepository,
+    private readonly onScorecardLocked?: OnScorecardLocked,
   ) {}
 
   async execute(input: CaptureFinishedDartsMatchInput): Promise<DartsMatch> {
@@ -44,6 +46,14 @@ export class CaptureFinishedDartsMatch {
       lockedByUserId: input.lockedByUserId,
     });
 
-    return this.matches.create(match);
+    const persisted = await this.matches.create(match);
+    if (persisted.isLocked && this.onScorecardLocked) {
+      await this.onScorecardLocked({
+        sport: "darts",
+        scorecardId: persisted.id,
+        dartsWinnerUserId: persisted.toSnapshot().winnerUserId,
+      });
+    }
+    return persisted;
   }
 }

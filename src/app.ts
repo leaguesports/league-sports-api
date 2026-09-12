@@ -101,6 +101,10 @@ import {
   createOpenF1Module,
   OpenF1Client,
 } from "./modules/openf1";
+import {
+  createVenueLeaderboardsModule,
+  VenueLeaderboardRepository,
+} from "./modules/venue-leaderboards";
 
 export type CreateAppDependencies = {
   venueRepository?: VenueRepository;
@@ -130,6 +134,7 @@ export type CreateAppDependencies = {
   lobbyRepository?: LobbyRepository;
   golfTourRepository?: GolfTourRepository;
   openF1Client?: OpenF1Client;
+  venueLeaderboardRepository?: VenueLeaderboardRepository;
 };
 
 export async function createApp(
@@ -185,9 +190,12 @@ export async function createApp(
   const lockFourballOnScorecardLock = new LockGolfTourFourballOnScorecardLock(
     golfTourRepository,
   );
+  let ingestVenueLeaderboard: (event: ScorecardLockedEvent) => Promise<void> =
+    async () => {};
   const onScorecardLocked = async (event: ScorecardLockedEvent) => {
     await completeOnLock.execute(event);
     await lockFourballOnScorecardLock.execute(event);
+    await ingestVenueLeaderboard(event);
   };
 
   const match = createMatchModule({
@@ -348,6 +356,20 @@ export async function createApp(
     config,
     openF1Client: dependencies.openF1Client,
   });
+  const venueLeaderboards = createVenueLeaderboardsModule({
+    prisma,
+    venueRepository: venue.venueRepository,
+    matchRepository: match.matchRepository,
+    golfRoundRepository: golfRound.golfRoundRepository,
+    dartsMatchRepository: darts.dartsMatchRepository,
+    venueLeaderboardRepository: dependencies.venueLeaderboardRepository,
+    useInMemoryLeaderboards: Boolean(
+      dependencies.venueRepository || dependencies.venueLeaderboardRepository,
+    ),
+    tryGetSessionUserId: identity.tryGetSessionUserId,
+    requireAuth: identity.authorizationMiddleware,
+  });
+  ingestVenueLeaderboard = venueLeaderboards.onScorecardLocked;
 
   app.use(identity.router);
   app.use(venue.router);
@@ -371,6 +393,7 @@ export async function createApp(
   app.use(lobby.router);
   app.use(golfTours.router);
   app.use(openF1.router);
+  app.use(venueLeaderboards.router);
 
   app.use(
     (

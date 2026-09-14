@@ -708,8 +708,8 @@ describe("golf rounds HTTP", () => {
     expect(createdBody.players.find((player) => player.userId === "user-riley")).toEqual(
       expect.objectContaining({
         handicapIndexUsed: 10.4,
-        courseHandicap: 11,
-        playingHandicap: 11,
+        courseHandicap: 6,
+        playingHandicap: 6,
         grossTotal: null,
         netTotal: null,
       }),
@@ -749,12 +749,12 @@ describe("golf rounds HTTP", () => {
       lockedBody.players.find((player) => player.userId === "user-riley"),
     ).toEqual(
       expect.objectContaining({
-        playingHandicap: 11,
+        playingHandicap: 6,
         grossTotal: 36,
-        netTotal: 25,
+        netTotal: 30,
       }),
     );
-    expect(lockedBody.score.holes[0].netStrokes).toEqual({ "3": 2 });
+    expect(lockedBody.score.holes[0].netStrokes).toEqual({ "3": 3 });
   });
 
   test("missing HI or ratings stays gross-only", async () => {

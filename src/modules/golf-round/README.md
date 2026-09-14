@@ -4,23 +4,34 @@ Live / locked golf scorecards. Handicap math is **estimated WHS-style**, **not o
 
 ## Formula (v1)
 
-Course Handicap (round half up, `.5` toward +∞):
+Course Handicap from the tee ratings (round half up, `.5` toward +∞):
 
 ```
-CH = HI × (Slope / 113) + (CourseRating − Par)
+ratingsCH = HI × (Slope / 113) + (CourseRating − Par)
 ```
 
-Playing Handicap v1 is 100%:
+Then scale to the holes being played when the ratings describe a different length:
+
+```
+ratingHoles = 18 if CR ≥ 50 or Par ≥ 50, else 9
+CH = roundHalfUp(ratingsCH × holesPlayed / ratingHoles)
+```
+
+Typical case: client sends **18-hole** CR/slope/par for a **9-hole** card → `CH = roundHalfUp(ratingsCH / 2)`. Standalone 9-hole tees (CR/par ~27–40) are used as-is. 18-hole rounds with 18-hole ratings are used as-is.
+
+Playing Handicap v1 is 100% of that **round** CH (not the 18-hole equivalent):
 
 ```
 PH = CH
 ```
 
-Net:
+Net (server is source of truth):
 
-- Stroke indexes present on every hole → allocate PH strokes (hardest SI first; extras wrap). Hole net = hole gross − strokes received. Round net = sum of hole nets.
+- Stroke indexes present on every played hole → allocate **this round’s** PH strokes across **played holes only** (hardest SI first; extras wrap). Hole net = hole gross − strokes received. Round net = sum of hole nets (= gross − PH).
 - Stroke indexes missing → no per-hole nets; round net = gross − PH.
 - Plus handicaps (negative PH) apply negative strokes to the easiest holes so net = gross − PH still holds.
+
+Do **not** allocate an 18-hole PH across a 9-hole card (that gives two strokes even on SI 15 and round net = 9-hole gross − 18-hole PH).
 
 ## Profile
 
@@ -68,8 +79,8 @@ Returned on create, get, lock, capture, and locked history.
 | `teePar` | round | client value or sum of hole pars |
 | `handicapDisclaimer` | round | always |
 | `players[].handicapIndexUsed` | player | HI + CR + slope + par present |
-| `players[].courseHandicap` | player | same |
-| `players[].playingHandicap` | player | same (equals CH in v1) |
+| `players[].courseHandicap` | player | same (**for the holes being played**, not always 18-hole) |
+| `players[].playingHandicap` | player | same (equals round CH in v1) |
 | `players[].grossTotal` | player | after lock / capture |
 | `players[].netTotal` | player | after lock / capture, when PH was snapshotted |
 | `score.holes[].strokes` | hole | gross (unchanged) |

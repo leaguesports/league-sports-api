@@ -4,8 +4,10 @@ import {
   computeCourseHandicap,
   computePlayingHandicap,
   computeRoundNet,
+  inferRatingHoleCount,
   parseGolfHandicapIndex,
   roundHalfUp,
+  scaleHandicapToHolesPlayed,
 } from "./handicap";
 
 describe("WHS-style handicap formula", () => {
@@ -76,6 +78,58 @@ describe("WHS-style handicap formula", () => {
     expect(computePlayingHandicap(-1)).toBe(-1);
   });
 
+  test("tee CR/par ≥ 50 are 18-hole ratings; below 50 are 9-hole", () => {
+    expect(inferRatingHoleCount(71.2, 72)).toBe(18);
+    expect(inferRatingHoleCount(67, 70)).toBe(18);
+    expect(inferRatingHoleCount(35.4, 36)).toBe(9);
+    expect(inferRatingHoleCount(32, 35)).toBe(9);
+    // Mixed: 18-hole CR with 9-hole par fallback still counts as 18-hole ratings
+    expect(inferRatingHoleCount(71.2, 36)).toBe(18);
+  });
+
+  test("18-hole CH is halved (round half up) for a 9-hole round", () => {
+    expect(scaleHandicapToHolesPlayed(20, 9, 18)).toBe(10);
+    expect(scaleHandicapToHolesPlayed(11, 9, 18)).toBe(6);
+    expect(scaleHandicapToHolesPlayed(1, 9, 18)).toBe(1);
+    expect(scaleHandicapToHolesPlayed(0, 9, 18)).toBe(0);
+    expect(scaleHandicapToHolesPlayed(-3, 9, 18)).toBe(-1);
+    expect(scaleHandicapToHolesPlayed(20, 18, 18)).toBe(20);
+    expect(scaleHandicapToHolesPlayed(10, 9, 9)).toBe(10);
+    expect(scaleHandicapToHolesPlayed(10, 18, 9)).toBe(20);
+  });
+
+  test("computeCourseHandicap scales 18-hole ratings to 9 holes when holesPlayed is 9", () => {
+    // HI 20, slope 113, CR 72, par 72 → ratings CH 20; 9-hole CH 10
+    expect(
+      computeCourseHandicap({
+        handicapIndex: 20,
+        slopeRating: 113,
+        courseRating: 72,
+        par: 72,
+        holesPlayed: 9,
+      }),
+    ).toBe(10);
+    expect(
+      computeCourseHandicap({
+        handicapIndex: 20,
+        slopeRating: 113,
+        courseRating: 72,
+        par: 72,
+        holesPlayed: 18,
+      }),
+    ).toBe(20);
+    // 9-hole tee ratings are not halved
+    expect(
+      computeCourseHandicap({
+        handicapIndex: 20,
+        slopeRating: 113,
+        courseRating: 35.2,
+        par: 36,
+        holesPlayed: 9,
+      }),
+    ).toBe(19);
+  });
+
   test("parseGolfHandicapIndex accepts null and WHS-range decimals", () => {
     expect(parseGolfHandicapIndex(null)).toBeNull();
     expect(parseGolfHandicapIndex(undefined)).toBeNull();
@@ -107,6 +161,47 @@ describe("WHS-style handicap formula", () => {
     expect(plusTwo.get(8)).toBe(-1);
     expect(plusTwo.get(1)).toBe(0);
     expect([...plusTwo.values()].reduce((sum, value) => sum + value, 0)).toBe(-2);
+  });
+
+  test("18-hole PH 20: one stroke on SI 3–18, two on SI 1 and 2", () => {
+    const holes = Array.from({ length: 18 }, (_, index) => ({
+      number: index + 1,
+      strokeIndex: index + 1,
+    }));
+    const allocated = allocateHoleStrokes(20, holes);
+    expect(allocated.get(1)).toBe(2);
+    expect(allocated.get(2)).toBe(2);
+    expect(allocated.get(15)).toBe(1);
+    expect(allocated.get(18)).toBe(1);
+    expect([...allocated.values()].reduce((sum, value) => sum + value, 0)).toBe(
+      20,
+    );
+  });
+
+  test("9-hole PH 10 (halved 18-hole 20): one stroke on SI 15, not two", () => {
+    // Front-nine 18-hole stroke indexes (odds); hole 9 is SI 15
+    const holes = [
+      { number: 1, strokeIndex: 7 },
+      { number: 2, strokeIndex: 3 },
+      { number: 3, strokeIndex: 13 },
+      { number: 4, strokeIndex: 1 },
+      { number: 5, strokeIndex: 11 },
+      { number: 6, strokeIndex: 5 },
+      { number: 7, strokeIndex: 17 },
+      { number: 8, strokeIndex: 9 },
+      { number: 9, strokeIndex: 15 },
+    ];
+    const nineHole = allocateHoleStrokes(10, holes);
+    expect(nineHole.get(9)).toBe(1);
+    expect(nineHole.get(4)).toBe(2);
+    expect([...nineHole.values()].reduce((sum, value) => sum + value, 0)).toBe(
+      10,
+    );
+
+    // Bug: allocating the 18-hole PH of 20 across 9 holes gives two strokes
+    // even on SI 15 (every hole gets at least 2).
+    const eighteenHolePhOnNine = allocateHoleStrokes(20, holes);
+    expect(eighteenHolePhOnNine.get(9)).toBe(2);
   });
 
   test("round net uses hole nets when SI present, else gross − PH", () => {
@@ -142,5 +237,32 @@ describe("WHS-style handicap formula", () => {
       holes: [{ number: 1, strokeIndex: 1, gross: 4 }],
     });
     expect(noPh).toEqual({ grossTotal: 4, netTotal: null, holeNets: null });
+  });
+
+  test("issue #65 screenshot: 9-hole PH 10 nets SI 15 gross 6 as 5, round 43 → 33", () => {
+    const holes = [
+      { number: 1, strokeIndex: 7, gross: 5 },
+      { number: 2, strokeIndex: 3, gross: 5 },
+      { number: 3, strokeIndex: 13, gross: 4 },
+      { number: 4, strokeIndex: 1, gross: 6 },
+      { number: 5, strokeIndex: 11, gross: 4 },
+      { number: 6, strokeIndex: 5, gross: 5 },
+      { number: 7, strokeIndex: 17, gross: 4 },
+      { number: 8, strokeIndex: 9, gross: 4 },
+      { number: 9, strokeIndex: 15, gross: 6 },
+    ];
+    const result = computeRoundNet({ playingHandicap: 10, holes });
+    expect(result.grossTotal).toBe(43);
+    expect(result.netTotal).toBe(33);
+    expect(result.holeNets?.find((hole) => hole.number === 9)).toEqual({
+      number: 9,
+      strokesReceived: 1,
+      netStrokes: 5,
+    });
+
+    // The reported bug: 18-hole PH 20 on this card → hole net 4, round net 23
+    const wrong = computeRoundNet({ playingHandicap: 20, holes });
+    expect(wrong.netTotal).toBe(23);
+    expect(wrong.holeNets?.find((hole) => hole.number === 9)?.netStrokes).toBe(4);
   });
 });

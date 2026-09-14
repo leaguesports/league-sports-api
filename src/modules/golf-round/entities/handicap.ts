@@ -14,6 +14,12 @@ export type CourseHandicapInput = {
   slopeRating: number;
   courseRating: number;
   par: number;
+  /**
+   * When set, CH is scaled to this many holes if the tee ratings describe a
+   * different hole count (18-hole CR/par on a 9-hole card, or the reverse).
+   * Omit to return the ratings-native CH (the WHS formula only).
+   */
+  holesPlayed?: 9 | 18;
 };
 
 export type PlayerHandicapSnapshot = {
@@ -46,16 +52,58 @@ export function roundHalfUp(value: number): number {
 /**
  * CH = HI × (Slope / 113) + (CourseRating − Par), then round half up.
  * Playing Handicap v1 is 100%: PH = CH.
+ *
+ * When `holesPlayed` is set and the tee ratings describe a different length
+ * (typical: 18-hole CR/par on a 9-hole round), scale with round-half-up:
+ * `roundHalfUp(ratingsCH × holesPlayed / ratingHoles)`.
  */
 export function computeCourseHandicap(input: CourseHandicapInput): number {
   const raw =
     input.handicapIndex * (input.slopeRating / 113) +
     (input.courseRating - input.par);
-  return roundHalfUp(raw);
+  const ratingsCh = roundHalfUp(raw);
+  if (input.holesPlayed == null) {
+    return ratingsCh;
+  }
+  return scaleHandicapToHolesPlayed(
+    ratingsCh,
+    input.holesPlayed,
+    inferRatingHoleCount(input.courseRating, input.par),
+  );
 }
 
 export function computePlayingHandicap(courseHandicap: number): number {
   return courseHandicap;
+}
+
+/**
+ * Infer whether tee CR/par describe a 9-hole or 18-hole course.
+ * 9-hole par/CR sit ~27–40; 18-hole ~60–80. Threshold 50 sits in the gap.
+ */
+export function inferRatingHoleCount(
+  courseRating: number,
+  par: number,
+): 9 | 18 {
+  if (courseRating >= 50 || par >= 50) {
+    return 18;
+  }
+  return 9;
+}
+
+/**
+ * Convert a ratings-native CH to the holes being played.
+ * Estimated WHS-style: 9-hole CH = round-half-up(18-hole CH / 2) when the
+ * client sent 18-hole ratings for a 9-hole card (and the reverse ×2).
+ */
+export function scaleHandicapToHolesPlayed(
+  courseHandicap: number,
+  holesPlayed: 9 | 18,
+  ratingHoles: 9 | 18,
+): number {
+  if (holesPlayed === ratingHoles) {
+    return courseHandicap;
+  }
+  return roundHalfUp(courseHandicap * (holesPlayed / ratingHoles));
 }
 
 export function parseGolfHandicapIndex(raw: unknown): number | null {

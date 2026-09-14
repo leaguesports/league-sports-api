@@ -89,7 +89,7 @@ export class GolfRound {
     const players = GolfPlayer.fromPlayers(props.players);
     const holeParTotal = course.holes.reduce((sum, hole) => sum + hole.par, 0);
     const tee = TeeRatings.from(props.tee ?? {}).withParFallback(holeParTotal);
-    applyPlayerHandicaps(players, tee, props.handicapIndexes);
+    applyPlayerHandicaps(players, tee, holesPlayed, props.handicapIndexes);
 
     return new GolfRound(
       randomUUID(),
@@ -331,6 +331,7 @@ export class GolfRound {
 function applyPlayerHandicaps(
   players: GolfPlayer[],
   tee: TeeRatings,
+  holesPlayed: 9 | 18,
   handicapIndexes?: ReadonlyMap<string, number | null>,
 ): void {
   if (!tee.canComputeHandicap || !handicapIndexes) {
@@ -350,6 +351,7 @@ function applyPlayerHandicaps(
       slopeRating: tee.slopeRating as number,
       courseRating: tee.courseRating as number,
       par: tee.teePar as number,
+      holesPlayed,
     });
     player.applyHandicap({
       handicapIndexUsed: handicapIndex,
@@ -367,7 +369,7 @@ function normalizeLockedByUserId(userId: string | null | undefined): string | nu
   return value.length === 0 ? null : value;
 }
 
-function parseHolesPlayed(raw: unknown): number {
+function parseHolesPlayed(raw: unknown): 9 | 18 {
   if (raw !== 9 && raw !== 18) {
     throw new DomainError("holesPlayed must be 9 or 18");
   }

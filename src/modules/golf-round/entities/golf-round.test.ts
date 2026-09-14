@@ -78,7 +78,7 @@ describe(GolfRound, () => {
     expect(round.hasPlayerUserId("user-1")).toBe(true);
   });
 
-  test("create snapshots CH/PH per seated user when HI + ratings exist", () => {
+  test("create snapshots 9-hole CH/PH when 18-hole ratings are sent", () => {
     const round = GolfRound.create({
       ...createProps,
       tee: {
@@ -97,8 +97,8 @@ describe(GolfRound, () => {
     expect(snapshot.players[0]).toMatchObject({
       userId: "user-1",
       handicapIndexUsed: 10.4,
-      courseHandicap: 11,
-      playingHandicap: 11,
+      courseHandicap: 6,
+      playingHandicap: 6,
       grossTotal: null,
       netTotal: null,
     });
@@ -130,7 +130,7 @@ describe(GolfRound, () => {
       slopeRating: 129,
       teePar: 72,
       players: [
-        expect.objectContaining({ playingHandicap: 11 }),
+        expect.objectContaining({ playingHandicap: 6 }),
         expect.objectContaining({ playingHandicap: null }),
       ],
     });
@@ -165,9 +165,9 @@ describe(GolfRound, () => {
 
     const snapshot = round.toSnapshot();
     expect(snapshot.players[0]).toMatchObject({
-      playingHandicap: 2,
+      playingHandicap: 1,
       grossTotal: 36,
-      netTotal: 34,
+      netTotal: 35,
     });
     expect(snapshot.players[1]).toMatchObject({
       playingHandicap: null,
@@ -180,5 +180,139 @@ describe(GolfRound, () => {
       netStrokes: { "1": 3 },
     });
     expect(snapshot.score?.holes[2]?.netStrokes).toEqual({ "1": 4 });
+  });
+
+  test("9-hole tee ratings are not halved", () => {
+    const round = GolfRound.create({
+      ...createProps,
+      tee: {
+        courseRating: 35.2,
+        slopeRating: 113,
+        teePar: 36,
+      },
+      handicapIndexes: new Map([["user-1", 20]]),
+    });
+    expect(round.toSnapshot().players[0]).toMatchObject({
+      courseHandicap: 19,
+      playingHandicap: 19,
+    });
+  });
+
+  test("18-hole round with PH 20 gives one stroke on SI 15", () => {
+    const courseHoles18 = Array.from({ length: 18 }, (_, index) => ({
+      number: index + 1,
+      par: ((index % 3) + 3) as 3 | 4 | 5,
+      strokeIndex: index + 1,
+    }));
+    const round = GolfRound.create({
+      ...createProps,
+      holesPlayed: 18,
+      course: { name: "Championship", holes: courseHoles18 },
+      tee: { courseRating: 72, slopeRating: 113, teePar: 72 },
+      handicapIndexes: new Map([["user-1", 20]]),
+    });
+    expect(round.toSnapshot().players[0]).toMatchObject({
+      courseHandicap: 20,
+      playingHandicap: 20,
+    });
+
+    const lockedScore = GolfScore.from(
+      {
+        holes: courseHoles18.map((hole) => ({
+          number: hole.number,
+          strokes: { "1": 4, "2": 5 },
+        })),
+      },
+      {
+        holeNumbers: courseHoles18.map((hole) => hole.number),
+        playerSlots: [1, 2],
+      },
+    );
+    round.lock(lockedScore, new Date("2026-09-04T12:00:00.000Z"), "user-1");
+
+    const snapshot = round.toSnapshot();
+    expect(snapshot.players[0]).toMatchObject({
+      playingHandicap: 20,
+      grossTotal: 72,
+      netTotal: 52,
+    });
+    expect(snapshot.score?.holes[0]?.netStrokes).toEqual({ "1": 2 });
+    expect(snapshot.score?.holes[14]).toMatchObject({
+      number: 15,
+      strokes: { "1": 4, "2": 5 },
+      netStrokes: { "1": 3 },
+    });
+  });
+
+  test("issue #65: 9-hole card with 18-hole PH 20 snapshots as PH 10", () => {
+    const screenshotHoles = [
+      { number: 1, par: 4 as const, strokeIndex: 7 },
+      { number: 2, par: 4 as const, strokeIndex: 3 },
+      { number: 3, par: 3 as const, strokeIndex: 13 },
+      { number: 4, par: 5 as const, strokeIndex: 1 },
+      { number: 5, par: 4 as const, strokeIndex: 11 },
+      { number: 6, par: 4 as const, strokeIndex: 5 },
+      { number: 7, par: 4 as const, strokeIndex: 17 },
+      { number: 8, par: 3 as const, strokeIndex: 9 },
+      { number: 9, par: 5 as const, strokeIndex: 15 },
+    ];
+    const screenshotGross = [5, 5, 4, 6, 4, 5, 4, 4, 6];
+    const round = GolfRound.create({
+      ...createProps,
+      course: { name: "Front Nine", holes: screenshotHoles },
+      tee: { courseRating: 72, slopeRating: 113, teePar: 72 },
+      handicapIndexes: new Map([["user-1", 20]]),
+    });
+    expect(round.toSnapshot().players[0]).toMatchObject({
+      courseHandicap: 10,
+      playingHandicap: 10,
+    });
+
+    const lockedScore = GolfScore.from(
+      {
+        holes: screenshotHoles.map((hole, index) => ({
+          number: hole.number,
+          strokes: { "1": screenshotGross[index], "2": 5 },
+        })),
+      },
+      {
+        holeNumbers: screenshotHoles.map((hole) => hole.number),
+        playerSlots: [1, 2],
+      },
+    );
+    round.lock(lockedScore, new Date("2026-09-04T12:00:00.000Z"), "user-1");
+
+    const snapshot = round.toSnapshot();
+    expect(snapshot.players[0]).toMatchObject({
+      playingHandicap: 10,
+      grossTotal: 43,
+      netTotal: 33,
+    });
+    expect(snapshot.score?.holes[8]).toMatchObject({
+      number: 9,
+      strokes: { "1": 6, "2": 5 },
+      netStrokes: { "1": 5 },
+    });
+    expect(snapshot.players[1]).toMatchObject({
+      playingHandicap: null,
+      grossTotal: 45,
+      netTotal: null,
+    });
+  });
+
+  test("back nine with 18-hole ratings also uses 9-hole CH/PH", () => {
+    const backNine = Array.from({ length: 9 }, (_, index) => ({
+      number: index + 10,
+      par: 4 as const,
+      strokeIndex: (index + 1) * 2,
+    }));
+    const round = GolfRound.create({
+      ...createProps,
+      startingHole: 10,
+      course: { name: "Back Nine", holes: backNine },
+      tee: { courseRating: 72, slopeRating: 113, teePar: 72 },
+      handicapIndexes: new Map([["user-1", 20]]),
+    });
+    expect(round.toSnapshot().players[0].playingHandicap).toBe(10);
   });
 });

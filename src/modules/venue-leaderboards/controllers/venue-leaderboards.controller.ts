@@ -2,7 +2,9 @@ import { Request, Response } from "express";
 import { z } from "zod";
 
 import { DomainError } from "../../../lib/domain-error";
+import { FriendshipPersistenceError } from "../../friends/repositories/friendship-persistence-error";
 import { VenueLeaderboardPersistenceError } from "../repositories/venue-leaderboard-persistence-error";
+import { GetVenueFriendsPlayed } from "../services/get-venue-friends-played.service";
 import {
   GetVenueLeaderboards,
   VenueLeaderboardNotFoundError,
@@ -19,6 +21,7 @@ const querySchema = z.object({
 
 export function createVenueLeaderboardsController(deps: {
   getVenueLeaderboards: GetVenueLeaderboards;
+  getVenueFriendsPlayed: GetVenueFriendsPlayed;
   tryGetSessionUserId: (req: Request) => string | null;
 }) {
   return {
@@ -35,6 +38,24 @@ export function createVenueLeaderboardsController(deps: {
           idOrCmsId,
           board: query.board,
           window: query.window,
+        });
+        return res.status(200).json(result);
+      } catch (error) {
+        return sendLeaderboardError(res, error);
+      }
+    },
+
+    async friendsPlayed(req: Request, res: Response) {
+      try {
+        const userId = deps.tryGetSessionUserId(req);
+        if (!userId) {
+          return res.status(401).json({ error: "Unauthorized" });
+        }
+
+        const { idOrCmsId } = z.parse(idOrCmsIdParamSchema, req.params);
+        const result = await deps.getVenueFriendsPlayed.execute({
+          viewerUserId: userId,
+          idOrCmsId,
         });
         return res.status(200).json(result);
       } catch (error) {
@@ -58,7 +79,10 @@ function sendLeaderboardError(res: Response, error: unknown) {
     return res.status(400).json({ error: message });
   }
 
-  if (error instanceof VenueLeaderboardPersistenceError) {
+  if (
+    error instanceof VenueLeaderboardPersistenceError ||
+    error instanceof FriendshipPersistenceError
+  ) {
     return res.status(503).json({ error: error.message });
   }
 

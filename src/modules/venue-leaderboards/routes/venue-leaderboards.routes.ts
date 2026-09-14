@@ -22,5 +22,13 @@ export function createVenueLeaderboardsRoutes(
     },
   );
 
+  router.get(
+    "/api/venues/:idOrCmsId/friends-played",
+    options.requireAuth,
+    (req, res) => {
+      void controller.friendsPlayed(req, res);
+    },
+  );
+
   return router;
 }

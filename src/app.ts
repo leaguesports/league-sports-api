@@ -362,6 +362,7 @@ export async function createApp(
     matchRepository: match.matchRepository,
     golfRoundRepository: golfRound.golfRoundRepository,
     dartsMatchRepository: darts.dartsMatchRepository,
+    friendshipRepository: friends.friendshipRepository,
     venueLeaderboardRepository: dependencies.venueLeaderboardRepository,
     useInMemoryLeaderboards: Boolean(
       dependencies.venueRepository || dependencies.venueLeaderboardRepository,

@@ -93,6 +93,32 @@ Per `venueCmsId + board + windowKey`:
 
 Lock ingest invalidates the in-memory cache for that venue.
 
+## Friends who’ve played at this venue (thin v1)
+
+Intersection of the viewer’s **accepted friends** (same graph as Organise invites) and users with a **locked** padel / golf / darts event at this venue. Guests never appear (facts are signed-in only). `appearOnVenueLeaderboards === false` uses the **same Profile switch** as the boards — no second privacy flag.
+
+```
+GET /api/venues/:idOrCmsId/friends-played
+```
+
+- Signed-in session required (401 otherwise). Same `:idOrCmsId` resolution as leaderboards.
+- Sorted by most recent lock at this venue (`lastPlayedAt` desc).
+- `friends` is capped at **6**; `total` is the uncapped count for “+N more”.
+- `summary` is optional: golf 18-hole `bestGross` / `bestNet` at this venue when present; otherwise `null` (Frontend can say “Beat their score”).
+- No migration — reads `VenueLeaderboardEventFact` + existing friendships.
+
+### Verify
+
+```bash
+# Replace COOKIE and VENUE with a signed-in session cookie and a venue cms id (or internal UUID).
+curl -sS -H "Cookie: token=$COOKIE" \
+  "http://localhost:3000/api/venues/$VENUE/friends-played"
+```
+
+Privacy: `PUT /api/me/preferences` `{ "appearOnVenueLeaderboards": false }` hides that user from this list and from boards.
+
+Frontend UI is out of scope for this API.
+
 ## Out of scope
 
-Frontend, TV, inventing scores, ClubMaster, most improved.
+Frontend, TV, inventing scores, ClubMaster, most improved, start-match flow, moments, invites nag.

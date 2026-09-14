@@ -7,6 +7,7 @@ import {
 
 import { PrismaClient } from "../../generated/prisma/client";
 import { DartsMatchRepository } from "../darts/repositories/darts-match.repository";
+import { FriendshipRepository } from "../friends/repositories/friendship.repository";
 import { GolfRoundRepository } from "../golf-round/repositories/golf-round.repository";
 import { MatchRepository } from "../match/repositories/match.repository";
 import { OnScorecardLocked } from "../scorecards/on-scorecard-locked";
@@ -17,6 +18,7 @@ import { InMemoryVenueLeaderboardRepository } from "./repositories/in-memory-ven
 import { PrismaVenueLeaderboardRepository } from "./repositories/prisma-venue-leaderboard.repository";
 import { VenueLeaderboardRepository } from "./repositories/venue-leaderboard.repository";
 import { createVenueLeaderboardsRoutes } from "./routes/venue-leaderboards.routes";
+import { GetVenueFriendsPlayed } from "./services/get-venue-friends-played.service";
 import { GetVenueLeaderboards } from "./services/get-venue-leaderboards.service";
 import { IngestLockedScorecard } from "./services/ingest-locked-scorecard.service";
 import { RecomputeVenueLeaderboards } from "./services/recompute-venue-leaderboards.service";
@@ -28,6 +30,7 @@ export type CreateVenueLeaderboardsModuleParams = {
   matchRepository: MatchRepository;
   golfRoundRepository: GolfRoundRepository;
   dartsMatchRepository: DartsMatchRepository;
+  friendshipRepository: FriendshipRepository;
   venueLeaderboardRepository?: VenueLeaderboardRepository;
   useInMemoryLeaderboards?: boolean;
   tryGetSessionUserId: (req: Request) => string | null;
@@ -47,6 +50,7 @@ export function createVenueLeaderboardsModule({
   matchRepository,
   golfRoundRepository,
   dartsMatchRepository,
+  friendshipRepository,
   venueLeaderboardRepository: venueLeaderboardRepositoryOverride,
   useInMemoryLeaderboards,
   tryGetSessionUserId,
@@ -83,8 +87,14 @@ export function createVenueLeaderboardsModule({
     venueLeaderboardRepository,
     cache,
   );
+  const getVenueFriendsPlayed = new GetVenueFriendsPlayed(
+    venueRepository,
+    venueLeaderboardRepository,
+    friendshipRepository,
+  );
   const controller = createVenueLeaderboardsController({
     getVenueLeaderboards,
+    getVenueFriendsPlayed,
     tryGetSessionUserId,
   });
 
@@ -107,6 +117,7 @@ export { InMemoryVenueLeaderboardRepository } from "./repositories/in-memory-ven
 export { PrismaVenueLeaderboardRepository } from "./repositories/prisma-venue-leaderboard.repository";
 export { VenueLeaderboardPersistenceError } from "./repositories/venue-leaderboard-persistence-error";
 export type { VenueLeaderboardRepository } from "./repositories/venue-leaderboard.repository";
+export { GetVenueFriendsPlayed } from "./services/get-venue-friends-played.service";
 export { GetVenueLeaderboards } from "./services/get-venue-leaderboards.service";
 export { IngestLockedScorecard } from "./services/ingest-locked-scorecard.service";
 export { RecomputeVenueLeaderboards } from "./services/recompute-venue-leaderboards.service";

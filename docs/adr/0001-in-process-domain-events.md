@@ -1,0 +1,3 @@
+# In-process Domain Events for cross-context reactions
+
+We will deepen today's `onScorecardLocked` callback chain into an explicit in-process Domain Event dispatcher (starting with `ScorecardLocked`), still synchronous and in the same deployable. API shape: typed `publish` + `subscribe`, handlers registered at composition time; `publish` awaits handlers and propagates errors so lock + side effects still succeed or fail together. Async transport (queue/outbox/workers) and per-handler isolation are later decisions. We chose this over keeping ad-hoc composition-root callbacks (hard to navigate) and over introducing messaging now (out of scope for an incremental, HTTP-stable restructure).

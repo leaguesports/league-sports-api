@@ -1,0 +1,5 @@
+# Sport segments plus a thin hub
+
+Padel, Golf, and Darts are top-level code segments. Each Sport owns its Scorecard and sport-only play (padel pairings, golf handicap and GolfTour, darts turns). Hub modules stay shared: Identity, Discovery (venues and leaderboard projections), one Lobby, OrganisedGame (delegates start into the Sport), teams / TeamMatch / Tournament (sport is a parameter), Social, and the in-process Domain Event bus.
+
+We rejected putting sports inside Scorecards/Organise/Competition (ADR-0002) because that hides the real seam: sport rules differ, matching and people do not. We rejected cloning Lobby or TeamMatch per sport: one matchmaker and one team-challenge graph already work across sports; duplication would fork them. HTTP routes stay stable; folder moves are incremental (sport modules first, hub grouping later).

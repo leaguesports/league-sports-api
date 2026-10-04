@@ -1,3 +1,7 @@
 # Incremental context restructure (docs → bus → hot paths)
 
+**Status:** superseded by [ADR-0003](./0003-sport-segments-and-hub.md)
+
 We restructure toward named contexts (Identity, Discovery, Scorecards, Organise, Competition, Social, Platform) without a big-bang tree move. Order of work: (1) domain docs (glossary, map, ADRs, readme), (2) in-process Domain Event dispatcher with `ScorecardLocked` migrated off `createApp` closures, (3) move only hot clusters on disk — starting with Scorecards — leaving other modules flat until touched. We rejected a full `src/contexts/*` move now (noisy, high merge risk) and rejected staying flat forever (does not fix findability). HTTP routes and payloads stay stable across these steps.
+
+Superseded because Scorecards / Organise / Competition as *owners of sport modules* was the wrong cut: Sports are top-level segments; the hub stays thin. Incremental PRs and HTTP stability still stand.

@@ -7,13 +7,14 @@ Backend for the **Sport Hub**: tools for fans, players, and pros across sports (
 Read these before changing structure or naming:
 
 - [GLOSSARY.md](./GLOSSARY.md) — product language
-- [GLOSSARY-MAP.md](./GLOSSARY-MAP.md) — contexts and how they relate
+- [GLOSSARY-MAP.md](./GLOSSARY-MAP.md) — sports, hub contexts, and how they relate
 - [docs/adr/](./docs/adr/) — architectural decisions
 
 Notable ADRs:
 
 - [0001 – In-process Domain Events](./docs/adr/0001-in-process-domain-events.md)
-- [0002 – Incremental context restructure](./docs/adr/0002-incremental-context-restructure.md)
+- [0002 – Incremental restructure (superseded)](./docs/adr/0002-incremental-context-restructure.md)
+- [0003 – Sport segments and hub](./docs/adr/0003-sport-segments-and-hub.md)
 
 ## Stack
 
@@ -42,16 +43,18 @@ Default port: `3000` (see `.env.example`).
 
 Feature modules live under `src/modules/*` (controllers → services → repositories). Composition root: `src/app.ts`.
 
-We are moving toward named **contexts** incrementally (docs → Domain Event bus → hot-path folder moves). See ADR-0002. HTTP routes and payloads stay stable across that work.
+We are moving toward **sport segments** plus a **thin hub** (docs → Domain Event bus → move sport modules). See ADR-0003. HTTP routes and payloads stay stable across that work.
 
-## Contexts (target)
+## Target layout
 
-| Context | Owns (roughly) |
+| Segment | Owns (roughly) |
 | --- | --- |
+| Padel | padel Scorecard (`match`) |
+| Golf | golf Scorecard (`golf-round`), GolfTour |
+| Darts | darts Scorecard (`darts`) |
 | Identity | accounts, sessions, profiles, Google OAuth |
 | Discovery | venues, venue leaderboards; future Event |
-| Scorecards | padel (`match`), golf-round, darts, scorecard lock seam |
-| Organise | organised-games, lobby |
-| Competition | teams, team-matches, tournaments, golf-tours |
+| Organise | lobby; OrganisedGame (starts via Padel/Golf) |
+| Competition | teams, TeamMatch, Tournament (calls into the Sport) |
 | Social | friends, communities, notifications |
 | Platform | parked tools (badges, preferences, integrations, roadmap, intents, openf1, pools, training) |

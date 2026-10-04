@@ -8,6 +8,22 @@ A multi-sport hub that gives fans, players, and pros tools around play, discover
 The product: one platform of tools for people with different relationships to sport (fans, players, pros), not a single-sport league manager.
 _Avoid_: League racing, sim racing league (legacy readme wording)
 
+**Sport**:
+A playable vertical in the hub today: Padel, Golf, or Darts. Each Sport owns its Scorecard and sport-only play. Hub-wide features (identity, venues, lobby, teams) are not Sports.
+_Avoid_: Treating Scorecards, Organise, or Competition as owners of sport code
+
+**Padel**:
+The racket-sport vertical. Its Scorecard is still named Match in code and `/api/matches`.
+_Avoid_: Match as a generic word for other sports
+
+**Golf**:
+The golf vertical: golf Scorecard (round), handicap, and GolfTour.
+_Avoid_: Folding golf-only tour play into Tournament
+
+**Darts**:
+The darts vertical: darts Scorecard (501) and turns. Lobby can match darts; OrganisedGame cannot start darts yet.
+_Avoid_: Assuming Organise supports every Sport
+
 **Fan**:
 Someone engaging around sport without necessarily playing in a given activity (follow, discover, watch, support).
 _Avoid_: Spectator (unless we later mean live-audience specifically)
@@ -37,7 +53,7 @@ A named fact that something already happened in the domain, published for other 
 _Avoid_: Event (unqualified), callback, hook (those are mechanisms)
 
 **Scorecard**:
-A sport-specific record of play that is live while in progress and locked when finished. Padel, golf, and darts each have a Scorecard shape.
+A Sport-owned record of play that is live while in progress and locked when finished. Not a hub context — each Sport has its own Scorecard shape.
 _Avoid_: Match (ambiguous), game (ambiguous with OrganisedGame)
 
 **Match**:

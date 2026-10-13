@@ -2,7 +2,7 @@ import { InMemoryDartsMatchRepository } from "../../darts/repositories/in-memory
 import { InMemoryFriendProfileLookup } from "../../friends/repositories/in-memory-friend-profile.lookup";
 import { InMemoryFriendshipRepository } from "../../friends/repositories/in-memory-friendship.repository";
 import { InMemoryGolfRoundRepository } from "../../golf-round/repositories/in-memory-golf-round.repository";
-import { InMemoryMatchRepository } from "../../match/repositories/in-memory-match.repository";
+import { InMemoryMatchRepository } from "../../padel/repositories/in-memory-match.repository";
 import { Team } from "../../teams/entities/team";
 import { TeamName } from "../../teams/entities/team-name";
 import { TeamSport } from "../../teams/entities/team-sport";
@@ -30,7 +30,7 @@ import {
 } from "./team-matches.service";
 import { CreateDartsMatch } from "../../darts/services/create-darts-match.service";
 import { CreateGolfRound } from "../../golf-round/services/create-golf-round.service";
-import { CreateMatch } from "../../match/services/create-match.service";
+import { CreateMatch } from "../../padel/services/create-match.service";
 
 async function becomeFriends(
   friendships: InMemoryFriendshipRepository,

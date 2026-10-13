@@ -14,9 +14,9 @@ import { GolfRoundRepository } from "../golf-round/repositories/golf-round.repos
 import { PrismaGolfHandicapIndexLookup } from "../golf-round/repositories/prisma-golf-handicap-index.lookup";
 import { CreateGolfRound } from "../golf-round/services/create-golf-round.service";
 import { GetGolfRoundById } from "../golf-round/services/get-golf-round-by-id.service";
-import { MatchRepository } from "../match/repositories/match.repository";
-import { CreateMatch } from "../match/services/create-match.service";
-import { GetMatchById } from "../match/services/get-match-by-id.service";
+import { MatchRepository } from "../padel/repositories/match.repository";
+import { CreateMatch } from "../padel/services/create-match.service";
+import { GetMatchById } from "../padel/services/get-match-by-id.service";
 import { OnScorecardLocked } from "../scorecards/on-scorecard-locked";
 import { TeamRepository } from "../teams/repositories/team.repository";
 import { VenueRepository } from "../venue/repositories/venue.repository";

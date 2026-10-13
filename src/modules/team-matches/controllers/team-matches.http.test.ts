@@ -10,7 +10,7 @@ import { InMemoryFriendProfileLookup } from "../../friends/repositories/in-memor
 import { InMemoryFriendshipRepository } from "../../friends/repositories/in-memory-friendship.repository";
 import { InMemoryGolfRoundRepository } from "../../golf-round/repositories/in-memory-golf-round.repository";
 import { signAuthenticationToken } from "../../identity/utils/jwt";
-import { InMemoryMatchRepository } from "../../match/repositories/in-memory-match.repository";
+import { InMemoryMatchRepository } from "../../padel/repositories/in-memory-match.repository";
 import { Team } from "../../teams/entities/team";
 import { TeamName } from "../../teams/entities/team-name";
 import { TeamSport } from "../../teams/entities/team-sport";

@@ -1,6 +1,6 @@
 import { DartsMatchRepository } from "../../darts/repositories/darts-match.repository";
 import { GolfRoundRepository } from "../../golf-round/repositories/golf-round.repository";
-import { MatchRepository } from "../../match/repositories/match.repository";
+import { MatchRepository } from "../../padel/repositories/match.repository";
 import { ScorecardLockedEvent } from "../../scorecards/on-scorecard-locked";
 import { VenueEventFact } from "../entities/venue-event-fact";
 import { VenueLeaderboardRepository } from "../repositories/venue-leaderboard.repository";

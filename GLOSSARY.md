@@ -13,7 +13,7 @@ A playable vertical in the hub today: Padel, Golf, or Darts. Each Sport owns its
 _Avoid_: Treating Scorecards, Organise, or Competition as owners of sport code
 
 **Padel**:
-The racket-sport vertical. Its Scorecard is still named Match in code and `/api/matches`.
+The racket-sport vertical (`src/modules/padel`). Its Scorecard is still named Match in code and `/api/matches`.
 _Avoid_: Match as a generic word for other sports
 
 **Golf**:
@@ -57,7 +57,7 @@ A Sport-owned record of play that is live while in progress and locked when fini
 _Avoid_: Match (ambiguous), game (ambiguous with OrganisedGame)
 
 **Match**:
-Legacy/code name for the **padel** Scorecard (`/api/matches` today). Prefer saying Padel Scorecard in new language; rename is planned without breaking the HTTP surface in this pass.
+Legacy/code name for the **padel** Scorecard (`src/modules/padel`, `/api/matches`). Prefer saying Padel Scorecard in new language. The HTTP surface stays `/api/matches`.
 _Avoid_: Using Match for golf, darts, team fixtures, or organised games
 
 **OrganisedGame**:

@@ -7,7 +7,7 @@ import jwt from "jsonwebtoken";
 import { createApp } from "../../../app";
 import { Config } from "../../../config";
 import { InMemoryFriendshipRepository } from "../../friends/repositories/in-memory-friendship.repository";
-import { InMemoryMatchRepository } from "../../match/repositories/in-memory-match.repository";
+import { InMemoryMatchRepository } from "../../padel/repositories/in-memory-match.repository";
 import { CmsId } from "../../venue/entities/cms-id";
 import { Slug } from "../../venue/entities/slug";
 import { Venue } from "../../venue/entities/venue";

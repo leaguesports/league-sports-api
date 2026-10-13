@@ -17,7 +17,7 @@ import { createIdentityModule } from "./modules/identity";
 import {
   createMatchModule,
   MatchRepository,
-} from "./modules/match";
+} from "./modules/padel";
 import {
   createFriendsModule,
   FriendProfileLookup,

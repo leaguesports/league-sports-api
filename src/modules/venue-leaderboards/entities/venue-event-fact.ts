@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import { DartsMatch } from "../../darts/entities/darts-match";
 import { GolfRound } from "../../golf-round/entities/golf-round";
-import { Match } from "../../match/entities/match";
+import { Match } from "../../padel/entities/match";
 
 export const LEADERBOARD_SPORTS = ["padel", "golf", "darts"] as const;
 

@@ -1,7 +1,7 @@
 import { DomainError } from "../../../lib/domain-error";
 import { FriendshipRepository } from "../../friends/repositories/friendship.repository";
 import { GolfRoundRepository } from "../../golf-round/repositories/golf-round.repository";
-import { MatchRepository } from "../../match/repositories/match.repository";
+import { MatchRepository } from "../../padel/repositories/match.repository";
 import { SERVER_BADGE_IDS, type ServerBadgeId } from "../catalog";
 import {
   BadgeEvidence,

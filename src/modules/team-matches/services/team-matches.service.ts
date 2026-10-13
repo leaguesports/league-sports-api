@@ -7,8 +7,8 @@ import {
 } from "../../friends/repositories/friendship.repository";
 import { CreateGolfRound } from "../../golf-round/services/create-golf-round.service";
 import { GetGolfRoundById } from "../../golf-round/services/get-golf-round-by-id.service";
-import { CreateMatch } from "../../match/services/create-match.service";
-import { GetMatchById } from "../../match/services/get-match-by-id.service";
+import { CreateMatch } from "../../padel/services/create-match.service";
+import { GetMatchById } from "../../padel/services/get-match-by-id.service";
 import { Team } from "../../teams/entities/team";
 import { TeamForbiddenError } from "../../teams/entities/team-forbidden-error";
 import { TeamNotFoundError } from "../../teams/entities/team-not-found-error";

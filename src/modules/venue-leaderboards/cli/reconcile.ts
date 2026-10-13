@@ -2,7 +2,7 @@ import { getConfig } from "../../../config";
 import { createPrismaClient } from "../../../lib/prisma";
 import { PrismaDartsMatchRepository } from "../../darts/repositories/prisma-darts-match.repository";
 import { PrismaGolfRoundRepository } from "../../golf-round/repositories/prisma-golf-round.repository";
-import { PrismaMatchRepository } from "../../match/repositories/prisma-match.repository";
+import { PrismaMatchRepository } from "../../padel/repositories/prisma-match.repository";
 import { PrismaVenueRepository } from "../../venue/repositories/prisma-venue.repository";
 import { LeaderboardMemoryCache } from "../cache/leaderboard-cache";
 import { PrismaVenueLeaderboardRepository } from "../repositories/prisma-venue-leaderboard.repository";

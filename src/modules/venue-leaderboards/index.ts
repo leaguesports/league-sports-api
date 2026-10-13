@@ -9,7 +9,7 @@ import { PrismaClient } from "../../generated/prisma/client";
 import { DartsMatchRepository } from "../darts/repositories/darts-match.repository";
 import { FriendshipRepository } from "../friends/repositories/friendship.repository";
 import { GolfRoundRepository } from "../golf-round/repositories/golf-round.repository";
-import { MatchRepository } from "../match/repositories/match.repository";
+import { MatchRepository } from "../padel/repositories/match.repository";
 import { OnScorecardLocked } from "../scorecards/on-scorecard-locked";
 import { VenueRepository } from "../venue/repositories/venue.repository";
 import { LeaderboardMemoryCache } from "./cache/leaderboard-cache";

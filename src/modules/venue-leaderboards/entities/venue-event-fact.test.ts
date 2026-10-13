@@ -1,7 +1,7 @@
 import { CmsId } from "../../venue/entities/cms-id";
-import { Match } from "../../match/entities/match";
-import { StartsAt } from "../../match/entities/starts-at";
-import { Ruleset } from "../../match/entities/ruleset";
+import { Match } from "../../padel/entities/match";
+import { StartsAt } from "../../padel/entities/starts-at";
+import { Ruleset } from "../../padel/entities/ruleset";
 import { VenueEventFact } from "./venue-event-fact";
 
 describe("VenueEventFact.fromPadelMatch", () => {

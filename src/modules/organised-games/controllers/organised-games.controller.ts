@@ -3,7 +3,7 @@ import { z } from "zod";
 
 import { DomainError } from "../../../lib/domain-error";
 import { GolfRoundVenueNotFoundError } from "../../golf-round/entities/golf-round-venue-not-found-error";
-import { MatchVenueNotFoundError } from "../../match/entities/match-venue-not-found-error";
+import { MatchVenueNotFoundError } from "../../padel/entities/match-venue-not-found-error";
 import { OrganisedGameCapacityError } from "../entities/organised-game-capacity-error";
 import { OrganisedGameForbiddenError } from "../entities/organised-game-forbidden-error";
 import { OrganisedGameNotFoundError } from "../entities/organised-game-not-found-error";

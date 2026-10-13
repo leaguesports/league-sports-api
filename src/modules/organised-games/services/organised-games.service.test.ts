@@ -8,8 +8,8 @@ import { InMemoryFriendProfileLookup } from "../../friends/repositories/in-memor
 import { InMemoryFriendshipRepository } from "../../friends/repositories/in-memory-friendship.repository";
 import { InMemoryGolfRoundRepository } from "../../golf-round/repositories/in-memory-golf-round.repository";
 import { CreateGolfRound } from "../../golf-round/services/create-golf-round.service";
-import { InMemoryMatchRepository } from "../../match/repositories/in-memory-match.repository";
-import { CreateMatch } from "../../match/services/create-match.service";
+import { InMemoryMatchRepository } from "../../padel/repositories/in-memory-match.repository";
+import { CreateMatch } from "../../padel/services/create-match.service";
 import { InMemoryNotificationRepository } from "../../notifications/repositories/in-memory-notification.repository";
 import { NotifyOrganisedGameInvite } from "../../notifications/services/notifications.service";
 import { OrganisedGameNotFriendError } from "../entities/organised-game-not-friend-error";

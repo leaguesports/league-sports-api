@@ -11,7 +11,7 @@ import { Slug } from "../../venue/entities/slug";
 import { Venue } from "../../venue/entities/venue";
 import { VenueName } from "../../venue/entities/venue-name";
 import { InMemoryVenueRepository } from "../../venue/repositories/in-memory-venue.repository";
-import { InMemoryMatchRepository } from "../../match/repositories/in-memory-match.repository";
+import { InMemoryMatchRepository } from "../../padel/repositories/in-memory-match.repository";
 import { InMemoryPreferencesRepository } from "../../preferences/repositories/in-memory-preferences.repository";
 import { VenueEventFact } from "../entities/venue-event-fact";
 import { InMemoryVenueLeaderboardRepository } from "../repositories/in-memory-venue-leaderboard.repository";

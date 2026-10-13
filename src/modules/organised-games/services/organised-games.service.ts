@@ -6,8 +6,8 @@ import {
 } from "../../friends/repositories/friendship.repository";
 import { GolfPlayerInput } from "../../golf-round/entities/golf-player";
 import { CreateGolfRound } from "../../golf-round/services/create-golf-round.service";
-import { PairingsInput } from "../../match/entities/pairings";
-import { CreateMatch } from "../../match/services/create-match.service";
+import { PairingsInput } from "../../padel/entities/pairings";
+import { CreateMatch } from "../../padel/services/create-match.service";
 import { CmsId } from "../../venue/entities/cms-id";
 import { VenueRepository } from "../../venue/repositories/venue.repository";
 import { OrganisedGame } from "../entities/organised-game";

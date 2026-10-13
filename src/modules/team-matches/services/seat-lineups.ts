@@ -1,7 +1,7 @@
 import { FriendProfile } from "../../friends/repositories/friendship.repository";
 import { DartsPlayerInput } from "../../darts/entities/darts-player";
 import { GolfPlayerInput } from "../../golf-round/entities/golf-player";
-import { PairingsInput } from "../../match/entities/pairings";
+import { PairingsInput } from "../../padel/entities/pairings";
 import { TeamMatch } from "../entities/team-match";
 
 export type SeatedProfile = Pick<FriendProfile, "userId" | "displayName">;

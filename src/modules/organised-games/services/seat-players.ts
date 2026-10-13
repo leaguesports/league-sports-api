@@ -1,8 +1,8 @@
 import { DomainError } from "../../../lib/domain-error";
 import { FriendProfile } from "../../friends/repositories/friendship.repository";
 import { GolfPlayerInput } from "../../golf-round/entities/golf-player";
-import { MatchPlayerInput } from "../../match/entities/match-player";
-import { PairingsInput } from "../../match/entities/pairings";
+import { MatchPlayerInput } from "../../padel/entities/match-player";
+import { PairingsInput } from "../../padel/entities/pairings";
 import { OrganisedGame } from "../entities/organised-game";
 
 export type SeatedProfile = Pick<FriendProfile, "userId" | "displayName">;

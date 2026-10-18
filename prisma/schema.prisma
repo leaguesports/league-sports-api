@@ -656,8 +656,10 @@ model GolfRoundPlayer {
   @@index([userId])
 }
 
-// Casual golf day: 4-character invite, one scorer per card, live board.
+// Casual golf day: 4-character invite, every seated player can score, live board.
 // Scramble is reserved and rejected by the API until a later release.
+// organiserUserId is null until a signed-in create or POST .../claim.
+// organiserTokenHash is the sha256 of the secret shown once at create.
 enum GameDayFormat {
   stroke
   scramble
@@ -675,34 +677,36 @@ enum GameDayCardStatus {
 }
 
 model WeekendEvent {
-  id              String    @id @default(uuid())
-  organiserUserId String
-  name            String?
-  createdAt       DateTime  @default(now())
-  organiser       User      @relation(fields: [organiserUserId], references: [id])
-  gameDays        GameDay[]
+  id                 String    @id @default(uuid())
+  organiserUserId    String?
+  organiserTokenHash String?
+  name               String?
+  createdAt          DateTime  @default(now())
+  organiser          User?     @relation(fields: [organiserUserId], references: [id])
+  gameDays           GameDay[]
 
   @@index([organiserUserId])
 }
 
 model GameDay {
-  id              String         @id @default(uuid())
-  organiserUserId String
-  venueCmsId      String
-  date            DateTime       @db.Date
-  defaultTee      String
-  teeOptions      Json
-  format          GameDayFormat
-  inviteCode      String         @unique
-  watchToken      String
-  watchTokenHash  String         @unique
-  status          GameDayStatus  @default(setup)
-  weekendEventId  String?
-  version         Int            @default(0)
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
+  id                 String         @id @default(uuid())
+  organiserUserId    String?
+  organiserTokenHash String?        @unique
+  venueCmsId         String
+  date               DateTime       @db.Date
+  defaultTee         String
+  teeOptions         Json
+  format             GameDayFormat
+  inviteCode         String         @unique
+  watchToken         String
+  watchTokenHash     String         @unique
+  status             GameDayStatus  @default(setup)
+  weekendEventId     String?
+  version            Int            @default(0)
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
 
-  organiser    User              @relation(fields: [organiserUserId], references: [id])
+  organiser    User?             @relation(fields: [organiserUserId], references: [id])
   venue        Venue             @relation(fields: [venueCmsId], references: [cmsId])
   weekendEvent WeekendEvent?     @relation(fields: [weekendEventId], references: [id], onDelete: SetNull)
   players      GameDayPlayer[]
@@ -764,15 +768,14 @@ model GameDayPlayer {
   @@index([userId])
 }
 
-// Winning client timestamp per hole. Last-write-wins: an older or equal
-// timestamp is stored only on the first write.
+// One row per hole. `scores` is the per-slot last write:
+// { slot, strokes, updatedByPlayerId, updatedByName, updatedAt, clientTimestamp }.
 model GameDayHoleScore {
-  id               String   @id @default(uuid())
-  cardId           String
-  holeNumber       Int
-  strokes          Json
-  clientTimestamp  DateTime
-  card             GameDayCard @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  id         String      @id @default(uuid())
+  cardId     String
+  holeNumber Int
+  scores     Json
+  card       GameDayCard @relation(fields: [cardId], references: [id], onDelete: Cascade)
 
   @@unique([cardId, holeNumber])
   @@index([cardId])

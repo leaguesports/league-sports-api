@@ -10,7 +10,9 @@ import {
   dateLabel,
   GameDayRecord,
   headline,
+  HoleRecord,
   PlayerRecord,
+  strokesBySlot,
 } from "./record";
 
 export type Access = "organiser" | "player" | "watch";
@@ -21,7 +23,7 @@ export function toScoringPlayers(day: GameDayRecord): ScoringPlayer[] {
     for (const player of seated(day, card.id)) {
       const holes = card.course.holes.map((hole) => {
         const saved = card.holes.find((entry) => entry.holeNumber === hole.number);
-        const gross = saved?.strokes[String(player.slot)];
+        const gross = saved ? strokesBySlot(saved)[String(player.slot)] : undefined;
         return {
           number: hole.number,
           par: hole.par,
@@ -62,12 +64,15 @@ export function presentOrganiser(day: GameDayRecord) {
     status: day.status,
     version: day.version,
     weekendEventId: day.weekendEventId,
+    claimed: day.organiserUserId != null,
+    organiserPlayerId: organiserPlayerId(day),
     players: day.players.map((player) => ({
       id: player.id,
       displayName: player.displayName,
       handicapIndex: player.handicapIndex,
       teeName: player.teeName,
       joined: player.deviceTokenHash != null,
+      isOrganiser: isOrganiserPlayer(day, player),
       cardId: player.cardId,
       cardNumber: cardNumber(day, player.cardId),
       slot: player.slot,
@@ -104,7 +109,6 @@ export function presentCard(
   viewerPlayerId: string | null,
 ) {
   const players = seated(day, card.id);
-  const savedNumbers = new Set(card.holes.map((hole) => hole.holeNumber));
   return {
     id: card.id,
     gameDayId: day.id,
@@ -113,7 +117,7 @@ export function presentCard(
     golfRoundId: card.golfRoundId,
     holesPlayed: card.holesPlayed,
     startingHole: card.startingHole,
-    scoring: viewerPlayerId != null && card.scorerPlayerId === viewerPlayerId,
+    scoring: viewerPlayerId != null && players.some((player) => player.id === viewerPlayerId),
     scorer: scorerView(day, card),
     players: players.map((player) => ({
       playerId: player.id,
@@ -124,22 +128,21 @@ export function presentCard(
       courseHandicap: player.courseHandicap,
       teeName: player.teeName,
       looksRight: player.looksRight,
-      isScorer: player.id === card.scorerPlayerId,
+      isScorer: true,
       you: viewerPlayerId != null && player.id === viewerPlayerId,
     })),
     course: card.course,
     tees: card.tees,
-    holes: [...card.holes]
-      .sort((left, right) => left.holeNumber - right.holeNumber)
-      .map((hole) => ({
-        number: hole.holeNumber,
-        strokes: hole.strokes,
-        clientTimestamp: hole.clientTimestamp,
-        synced: true,
-      })),
+    holes: presentHoles(card),
     missingHoles: card.course.holes
       .map((hole) => hole.number)
-      .filter((number) => !savedNumbers.has(number)),
+      .filter((number) => {
+        const saved = card.holes.find((hole) => hole.holeNumber === number);
+        if (!saved) return true;
+        return players.some(
+          (player) => !saved.scores.some((score) => score.slot === player.slot),
+        );
+      }),
   };
 }
 
@@ -217,6 +220,7 @@ export function presentLeaderboard(
       thru: card.holes.length,
       playerCount: seated(day, card.id).length,
       syncedAt: latestTimestamp(card),
+      holes: presentHoles(card),
     })),
   };
 }
@@ -283,7 +287,7 @@ function presentPreviewCard(day: GameDayRecord, card: CardRecord) {
     players: players.map((player) => ({
       displayName: player.displayName,
       slot: player.slot,
-      scoring: player.id === card.scorerPlayerId,
+      scoring: true,
     })),
   };
 }
@@ -307,12 +311,53 @@ function scorerView(day: GameDayRecord, card: CardRecord) {
   };
 }
 
+function presentHoles(card: CardRecord) {
+  return [...card.holes]
+    .sort((left, right) => left.holeNumber - right.holeNumber)
+    .map((hole) => presentHole(hole));
+}
+
+function presentHole(hole: HoleRecord) {
+  const latestClient = hole.scores.reduce<string | null>((latest, score) => {
+    if (latest == null || score.clientTimestamp > latest) return score.clientTimestamp;
+    return latest;
+  }, null);
+  return {
+    number: hole.holeNumber,
+    strokes: strokesBySlot(hole),
+    clientTimestamp: latestClient,
+    synced: true,
+    scores: [...hole.scores]
+      .sort((left, right) => left.slot - right.slot)
+      .map((score) => ({
+        slot: score.slot,
+        strokes: score.strokes,
+        updatedByPlayerId: score.updatedByPlayerId,
+        updatedByName: score.updatedByName,
+        updatedAt: score.updatedAt,
+      })),
+  };
+}
+
 function latestTimestamp(card: CardRecord): string | null {
   let latest: string | null = null;
   for (const hole of card.holes) {
-    if (latest == null || hole.clientTimestamp > latest) {
-      latest = hole.clientTimestamp;
+    for (const score of hole.scores) {
+      if (latest == null || score.updatedAt > latest) latest = score.updatedAt;
     }
   }
   return latest;
+}
+
+function organiserPlayerId(day: GameDayRecord): string | null {
+  const player = day.players.find((item) => isOrganiserPlayer(day, item));
+  return player?.id ?? null;
+}
+
+function isOrganiserPlayer(day: GameDayRecord, player: PlayerRecord): boolean {
+  return (
+    day.organiserTokenHash != null &&
+    player.deviceTokenHash != null &&
+    player.deviceTokenHash === day.organiserTokenHash
+  );
 }

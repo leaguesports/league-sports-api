@@ -30,6 +30,18 @@ export class InMemoryGameDayRepository implements GameDayRepository {
     return found ? cloneRecord(found) : null;
   }
 
+  async updateWeekend(
+    id: string,
+    mutate: (event: WeekendRecord) => void,
+  ): Promise<WeekendRecord | null> {
+    const current = this.weekends.get(id);
+    if (!current) return null;
+    const draft = cloneRecord(current);
+    mutate(draft);
+    this.weekends.set(id, draft);
+    return cloneRecord(draft);
+  }
+
   async findById(id: string): Promise<GameDayRecord | null> {
     const found = this.days.get(id);
     return found ? cloneRecord(found) : null;

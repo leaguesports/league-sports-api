@@ -121,6 +121,14 @@ export class GolfPlayer {
     };
   }
 
+  clearLockTotals(): void {
+    this.handicapValue = {
+      ...this.handicapValue,
+      grossTotal: null,
+      netTotal: null,
+    };
+  }
+
   toSnapshot(): GolfPlayerSnapshot {
     return {
       slot: this.slot,

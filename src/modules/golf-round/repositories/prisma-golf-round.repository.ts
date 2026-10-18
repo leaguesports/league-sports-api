@@ -165,6 +165,74 @@ export class PrismaGolfRoundRepository implements GolfRoundRepository {
     }
   }
 
+  async persistUnlock(round: GolfRound): Promise<GolfRound> {
+    try {
+      await this.prisma.golfRound.updateMany({
+        where: { id: round.id, status: "locked" },
+        data: {
+          status: "live",
+          lockedAt: null,
+          lockedByUserId: null,
+          score: Prisma.JsonNull,
+        },
+      });
+      await this.prisma.golfRoundPlayer.updateMany({
+        where: { roundId: round.id },
+        data: { grossTotal: null, netTotal: null },
+      });
+      const current = await this.findById(round.id);
+      if (!current) {
+        throw new GolfRoundPersistenceError("Unable to load golf round");
+      }
+      return current;
+    } catch (error) {
+      if (error instanceof GolfRoundPersistenceError) throw error;
+      throw wrapPersistenceError(error, "Unable to save golf round");
+    }
+  }
+
+  async persistLockedScore(round: GolfRound): Promise<GolfRound> {
+    const snapshot = round.toSnapshot();
+    try {
+      const updated = await this.prisma.golfRound.updateMany({
+        where: { id: round.id, status: "locked" },
+        data: {
+          score:
+            round.score === null ? Prisma.JsonNull : round.score.toSnapshot(),
+        },
+      });
+      if (updated.count !== 1) {
+        throw new GolfRoundLockConflictError();
+      }
+      await this.prisma.$transaction(
+        snapshot.players.map((player) =>
+          this.prisma.golfRoundPlayer.update({
+            where: {
+              roundId_slot: { roundId: round.id, slot: player.slot },
+            },
+            data: {
+              grossTotal: player.grossTotal,
+              netTotal: player.netTotal,
+            },
+          }),
+        ),
+      );
+      const current = await this.findById(round.id);
+      if (!current) {
+        throw new GolfRoundPersistenceError("Unable to load golf round");
+      }
+      return current;
+    } catch (error) {
+      if (
+        error instanceof GolfRoundLockConflictError ||
+        error instanceof GolfRoundPersistenceError
+      ) {
+        throw error;
+      }
+      throw wrapPersistenceError(error, "Unable to save golf round");
+    }
+  }
+
   async listLockedByPlayerUserId(userId: string): Promise<GolfRound[]> {
     try {
       const rows = await this.prisma.golfRound.findMany({

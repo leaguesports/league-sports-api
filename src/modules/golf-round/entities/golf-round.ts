@@ -241,6 +241,29 @@ export class GolfRound {
     this.applyLockTotals(score);
   }
 
+  /**
+   * Replace the score on a locked round without changing who locked it or when.
+   * Used when an organiser corrects a confirmed game-day card.
+   */
+  reviseLockedScore(score: GolfScore): void {
+    if (this.statusValue !== "locked") {
+      throw new GolfRoundLockConflictError();
+    }
+    this.scoreValue = score;
+    this.applyLockTotals(score);
+  }
+
+  /** Open a locked round. Idempotent on a live round. Clears lock totals. */
+  unlock(): void {
+    this.statusValue = "live";
+    this.scoreValue = null;
+    this.lockedAtValue = null;
+    this.lockedByUserIdValue = null;
+    for (const player of this.players) {
+      player.clearLockTotals();
+    }
+  }
+
   hasSameScore(score: GolfScore): boolean {
     return (
       this.statusValue === "locked" &&

@@ -1,6 +1,6 @@
 export type GameDayStatus = "setup" | "in_play" | "final";
 export type CardStatus = "live" | "locked";
-export type FeedType = "birdie" | "lead_change" | "card_locked";
+export type FeedType = "birdie" | "lead_change" | "card_locked" | "card_unlocked";
 
 export type TeeRating = {
   name: string;
@@ -37,11 +37,20 @@ export type PlayerRecord = {
   playingHandicap: number | null;
 };
 
+/** One player's strokes on one hole, and who last wrote them. */
+export type SlotScore = {
+  slot: number;
+  strokes: number;
+  updatedByPlayerId: string | null;
+  updatedByName: string | null;
+  updatedAt: string;
+  clientTimestamp: string;
+};
+
 export type HoleRecord = {
   id: string;
   holeNumber: number;
-  strokes: Record<string, number>;
-  clientTimestamp: string;
+  scores: SlotScore[];
 };
 
 export type CardRecord = {
@@ -67,7 +76,8 @@ export type FeedRecord = {
 
 export type GameDayRecord = {
   id: string;
-  organiserUserId: string;
+  organiserUserId: string | null;
+  organiserTokenHash: string | null;
   venueCmsId: string;
   venueName: string;
   date: string;
@@ -87,12 +97,16 @@ export type GameDayRecord = {
 
 export type WeekendRecord = {
   id: string;
-  organiserUserId: string;
+  organiserUserId: string | null;
+  organiserTokenHash: string | null;
   name: string | null;
   createdAt: string;
 };
 
-export const MAX_PLAYERS = 16;
+export const MAX_PLAYERS = 40;
+export const MAX_CARDS = 10;
+/** Display name stored when the organiser corrects a locked card. */
+export const ORGANISER_SCORE_NAME = "Organiser";
 export const FEED_LIMIT = 40;
 
 export function deriveStatus(day: GameDayRecord): GameDayStatus {
@@ -139,4 +153,12 @@ export function headline(venueName: string, isoDate: string): string {
 
 export function cloneRecord<T>(value: T): T {
   return structuredClone(value);
+}
+
+export function strokesBySlot(hole: HoleRecord): Record<string, number> {
+  const strokes: Record<string, number> = {};
+  for (const score of hole.scores) {
+    strokes[String(score.slot)] = score.strokes;
+  }
+  return strokes;
 }

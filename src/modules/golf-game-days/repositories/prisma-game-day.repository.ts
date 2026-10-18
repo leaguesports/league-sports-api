@@ -38,6 +38,7 @@ export class PrismaGameDayRepository implements GameDayRepository {
         data: {
           id: day.id,
           organiserUserId: day.organiserUserId,
+          organiserTokenHash: day.organiserTokenHash,
           venueCmsId: day.venueCmsId,
           date: asDate(day.date),
           defaultTee: day.defaultTee,
@@ -65,16 +66,12 @@ export class PrismaGameDayRepository implements GameDayRepository {
         data: {
           id: event.id,
           organiserUserId: event.organiserUserId,
+          organiserTokenHash: event.organiserTokenHash,
           name: event.name,
           createdAt: new Date(event.createdAt),
         },
       });
-      return {
-        id: row.id,
-        organiserUserId: row.organiserUserId,
-        name: row.name,
-        createdAt: row.createdAt.toISOString(),
-      };
+      return toWeekend(row);
     } catch (error) {
       throw mapWriteError(error);
     }
@@ -84,14 +81,31 @@ export class PrismaGameDayRepository implements GameDayRepository {
     try {
       const row = await this.prisma.weekendEvent.findUnique({ where: { id } });
       if (!row) return null;
-      return {
-        id: row.id,
-        organiserUserId: row.organiserUserId,
-        name: row.name,
-        createdAt: row.createdAt.toISOString(),
-      };
+      return toWeekend(row);
     } catch (error) {
       throw wrap(error);
+    }
+  }
+
+  async updateWeekend(
+    id: string,
+    mutate: (event: WeekendRecord) => void,
+  ): Promise<WeekendRecord | null> {
+    try {
+      const row = await this.prisma.weekendEvent.findUnique({ where: { id } });
+      if (!row) return null;
+      const draft = toWeekend(row);
+      mutate(draft);
+      const saved = await this.prisma.weekendEvent.update({
+        where: { id },
+        data: {
+          organiserUserId: draft.organiserUserId,
+          name: draft.name,
+        },
+      });
+      return toWeekend(saved);
+    } catch (error) {
+      throw mapWriteError(error);
     }
   }
 
@@ -171,6 +185,7 @@ async function persist(tx: Prisma.TransactionClient, day: GameDayRecord): Promis
       defaultTee: day.defaultTee,
       teeOptions: day.teeOptions,
       weekendEventId: day.weekendEventId,
+      organiserUserId: day.organiserUserId,
     },
   });
 
@@ -192,12 +207,10 @@ async function persist(tx: Prisma.TransactionClient, day: GameDayRecord): Promis
           id: hole.id,
           cardId: card.id,
           holeNumber: hole.holeNumber,
-          strokes: hole.strokes,
-          clientTimestamp: new Date(hole.clientTimestamp),
+          scores: hole.scores as unknown as Prisma.InputJsonValue,
         },
         update: {
-          strokes: hole.strokes,
-          clientTimestamp: new Date(hole.clientTimestamp),
+          scores: hole.scores as unknown as Prisma.InputJsonValue,
         },
       });
     }
@@ -293,6 +306,7 @@ function toRecord(row: DayRow): GameDayRecord {
   return {
     id: row.id,
     organiserUserId: row.organiserUserId,
+    organiserTokenHash: row.organiserTokenHash,
     venueCmsId: row.venueCmsId,
     venueName: row.venue.name,
     date: row.date.toISOString().slice(0, 10),
@@ -348,8 +362,7 @@ function toCard(row: DayRow["cards"][number]): CardRecord {
         (hole): HoleRecord => ({
           id: hole.id,
           holeNumber: hole.holeNumber,
-          strokes: asStrokes(hole.strokes),
-          clientTimestamp: hole.clientTimestamp.toISOString(),
+          scores: asScores(hole.scores),
         }),
       )
       .sort((left, right) => left.holeNumber - right.holeNumber),
@@ -404,13 +417,41 @@ function asTees(value: Prisma.JsonValue): TeeRating[] {
   });
 }
 
-function asStrokes(value: Prisma.JsonValue): Record<string, number> {
-  const raw = asObject(value);
-  const strokes: Record<string, number> = {};
-  for (const [key, stroke] of Object.entries(raw)) {
-    if (typeof stroke === "number") strokes[key] = stroke;
+function toWeekend(row: {
+  id: string;
+  organiserUserId: string | null;
+  organiserTokenHash: string | null;
+  name: string | null;
+  createdAt: Date;
+}): WeekendRecord {
+  return {
+    id: row.id,
+    organiserUserId: row.organiserUserId,
+    organiserTokenHash: row.organiserTokenHash,
+    name: row.name,
+    createdAt: row.createdAt.toISOString(),
+  };
+}
+
+function asScores(value: Prisma.JsonValue): HoleRecord["scores"] {
+  if (!Array.isArray(value)) return [];
+  const scores: HoleRecord["scores"] = [];
+  for (const item of value) {
+    const raw = asObject(item);
+    if (typeof raw.slot !== "number" || typeof raw.strokes !== "number") continue;
+    scores.push({
+      slot: raw.slot,
+      strokes: raw.strokes,
+      updatedByPlayerId:
+        typeof raw.updatedByPlayerId === "string" ? raw.updatedByPlayerId : null,
+      updatedByName:
+        typeof raw.updatedByName === "string" ? raw.updatedByName : null,
+      updatedAt: typeof raw.updatedAt === "string" ? raw.updatedAt : "",
+      clientTimestamp:
+        typeof raw.clientTimestamp === "string" ? raw.clientTimestamp : "",
+    });
   }
-  return strokes;
+  return scores.sort((left, right) => left.slot - right.slot);
 }
 
 function asPayload(value: Prisma.JsonValue): Record<string, unknown> {

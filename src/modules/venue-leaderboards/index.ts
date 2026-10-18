@@ -10,7 +10,10 @@ import { DartsMatchRepository } from "../darts/repositories/darts-match.reposito
 import { FriendshipRepository } from "../friends/repositories/friendship.repository";
 import { GolfRoundRepository } from "../golf-round/repositories/golf-round.repository";
 import { MatchRepository } from "../padel/repositories/match.repository";
-import { OnScorecardLocked } from "../scorecards/on-scorecard-locked";
+import {
+  OnScorecardLocked,
+  OnScorecardUnlocked,
+} from "../scorecards/on-scorecard-locked";
 import { VenueRepository } from "../venue/repositories/venue.repository";
 import { LeaderboardMemoryCache } from "./cache/leaderboard-cache";
 import { createVenueLeaderboardsController } from "./controllers/venue-leaderboards.controller";
@@ -21,6 +24,7 @@ import { createVenueLeaderboardsRoutes } from "./routes/venue-leaderboards.route
 import { GetVenueFriendsPlayed } from "./services/get-venue-friends-played.service";
 import { GetVenueLeaderboards } from "./services/get-venue-leaderboards.service";
 import { IngestLockedScorecard } from "./services/ingest-locked-scorecard.service";
+import { WithdrawLockedScorecard } from "./services/withdraw-locked-scorecard.service";
 import { RecomputeVenueLeaderboards } from "./services/recompute-venue-leaderboards.service";
 import { ReconcileVenueLeaderboards } from "./services/reconcile-venue-leaderboards.service";
 
@@ -41,6 +45,7 @@ export type VenueLeaderboardsModule = {
   router: Router;
   venueLeaderboardRepository: VenueLeaderboardRepository;
   onScorecardLocked: OnScorecardLocked;
+  onScorecardUnlocked: OnScorecardUnlocked;
   reconcile: ReconcileVenueLeaderboards;
 };
 
@@ -66,6 +71,10 @@ export function createVenueLeaderboardsModule({
   const recompute = new RecomputeVenueLeaderboards(
     venueLeaderboardRepository,
     cache,
+  );
+  const withdraw = new WithdrawLockedScorecard(
+    venueLeaderboardRepository,
+    recompute,
   );
   const ingest = new IngestLockedScorecard(
     venueLeaderboardRepository,
@@ -106,6 +115,13 @@ export function createVenueLeaderboardsModule({
         await ingest.execute(event);
       } catch (error) {
         console.error("venue leaderboard ingest failed", error);
+      }
+    },
+    onScorecardUnlocked: async (event) => {
+      try {
+        await withdraw.execute(event);
+      } catch (error) {
+        console.error("venue leaderboard withdraw failed", error);
       }
     },
     reconcile,

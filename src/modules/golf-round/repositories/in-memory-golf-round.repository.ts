@@ -37,6 +37,26 @@ export class InMemoryGolfRoundRepository implements GolfRoundRepository {
     return clone(round)!;
   }
 
+  async persistUnlock(round: GolfRound): Promise<GolfRound> {
+    if (!this.byId.has(round.id)) {
+      throw new GolfRoundPersistenceError("Unable to load golf round");
+    }
+    this.byId.set(round.id, clone(round)!);
+    return clone(round)!;
+  }
+
+  async persistLockedScore(round: GolfRound): Promise<GolfRound> {
+    const stored = this.byId.get(round.id);
+    if (!stored) {
+      throw new GolfRoundPersistenceError("Unable to load golf round");
+    }
+    if (!stored.isLocked) {
+      throw new GolfRoundLockConflictError();
+    }
+    this.byId.set(round.id, clone(round)!);
+    return clone(round)!;
+  }
+
   async listLockedByPlayerUserId(userId: string): Promise<GolfRound[]> {
     return this.lockedNewestFirst().filter((round) =>
       round.hasPlayerUserId(userId),

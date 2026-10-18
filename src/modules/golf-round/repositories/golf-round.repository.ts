@@ -5,6 +5,10 @@ export interface GolfRoundRepository {
   findById(id: string): Promise<GolfRound | null>;
   create(round: GolfRound): Promise<GolfRound>;
   persistLock(round: GolfRound): Promise<GolfRound>;
+  /** Clear lock, score, and totals. Idempotent when the round is already live. */
+  persistUnlock(round: GolfRound): Promise<GolfRound>;
+  /** Update the score JSON and totals of a round that is already locked. */
+  persistLockedScore(round: GolfRound): Promise<GolfRound>;
   listLockedByPlayerUserId(userId: string): Promise<GolfRound[]>;
   listLockedByVenueCmsId(cmsId: CmsId): Promise<GolfRound[]>;
   /** Session-attributed lock timestamps for badge evaluation. */

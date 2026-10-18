@@ -4,6 +4,10 @@ export interface GameDayRepository {
   create(day: GameDayRecord): Promise<GameDayRecord>;
   createWeekend(event: WeekendRecord): Promise<WeekendRecord>;
   findWeekend(id: string): Promise<WeekendRecord | null>;
+  updateWeekend(
+    id: string,
+    mutate: (event: WeekendRecord) => void,
+  ): Promise<WeekendRecord | null>;
   findById(id: string): Promise<GameDayRecord | null>;
   findByInviteCode(code: string): Promise<GameDayRecord | null>;
   findByWatchTokenHash(hash: string): Promise<GameDayRecord | null>;

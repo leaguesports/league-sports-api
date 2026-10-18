@@ -22,7 +22,14 @@ const createBodySchema = z.object({
         teeName: teeNameSchema.optional(),
       }),
     )
-    .max(16)
+    .max(80)
+    .optional(),
+  organiserPlayer: z
+    .object({
+      displayName: z.string().trim().min(1).max(40),
+      handicapIndex: z.number().nullable().optional(),
+      teeName: teeNameSchema.optional(),
+    })
     .optional(),
   weekendEventId: z.string().min(1).optional(),
   weekendEvent: z
@@ -68,11 +75,19 @@ const startCardBodySchema = z.object({
 const saveHoleBodySchema = z.object({
   clientTimestamp: z.string().min(1),
   strokes: z.record(z.string(), z.number()),
+  expectedUpdatedAt: z.record(z.string(), z.string().nullable()).optional(),
+});
+
+const updatePlayerBodySchema = z.object({
+  displayName: z.string().trim().min(1).max(40).optional(),
+  handicapIndex: z.number().nullable().optional(),
+  teeName: teeNameSchema.optional(),
 });
 
 const codeParam = z.object({ code: z.string().min(1) });
 const idParam = z.object({ id: z.string().min(1) });
 const cardParams = z.object({ id: z.string().min(1), cardId: z.string().min(1) });
+const playerParams = z.object({ id: z.string().min(1), playerId: z.string().min(1) });
 const holeParams = cardParams.extend({ holeNumber: z.coerce.number().int() });
 const watchParams = z.object({ watchToken: z.string().min(1) });
 const weekendParams = z.object({ weekendEventId: z.string().min(1) });
@@ -82,14 +97,26 @@ export function createGameDaysController(deps: {
   tryGetSessionUserId: (req: Request) => string | null;
   inviteRateLimiter: GameDayRateLimiter;
   watchRateLimiter: GameDayRateLimiter;
+  anonymousCreateRateLimiter: GameDayRateLimiter;
+  signedInCreateRateLimiter: GameDayRateLimiter;
 }) {
   return {
     async create(req: Request, res: Response) {
       try {
         const userId = deps.tryGetSessionUserId(req);
-        if (!userId) return res.status(401).json({ error: "Unauthorized" });
         const body = z.parse(createBodySchema, req.body ?? {});
-        const created = await deps.gameDays.create(userId, body);
+        const limiter = userId
+          ? deps.signedInCreateRateLimiter
+          : deps.anonymousCreateRateLimiter;
+        if (!limiter.consume(req.ip || "unknown")) {
+          return res.status(429).json({
+            error: "Too many game days created. Try again in a little while.",
+          });
+        }
+        const created = await deps.gameDays.create(userId, {
+          ...body,
+          organiserToken: organiserToken(req),
+        });
         return res.status(201).json(created);
       } catch (error) {
         return sendError(res, error);
@@ -98,10 +125,45 @@ export function createGameDaysController(deps: {
 
     async getMine(req: Request, res: Response) {
       try {
-        const userId = deps.tryGetSessionUserId(req);
-        if (!userId) return res.status(401).json({ error: "Unauthorized" });
         const { id } = z.parse(idParam, req.params);
-        const day = await deps.gameDays.getForOrganiser(id, userId);
+        const day = await deps.gameDays.getForOrganiser(id, credentials(req, deps));
+        return res.status(200).json(day);
+      } catch (error) {
+        return sendError(res, error);
+      }
+    },
+
+    async claim(req: Request, res: Response) {
+      try {
+        const { id } = z.parse(idParam, req.params);
+        const result = await deps.gameDays.claim(
+          id,
+          deps.tryGetSessionUserId(req),
+          organiserToken(req),
+        );
+        return res.status(200).json(result);
+      } catch (error) {
+        return sendError(res, error);
+      }
+    },
+
+    async updatePlayer(req: Request, res: Response) {
+      try {
+        const { id, playerId } = z.parse(playerParams, req.params);
+        const body = z.parse(updatePlayerBodySchema, req.body ?? {});
+        if (
+          body.displayName === undefined &&
+          body.handicapIndex === undefined &&
+          body.teeName === undefined
+        ) {
+          return res.status(400).json({ error: "Nothing to update" });
+        }
+        const day = await deps.gameDays.updatePlayer(
+          id,
+          playerId,
+          body,
+          credentials(req, deps),
+        );
         return res.status(200).json(day);
       } catch (error) {
         return sendError(res, error);
@@ -137,7 +199,7 @@ export function createGameDaysController(deps: {
 
     async startCard(req: Request, res: Response) {
       try {
-        const token = deviceToken(req);
+        const token = scoringToken(req);
         if (!token) return res.status(401).json({ error: "Device token required" });
         const { id } = z.parse(idParam, req.params);
         const body = z.parse(startCardBodySchema, req.body ?? {});
@@ -150,7 +212,7 @@ export function createGameDaysController(deps: {
 
     async joinCard(req: Request, res: Response) {
       try {
-        const token = deviceToken(req);
+        const token = scoringToken(req);
         if (!token) return res.status(401).json({ error: "Device token required" });
         const { id, cardId } = z.parse(cardParams, req.params);
         const card = await deps.gameDays.joinCard(id, cardId, token);
@@ -162,7 +224,7 @@ export function createGameDaysController(deps: {
 
     async takeOver(req: Request, res: Response) {
       try {
-        const token = deviceToken(req);
+        const token = scoringToken(req);
         if (!token) return res.status(401).json({ error: "Device token required" });
         const { id, cardId } = z.parse(cardParams, req.params);
         const result = await deps.gameDays.takeOver(id, cardId, token);
@@ -174,11 +236,15 @@ export function createGameDaysController(deps: {
 
     async saveHole(req: Request, res: Response) {
       try {
-        const token = deviceToken(req);
-        if (!token) return res.status(401).json({ error: "Device token required" });
         const { id, cardId, holeNumber } = z.parse(holeParams, req.params);
         const body = z.parse(saveHoleBodySchema, req.body ?? {});
-        const result = await deps.gameDays.saveHole(id, cardId, holeNumber, token, body);
+        const result = await deps.gameDays.saveHole(
+          id,
+          cardId,
+          holeNumber,
+          scoreActor(req, deps),
+          body,
+        );
         return res.status(200).json(result);
       } catch (error) {
         return sendError(res, error);
@@ -187,7 +253,7 @@ export function createGameDaysController(deps: {
 
     async looksRight(req: Request, res: Response) {
       try {
-        const token = deviceToken(req);
+        const token = scoringToken(req);
         if (!token) return res.status(401).json({ error: "Device token required" });
         const { id, cardId } = z.parse(cardParams, req.params);
         const result = await deps.gameDays.looksRight(id, cardId, token);
@@ -199,10 +265,18 @@ export function createGameDaysController(deps: {
 
     async confirm(req: Request, res: Response) {
       try {
-        const token = deviceToken(req);
-        if (!token) return res.status(401).json({ error: "Device token required" });
         const { id, cardId } = z.parse(cardParams, req.params);
-        const result = await deps.gameDays.confirmCard(id, cardId, token);
+        const result = await deps.gameDays.confirmCard(id, cardId, scoreActor(req, deps));
+        return res.status(200).json(result);
+      } catch (error) {
+        return sendError(res, error);
+      }
+    },
+
+    async unlock(req: Request, res: Response) {
+      try {
+        const { id, cardId } = z.parse(cardParams, req.params);
+        const result = await deps.gameDays.unlockCard(id, cardId, credentials(req, deps));
         return res.status(200).json(result);
       } catch (error) {
         return sendError(res, error);
@@ -264,7 +338,37 @@ function actor(
     userId: deps.tryGetSessionUserId(req),
     deviceToken: deviceToken(req),
     watchToken: headerToken(req, "x-game-day-watch-token"),
+    organiserToken: organiserToken(req),
   };
+}
+
+function credentials(
+  req: Request,
+  deps: { tryGetSessionUserId: (req: Request) => string | null },
+) {
+  return {
+    userId: deps.tryGetSessionUserId(req),
+    organiserToken: organiserToken(req),
+  };
+}
+
+function scoreActor(
+  req: Request,
+  deps: { tryGetSessionUserId: (req: Request) => string | null },
+) {
+  return {
+    userId: deps.tryGetSessionUserId(req),
+    deviceToken: deviceToken(req),
+    organiserToken: organiserToken(req),
+  };
+}
+
+function scoringToken(req: Request): string | null {
+  return deviceToken(req) ?? organiserToken(req);
+}
+
+function organiserToken(req: Request): string | null {
+  return headerToken(req, "x-game-day-organiser-token");
 }
 
 function deviceToken(req: Request): string | null {

@@ -104,6 +104,7 @@ describe("golf game days HTTP", () => {
       id: string;
       inviteCode: string;
       watchToken: string;
+      organiserToken: string;
       players: { id: string; displayName: string }[];
     };
     return { response, body };
@@ -195,10 +196,11 @@ describe("golf game days HTTP", () => {
     ).toBe(true);
   });
 
-  test("only the scorer writes, handover rejects the old scorer, and the watch token is read-only", async () => {
+  test("any player on the card can score a slot, take-over is a no-op, and outsiders are rejected", async () => {
     const { body } = await createDay();
     const mike = await join(server.url, body.inviteCode, "Mike");
     const lerato = await join(server.url, body.inviteCode, "Lerato");
+    const outsider = await join(server.url, body.inviteCode, "Outsider");
     const started = await startCard(server.url, body.id, mike.deviceToken);
     expect(started.status).toBe(201);
     const startedBody = (await started.json()) as { card: { id: string } };
@@ -213,57 +215,128 @@ describe("golf game days HTTP", () => {
       token: body.watchToken,
       holeNumber: 1,
       clientTimestamp: stamp(-30_000),
-      strokes: { "1": 4, "2": 4 },
+      strokes: { "1": 4 },
     });
     expect(watchWrite.status).toBe(403);
     expect(await watchWrite.json()).toEqual({ error: "Watch token is read-only" });
 
+    const outsiderWrite = await saveHole(server.url, {
+      gameDayId: body.id,
+      cardId,
+      token: outsider.deviceToken,
+      holeNumber: 1,
+      clientTimestamp: stamp(-30_000),
+      strokes: { "1": 4 },
+    });
+    expect(outsiderWrite.status).toBe(403);
+
+    const mikeAt = stamp(-30_000);
     const first = await saveHole(server.url, {
       gameDayId: body.id,
       cardId,
       token: mike.deviceToken,
       holeNumber: 1,
-      clientTimestamp: stamp(-30_000),
-      strokes: { "1": 4, "2": 5 },
+      clientTimestamp: mikeAt,
+      strokes: { "1": 4 },
     });
-    expect(first.status).toBe(200);
-    expect(await first.json()).toMatchObject({ applied: true, reason: "applied" });
+    const firstBody = (await first.json()) as {
+      applied: boolean;
+      reason: string;
+      version: number;
+      card: { holes: HoleView[] };
+    };
+    expect(firstBody).toMatchObject({ applied: true, reason: "applied", conflict: false });
+    const mikeScore = firstBody.card.holes[0]?.scores.find((score) => score.slot === 1);
+    expect(mikeScore?.updatedByPlayerId).toBe(mike.playerId);
+    expect(mikeScore?.updatedByName).toBe("Mike");
 
-    const leratoWrite = await saveHole(server.url, {
+    const leratoAt = stamp(-20_000);
+    const second = await saveHole(server.url, {
       gameDayId: body.id,
       cardId,
       token: lerato.deviceToken,
       holeNumber: 1,
-      clientTimestamp: stamp(-20_000),
-      strokes: { "1": 3, "2": 3 },
+      clientTimestamp: leratoAt,
+      strokes: { "2": 5 },
     });
-    expect(leratoWrite.status).toBe(403);
+    const secondBody = (await second.json()) as {
+      version: number;
+      card: { holes: HoleView[] };
+    };
+    expect(second.status).toBe(200);
+    const hole = secondBody.card.holes.find((item) => item.number === 1);
+    expect(hole?.strokes).toEqual({ "1": 4, "2": 5 });
+    expect(hole?.scores.find((score) => score.slot === 1)?.updatedAt).toBe(
+      mikeScore?.updatedAt,
+    );
+    expect(hole?.scores.find((score) => score.slot === 2)?.updatedByName).toBe("Lerato");
+    expect(secondBody.version).toBe(firstBody.version + 1);
 
     const takeover = await fetch(
       `${server.url}/api/golf-game-days/${body.id}/cards/${cardId}/take-over`,
       { method: "POST", headers: { "X-Game-Day-Token": lerato.deviceToken } },
     );
     expect(takeover.status).toBe(200);
+    expect(await takeover.json()).toEqual({
+      cardId,
+      scoring: true,
+      deprecated: true,
+    });
 
-    const oldScorer = await saveHole(server.url, {
+    const replay = await saveHole(server.url, {
       gameDayId: body.id,
       cardId,
       token: mike.deviceToken,
       holeNumber: 1,
-      clientTimestamp: stamp(-10_000),
-      strokes: { "1": 4, "2": 4 },
+      clientTimestamp: mikeAt,
+      strokes: { "1": 4 },
     });
-    expect(oldScorer.status).toBe(403);
+    const replayBody = (await replay.json()) as {
+      applied: boolean;
+      reason: string;
+      version: number;
+      card: { holes: HoleView[] };
+    };
+    expect(replayBody).toMatchObject({ applied: false, reason: "replay", conflict: false });
+    expect(replayBody.version).toBe(secondBody.version);
+    expect(
+      replayBody.card.holes[0]?.scores.find((score) => score.slot === 1)?.updatedAt,
+    ).toBe(mikeScore?.updatedAt);
 
-    const newScorer = await saveHole(server.url, {
+    const conflict = await saveHole(server.url, {
       gameDayId: body.id,
       cardId,
       token: lerato.deviceToken,
       holeNumber: 1,
-      clientTimestamp: stamp(-10_000),
-      strokes: { "1": 4, "2": 4 },
+      clientTimestamp: stamp(-5_000),
+      strokes: { "1": 6 },
+      expectedUpdatedAt: { "1": "2000-01-01T00:00:00.000Z" },
     });
-    expect(newScorer.status).toBe(200);
+    const conflictBody = (await conflict.json()) as {
+      applied: boolean;
+      reason: string;
+      conflict: boolean;
+      conflicts: {
+        slot: number;
+        previous: { strokes: number; updatedByName: string | null; updatedAt: string } | null;
+      }[];
+      card: { holes: HoleView[] };
+    };
+    expect(conflictBody.applied).toBe(true);
+    expect(conflictBody.reason).toBe("applied");
+    expect(conflictBody.conflict).toBe(true);
+    expect(conflictBody.conflicts).toEqual([
+      {
+        slot: 1,
+        previous: {
+          strokes: 4,
+          updatedByPlayerId: mike.playerId,
+          updatedByName: "Mike",
+          updatedAt: mikeScore?.updatedAt,
+        },
+      },
+    ]);
+    expect(conflictBody.card.holes[0]?.strokes).toEqual({ "1": 6, "2": 5 });
 
     const watched = await fetch(
       `${server.url}/api/golf-game-days/watch/${body.watchToken}/leaderboard`,
@@ -286,7 +359,7 @@ describe("golf game days HTTP", () => {
     expect(withDevice.status).toBe(200);
   });
 
-  test("offline replay and an older timestamp are acknowledged without changing the hole", async () => {
+  test("an exact replay is idempotent and an older timestamp still wins", async () => {
     const { body } = await createDay();
     const mike = await join(server.url, body.inviteCode, "Mike", 20);
     const started = await startCard(server.url, body.id, mike.deviceToken);
@@ -304,7 +377,14 @@ describe("golf game days HTTP", () => {
       clientTimestamp: at,
       strokes: { "1": 3 },
     });
-    expect(await saved.json()).toMatchObject({ applied: true, reason: "applied" });
+    const savedBody = (await saved.json()) as {
+      applied: boolean;
+      reason: string;
+      version: number;
+      card: { holes: HoleView[] };
+    };
+    expect(savedBody).toMatchObject({ applied: true, reason: "applied" });
+    const firstUpdatedAt = savedBody.card.holes[0]?.scores[0]?.updatedAt;
 
     const replay = await saveHole(server.url, {
       gameDayId: body.id,
@@ -314,7 +394,15 @@ describe("golf game days HTTP", () => {
       clientTimestamp: at,
       strokes: { "1": 3 },
     });
-    expect(await replay.json()).toMatchObject({ applied: false, reason: "replay" });
+    const replayBody = (await replay.json()) as {
+      applied: boolean;
+      reason: string;
+      version: number;
+      card: { holes: HoleView[] };
+    };
+    expect(replayBody).toMatchObject({ applied: false, reason: "replay" });
+    expect(replayBody.version).toBe(savedBody.version);
+    expect(replayBody.card.holes[0]?.scores[0]?.updatedAt).toBe(firstUpdatedAt);
 
     const older = await saveHole(server.url, {
       gameDayId: body.id,
@@ -327,12 +415,12 @@ describe("golf game days HTTP", () => {
     const olderBody = (await older.json()) as {
       applied: boolean;
       reason: string;
-      card: { holes: { number: number; strokes: Record<string, number> }[] };
+      card: { holes: HoleView[] };
     };
-    expect(olderBody.applied).toBe(false);
-    expect(olderBody.reason).toBe("stale");
+    expect(olderBody.applied).toBe(true);
+    expect(olderBody.reason).toBe("applied");
     expect(olderBody.card.holes.find((hole) => hole.number === 1)?.strokes).toEqual({
-      "1": 3,
+      "1": 8,
     });
 
     expect(publisher.events.map((event) => event.name)).toEqual(
@@ -345,6 +433,8 @@ describe("golf game days HTTP", () => {
     expect(snapshot?.data).toEqual(
       expect.objectContaining({
         version: expect.any(Number),
+        updatedBy: { playerId: mike.playerId, displayName: "Mike" },
+        updatedAt: expect.any(String),
         leaderboard: expect.objectContaining({ gameDayId: body.id }),
       }),
     );
@@ -451,7 +541,400 @@ describe("golf game days HTTP", () => {
     expect(second.status).toBe(404);
     expect(third.status).toBe(429);
   });
+
+  test("any player can confirm, a lock blocks players, and the organiser can correct and unlock", async () => {
+    const { body } = await createDay();
+    const guest = await join(server.url, body.inviteCode, "Guest");
+    const rileyResponse = await fetch(
+      `${server.url}/api/golf-game-days/invite/${body.inviteCode}/join`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: sessionCookie("user-riley"),
+        },
+        body: JSON.stringify({
+          displayName: "Riley",
+          handicapIndex: 20,
+          teeName: "White",
+        }),
+      },
+    );
+    const riley = (await rileyResponse.json()) as { deviceToken: string; playerId: string };
+    const started = await startCard(server.url, body.id, guest.deviceToken);
+    const startBody = (await started.json()) as {
+      card: { id: string; golfRoundId: string };
+    };
+    expect(
+      (await joinCard(server.url, body.id, startBody.card.id, riley.deviceToken)).status,
+    ).toBe(200);
+
+    for (const hole of courseHoles) {
+      const saved = await saveHole(server.url, {
+        gameDayId: body.id,
+        cardId: startBody.card.id,
+        token: riley.deviceToken,
+        holeNumber: hole.number,
+        clientTimestamp: stamp(-60_000 + hole.number * 1000),
+        strokes: { "1": 4, "2": 4 },
+      });
+      expect(saved.status).toBe(200);
+    }
+
+    const confirmed = await fetch(
+      `${server.url}/api/golf-game-days/${body.id}/cards/${startBody.card.id}/confirm`,
+      { method: "POST", headers: { "X-Game-Day-Token": riley.deviceToken } },
+    );
+    expect(confirmed.status).toBe(200);
+    expect(publisher.events.some((event) => event.name === "card.locked")).toBe(true);
+    expect((await leaderboards.listFacts("sanity-course-1")).map((fact) => fact.golfGross)).toEqual([
+      36,
+    ]);
+
+    const blocked = await saveHole(server.url, {
+      gameDayId: body.id,
+      cardId: startBody.card.id,
+      token: guest.deviceToken,
+      holeNumber: 1,
+      clientTimestamp: stamp(-1_000),
+      strokes: { "1": 5 },
+    });
+    expect(blocked.status).toBe(409);
+
+    const corrected = await saveHole(server.url, {
+      gameDayId: body.id,
+      cardId: startBody.card.id,
+      cookie: sessionCookie("organiser-1"),
+      holeNumber: 1,
+      clientTimestamp: stamp(-500),
+      strokes: { "2": 5 },
+    });
+    const correctedBody = (await corrected.json()) as { card: { holes: HoleView[] } };
+    expect(corrected.status).toBe(200);
+    const slot = correctedBody.card.holes
+      .find((hole) => hole.number === 1)
+      ?.scores.find((score) => score.slot === 2);
+    expect(slot).toMatchObject({
+      strokes: 5,
+      updatedByPlayerId: null,
+      updatedByName: "Organiser",
+    });
+    const organiserEvent = [...publisher.events]
+      .reverse()
+      .find((event) => event.name === "score.updated");
+    expect(organiserEvent?.data).toEqual(
+      expect.objectContaining({
+        updatedBy: { playerId: null, displayName: "Organiser" },
+        updatedAt: slot?.updatedAt,
+      }),
+    );
+    const afterEdit = await leaderboards.listFacts("sanity-course-1");
+    expect(afterEdit).toHaveLength(1);
+    expect(afterEdit[0]?.golfGross).toBe(37);
+
+    const unlocked = await fetch(
+      `${server.url}/api/golf-game-days/${body.id}/cards/${startBody.card.id}/unlock`,
+      { method: "POST", headers: { Cookie: sessionCookie("organiser-1") } },
+    );
+    expect(unlocked.status).toBe(200);
+    expect(publisher.events.some((event) => event.name === "card.unlocked")).toBe(true);
+    expect(await leaderboards.listFacts("sanity-course-1")).toEqual([]);
+    const round = await rounds.findById(startBody.card.golfRoundId);
+    expect(round?.isLocked).toBe(false);
+
+    const playerAgain = await saveHole(server.url, {
+      gameDayId: body.id,
+      cardId: startBody.card.id,
+      token: guest.deviceToken,
+      holeNumber: 1,
+      clientTimestamp: stamp(-100),
+      strokes: { "1": 4, "2": 4 },
+    });
+    expect(playerAgain.status).toBe(200);
+
+    const relocked = await fetch(
+      `${server.url}/api/golf-game-days/${body.id}/cards/${startBody.card.id}/confirm`,
+      { method: "POST", headers: { "X-Game-Day-Token": guest.deviceToken } },
+    );
+    expect(relocked.status).toBe(200);
+    expect(await leaderboards.listFacts("sanity-course-1")).toHaveLength(1);
+
+    const stranger = await fetch(
+      `${server.url}/api/golf-game-days/${body.id}/cards/${startBody.card.id}/unlock`,
+      { method: "POST", headers: { Cookie: sessionCookie("user-riley") } },
+    );
+    expect(stranger.status).toBe(403);
+
+    const byToken = await fetch(
+      `${server.url}/api/golf-game-days/${body.id}/cards/${startBody.card.id}/unlock`,
+      {
+        method: "POST",
+        headers: { "X-Game-Day-Organiser-Token": body.organiserToken },
+      },
+    );
+    expect(byToken.status).toBe(200);
+    expect((await rounds.findById(startBody.card.golfRoundId))?.isLocked).toBe(false);
+  });
+
+  test("anonymous create returns an organiser token that can score, claim, and manage the day", async () => {
+    const created = await fetch(`${server.url}/api/golf-game-days`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        venueCmsId: "sanity-course-1",
+        date: "2026-11-01",
+        defaultTee: "White",
+        format: "stroke",
+        organiserPlayer: { displayName: "Host", handicapIndex: 12, teeName: "White" },
+        weekendEvent: { name: "Zebula weekend" },
+      }),
+    });
+    const body = (await created.json()) as {
+      id: string;
+      organiserToken: string;
+      claimed: boolean;
+      organiserPlayerId: string;
+      weekendEventId: string;
+      players: { id: string; displayName: string; isOrganiser: boolean }[];
+    };
+    expect(created.status).toBe(201);
+    expect(body.claimed).toBe(false);
+    expect(body.organiserToken.length).toBeGreaterThan(20);
+    expect(body.players[0]).toMatchObject({ displayName: "Host", isOrganiser: true });
+
+    const hidden = await fetch(`${server.url}/api/golf-game-days/${body.id}`);
+    expect(hidden.status).toBe(401);
+    const wrong = await fetch(`${server.url}/api/golf-game-days/${body.id}`, {
+      headers: { "X-Game-Day-Organiser-Token": "not-the-token" },
+    });
+    expect(wrong.status).toBe(403);
+    const stranger = await fetch(`${server.url}/api/golf-game-days/${body.id}`, {
+      headers: { Cookie: sessionCookie("someone-else") },
+    });
+    expect(stranger.status).toBe(403);
+
+    const opened = await fetch(`${server.url}/api/golf-game-days/${body.id}`, {
+      headers: { "X-Game-Day-Organiser-Token": body.organiserToken },
+    });
+    const openedBody = (await opened.json()) as Record<string, unknown>;
+    expect(opened.status).toBe(200);
+    expect(openedBody.organiserToken).toBeUndefined();
+    expect(JSON.stringify(openedBody)).not.toContain(body.organiserToken);
+
+    const renamed = await fetch(
+      `${server.url}/api/golf-game-days/${body.id}/players/${body.organiserPlayerId}`,
+      {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Game-Day-Organiser-Token": body.organiserToken,
+        },
+        body: JSON.stringify({ displayName: "Hosty" }),
+      },
+    );
+    expect(renamed.status).toBe(200);
+
+    const started = await startCard(server.url, body.id, body.organiserToken, "organiser");
+    expect(started.status).toBe(201);
+    const cardId = ((await started.json()) as { card: { id: string } }).card.id;
+    const scored = await saveHole(server.url, {
+      gameDayId: body.id,
+      cardId,
+      organiserToken: body.organiserToken,
+      holeNumber: 1,
+      clientTimestamp: stamp(-1_000),
+      strokes: { "1": 4 },
+    });
+    const scoredBody = (await scored.json()) as { card: { holes: HoleView[] } };
+    expect(scored.status).toBe(200);
+    expect(scoredBody.card.holes[0]?.scores[0]).toMatchObject({
+      slot: 1,
+      strokes: 4,
+      updatedByPlayerId: body.organiserPlayerId,
+      updatedByName: "Hosty",
+    });
+
+    const unauthenticated = await fetch(`${server.url}/api/golf-game-days/${body.id}/claim`, {
+      method: "POST",
+      headers: { "X-Game-Day-Organiser-Token": body.organiserToken },
+    });
+    expect(unauthenticated.status).toBe(401);
+    const badClaim = await fetch(`${server.url}/api/golf-game-days/${body.id}/claim`, {
+      method: "POST",
+      headers: {
+        Cookie: sessionCookie("user-claim"),
+        "X-Game-Day-Organiser-Token": "nope",
+      },
+    });
+    expect(badClaim.status).toBe(403);
+
+    const claim = await fetch(`${server.url}/api/golf-game-days/${body.id}/claim`, {
+      method: "POST",
+      headers: {
+        Cookie: sessionCookie("user-claim"),
+        "X-Game-Day-Organiser-Token": body.organiserToken,
+      },
+    });
+    const claimBody = (await claim.json()) as { claimed: boolean; weekendClaimed: boolean };
+    expect(claim.status).toBe(200);
+    expect(claimBody.claimed).toBe(true);
+    expect(claimBody.weekendClaimed).toBe(true);
+
+    const again = await fetch(`${server.url}/api/golf-game-days/${body.id}/claim`, {
+      method: "POST",
+      headers: {
+        Cookie: sessionCookie("user-claim"),
+        "X-Game-Day-Organiser-Token": body.organiserToken,
+      },
+    });
+    expect(again.status).toBe(200);
+
+    const conflict = await fetch(`${server.url}/api/golf-game-days/${body.id}/claim`, {
+      method: "POST",
+      headers: {
+        Cookie: sessionCookie("user-other"),
+        "X-Game-Day-Organiser-Token": body.organiserToken,
+      },
+    });
+    expect(conflict.status).toBe(409);
+
+    const byCookie = await fetch(`${server.url}/api/golf-game-days/${body.id}`, {
+      headers: { Cookie: sessionCookie("user-claim") },
+    });
+    expect(byCookie.status).toBe(200);
+
+    const weekend = await fetch(
+      `${server.url}/api/golf-game-days/weekends/${body.weekendEventId}/leaderboard`,
+      { headers: { "X-Game-Day-Organiser-Token": body.organiserToken } },
+    );
+    expect(weekend.status).toBe(200);
+  });
+
+  test("a signed-in owner can open the day without the organiser token", async () => {
+    const { response, body } = await createDay([{ displayName: "Brandon" }]);
+    expect(response.status).toBe(201);
+    expect(body.organiserToken.length).toBeGreaterThan(20);
+    const mine = await fetch(`${server.url}/api/golf-game-days/${body.id}`, {
+      headers: { Cookie: sessionCookie("organiser-1") },
+    });
+    expect(mine.status).toBe(200);
+    const other = await fetch(`${server.url}/api/golf-game-days/${body.id}`, {
+      headers: { Cookie: sessionCookie("organiser-2") },
+    });
+    expect(other.status).toBe(403);
+    const badToken = await fetch(`${server.url}/api/golf-game-days/${body.id}`, {
+      headers: { "X-Game-Day-Organiser-Token": "wrong" },
+    });
+    expect(badToken.status).toBe(403);
+  });
+
+  test("anonymous creates are rate limited more tightly than signed-in creates", async () => {
+    await server.close();
+    await app.locals.prisma?.$disconnect();
+    const limited = await createApp(config, {
+      venueRepository: venues,
+      golfRoundRepository: rounds,
+      gameDayRepository: gameDays,
+      gameDayPublisher: publisher,
+      gameDayAnonymousCreateRateLimiter: new InMemoryWindowRateLimiter(2, 60 * 60 * 1000),
+      gameDaySignedInCreateRateLimiter: new InMemoryWindowRateLimiter(5, 60 * 60 * 1000),
+    });
+    server = await listen(limited);
+    app = limited;
+
+    const payload = {
+      venueCmsId: "sanity-course-1",
+      date: "2026-11-01",
+      defaultTee: "White",
+      format: "stroke",
+    };
+    const first = await fetch(`${server.url}/api/golf-game-days`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const second = await fetch(`${server.url}/api/golf-game-days`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const third = await fetch(`${server.url}/api/golf-game-days`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    expect(first.status).toBe(201);
+    expect(second.status).toBe(201);
+    expect(third.status).toBe(429);
+    expect(await third.json()).toEqual({
+      error: "Too many game days created. Try again in a little while.",
+    });
+
+    const signedIn = await fetch(`${server.url}/api/golf-game-days`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: sessionCookie("organiser-1"),
+      },
+      body: JSON.stringify(payload),
+    });
+    expect(signedIn.status).toBe(201);
+  });
+
+  test("a game day stops at 40 players and 10 cards", async () => {
+    const players = Array.from({ length: 40 }, (_, index) => ({
+      displayName: `Player ${index + 1}`,
+    }));
+    const { response } = await createDay(players);
+    expect(response.status).toBe(201);
+    const full = await createDay([
+      ...players,
+      { displayName: "One more" },
+    ]);
+    expect(full.response.status).toBe(400);
+    expect(full.body).toEqual({
+      error: "A game day can have at most 40 players",
+    });
+
+    const { body } = await createDay(players);
+    const extra = await fetch(
+      `${server.url}/api/golf-game-days/invite/${body.inviteCode}/join`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ displayName: "Late", teeName: "White" }),
+      },
+    );
+    expect(extra.status).toBe(409);
+    expect(await extra.json()).toEqual({ error: "This game day is full" });
+
+    const cardDay = await createDay();
+    const tokens: string[] = [];
+    for (let index = 0; index < 11; index += 1) {
+      tokens.push((await join(server.url, cardDay.body.inviteCode, `C${index}`)).deviceToken);
+    }
+    for (let index = 0; index < 10; index += 1) {
+      expect((await startCard(server.url, cardDay.body.id, tokens[index]!)).status).toBe(201);
+    }
+    const eleventh = await startCard(server.url, cardDay.body.id, tokens[10]!);
+    expect(eleventh.status).toBe(409);
+    expect(await eleventh.json()).toEqual({
+      error: "A game day can have at most 10 cards",
+    });
+  });
 });
+
+type HoleView = {
+  number: number;
+  strokes: Record<string, number>;
+  scores: {
+    slot: number;
+    strokes: number;
+    updatedByPlayerId: string | null;
+    updatedByName: string | null;
+    updatedAt: string;
+  }[];
+};
 
 async function join(
   url: string,
@@ -474,12 +957,19 @@ async function join(
   return (await response.json()) as { deviceToken: string; playerId: string };
 }
 
-function startCard(url: string, gameDayId: string, token: string) {
+function startCard(
+  url: string,
+  gameDayId: string,
+  token: string,
+  header: "device" | "organiser" = "device",
+) {
+  const headerName =
+    header === "organiser" ? "X-Game-Day-Organiser-Token" : "X-Game-Day-Token";
   return fetch(`${url}/api/golf-game-days/${gameDayId}/cards`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "X-Game-Day-Token": token,
+      [headerName]: token,
     },
     body: JSON.stringify({
       holesPlayed: 9,
@@ -502,23 +992,28 @@ function saveHole(
   input: {
     gameDayId: string;
     cardId: string;
-    token: string;
+    token?: string;
+    organiserToken?: string;
+    cookie?: string;
     holeNumber: number;
     clientTimestamp: string;
     strokes: Record<string, number>;
+    expectedUpdatedAt?: Record<string, string | null>;
   },
 ) {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (input.token) headers["X-Game-Day-Token"] = input.token;
+  if (input.organiserToken) headers["X-Game-Day-Organiser-Token"] = input.organiserToken;
+  if (input.cookie) headers.Cookie = input.cookie;
   return fetch(
     `${url}/api/golf-game-days/${input.gameDayId}/cards/${input.cardId}/holes/${input.holeNumber}`,
     {
       method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Game-Day-Token": input.token,
-      },
+      headers,
       body: JSON.stringify({
         clientTimestamp: input.clientTimestamp,
         strokes: input.strokes,
+        expectedUpdatedAt: input.expectedUpdatedAt,
       }),
     },
   );

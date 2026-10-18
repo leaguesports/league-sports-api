@@ -59,6 +59,22 @@ export class InMemoryVenueLeaderboardRepository
     }
   }
 
+  async deleteFactsForEvent(
+    venueCmsId: string,
+    sport: VenueEventFact["sport"],
+    eventId: string,
+  ): Promise<void> {
+    for (const [key, fact] of this.facts) {
+      if (
+        fact.venueCmsId === venueCmsId &&
+        fact.sport === sport &&
+        fact.eventId === eventId
+      ) {
+        this.facts.delete(key);
+      }
+    }
+  }
+
   async replaceFactsForVenue(
     venueCmsId: string,
     facts: VenueEventFact[],

@@ -69,7 +69,10 @@ import {
 } from "./modules/team-matches";
 import { PrismaTeamMatchRepository } from "./modules/team-matches/repositories/prisma-team-match.repository";
 import { CompleteTeamMatchOnScorecardLock } from "./modules/team-matches/services/complete-on-scorecard-lock";
-import { ScorecardLockedEvent } from "./modules/scorecards/on-scorecard-locked";
+import {
+  ScorecardLockedEvent,
+  ScorecardUnlockedEvent,
+} from "./modules/scorecards/on-scorecard-locked";
 import {
   createTournamentsModule,
   TournamentRepository,
@@ -144,6 +147,8 @@ export type CreateAppDependencies = {
   gameDayRepository?: GameDayRepository;
   gameDayPublisher?: GameDayPublisher;
   gameDayRateLimiter?: GameDayRateLimiter;
+  gameDayAnonymousCreateRateLimiter?: GameDayRateLimiter;
+  gameDaySignedInCreateRateLimiter?: GameDayRateLimiter;
 };
 
 export async function createApp(
@@ -201,10 +206,15 @@ export async function createApp(
   );
   let ingestVenueLeaderboard: (event: ScorecardLockedEvent) => Promise<void> =
     async () => {};
+  let withdrawVenueLeaderboard: (event: ScorecardUnlockedEvent) => Promise<void> =
+    async () => {};
   const onScorecardLocked = async (event: ScorecardLockedEvent) => {
     await completeOnLock.execute(event);
     await lockFourballOnScorecardLock.execute(event);
     await ingestVenueLeaderboard(event);
+  };
+  const onScorecardUnlocked = async (event: ScorecardUnlockedEvent) => {
+    await withdrawVenueLeaderboard(event);
   };
 
   const match = createMatchModule({
@@ -380,17 +390,21 @@ export async function createApp(
     requireAuth: identity.authorizationMiddleware,
   });
   ingestVenueLeaderboard = venueLeaderboards.onScorecardLocked;
+  withdrawVenueLeaderboard = venueLeaderboards.onScorecardUnlocked;
 
   const golfGameDays = createGolfGameDaysModule({
     prisma,
     venueRepository: venue.venueRepository,
     golfRoundRepository: golfRound.golfRoundRepository,
     onScorecardLocked,
+    onScorecardUnlocked,
     tryGetSessionUserId: identity.tryGetSessionUserId,
     requireAuth: identity.authorizationMiddleware,
     gameDayRepository: dependencies.gameDayRepository,
     gameDayPublisher: dependencies.gameDayPublisher,
     gameDayRateLimiter: dependencies.gameDayRateLimiter,
+    anonymousCreateRateLimiter: dependencies.gameDayAnonymousCreateRateLimiter,
+    signedInCreateRateLimiter: dependencies.gameDaySignedInCreateRateLimiter,
   });
 
   app.use(identity.router);

@@ -646,6 +646,8 @@ describe("golf rounds HTTP", () => {
         attachToGameDay: (roundId, gameDayId) =>
           rounds.attachToGameDay(roundId, gameDayId),
         persistRoster: (round) => rounds.persistRoster(round),
+        persistUnlock: (round) => rounds.persistUnlock(round),
+        persistLockedScore: (round) => rounds.persistLockedScore(round),
       },
     });
     server = await listen(app);

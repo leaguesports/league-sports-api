@@ -10,3 +10,14 @@ export type ScorecardLockedEvent = {
 };
 
 export type OnScorecardLocked = (event: ScorecardLockedEvent) => Promise<void>;
+
+/** A locked scorecard was opened again. Venue facts for this event should go. */
+export type ScorecardUnlockedEvent = {
+  sport: "padel" | "golf" | "darts";
+  scorecardId: string;
+  venueCmsId: string;
+};
+
+export type OnScorecardUnlocked = (
+  event: ScorecardUnlockedEvent,
+) => Promise<void>;

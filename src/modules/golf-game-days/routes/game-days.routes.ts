@@ -1,14 +1,13 @@
-import { NextFunction, Request, Response, Router } from "express";
+import { Router } from "express";
 
 import { createGameDaysController } from "../controllers/game-days.controller";
 
 export function createGameDayRoutes(
   controller: ReturnType<typeof createGameDaysController>,
-  requireAuth: (req: Request, res: Response, next: NextFunction) => void,
 ): Router {
   const router = Router();
 
-  router.post("/api/golf-game-days", requireAuth, (req, res) => {
+  router.post("/api/golf-game-days", (req, res) => {
     void controller.create(req, res);
   });
 
@@ -31,8 +30,16 @@ export function createGameDayRoutes(
     },
   );
 
-  router.get("/api/golf-game-days/:id", requireAuth, (req, res) => {
+  router.get("/api/golf-game-days/:id", (req, res) => {
     void controller.getMine(req, res);
+  });
+
+  router.post("/api/golf-game-days/:id/claim", (req, res) => {
+    void controller.claim(req, res);
+  });
+
+  router.patch("/api/golf-game-days/:id/players/:playerId", (req, res) => {
+    void controller.updatePlayer(req, res);
   });
 
   router.get("/api/golf-game-days/:id/leaderboard", (req, res) => {
@@ -65,6 +72,10 @@ export function createGameDayRoutes(
 
   router.post("/api/golf-game-days/:id/cards/:cardId/confirm", (req, res) => {
     void controller.confirm(req, res);
+  });
+
+  router.post("/api/golf-game-days/:id/cards/:cardId/unlock", (req, res) => {
+    void controller.unlock(req, res);
   });
 
   return router;

@@ -1,9 +1,12 @@
-import { NextFunction, Request, Response, Router } from "express";
+import { NextFunction, Request, Response } from "express";
 
 import { PrismaClient } from "../../generated/prisma/client";
 import { GolfRoundRepository } from "../golf-round/repositories/golf-round.repository";
 import { LockGolfRound } from "../golf-round/services/lock-golf-round.service";
-import { OnScorecardLocked } from "../scorecards/on-scorecard-locked";
+import {
+  OnScorecardLocked,
+  OnScorecardUnlocked,
+} from "../scorecards/on-scorecard-locked";
 import { VenueRepository } from "../venue/repositories/venue.repository";
 import { createGameDaysController } from "./controllers/game-days.controller";
 import {
@@ -17,6 +20,7 @@ import {
   DEFAULT_INVITE_RATE_LIMITER,
   DEFAULT_WATCH_RATE_LIMITER,
   GameDayRateLimiter,
+  InMemoryWindowRateLimiter,
 } from "./services/rate-limiter";
 import { GameDaysService } from "./services/game-days.service";
 
@@ -25,11 +29,14 @@ export type CreateGolfGameDaysModuleParams = {
   venueRepository: VenueRepository;
   golfRoundRepository: GolfRoundRepository;
   onScorecardLocked?: OnScorecardLocked;
+  onScorecardUnlocked?: OnScorecardUnlocked;
   tryGetSessionUserId: (req: Request) => string | null;
   requireAuth: (req: Request, res: Response, next: NextFunction) => void;
   gameDayRepository?: GameDayRepository;
   gameDayPublisher?: GameDayPublisher;
   gameDayRateLimiter?: GameDayRateLimiter;
+  anonymousCreateRateLimiter?: GameDayRateLimiter;
+  signedInCreateRateLimiter?: GameDayRateLimiter;
 };
 
 export function createGolfGameDaysModule({
@@ -37,18 +44,21 @@ export function createGolfGameDaysModule({
   venueRepository,
   golfRoundRepository,
   onScorecardLocked,
+  onScorecardUnlocked,
   tryGetSessionUserId,
-  requireAuth,
+  requireAuth: _requireAuth,
   gameDayRepository,
   gameDayPublisher,
   gameDayRateLimiter,
+  anonymousCreateRateLimiter,
+  signedInCreateRateLimiter,
 }: CreateGolfGameDaysModuleParams) {
   const repository = gameDayRepository ?? new PrismaGameDayRepository(prisma);
   const service = new GameDaysService(
     repository,
     venueRepository,
     golfRoundRepository,
-    new LockGolfRound(golfRoundRepository, onScorecardLocked),
+    new LockGolfRound(golfRoundRepository, onScorecardLocked, onScorecardUnlocked),
     gameDayPublisher ?? createGameDayPublisherFromEnv(),
   );
   const limiter = gameDayRateLimiter;
@@ -57,10 +67,14 @@ export function createGolfGameDaysModule({
     tryGetSessionUserId,
     inviteRateLimiter: limiter ?? DEFAULT_INVITE_RATE_LIMITER,
     watchRateLimiter: limiter ?? DEFAULT_WATCH_RATE_LIMITER,
+    anonymousCreateRateLimiter:
+      anonymousCreateRateLimiter ?? new InMemoryWindowRateLimiter(10, 60 * 60 * 1000),
+    signedInCreateRateLimiter:
+      signedInCreateRateLimiter ?? new InMemoryWindowRateLimiter(60, 60 * 60 * 1000),
   });
 
   return {
-    router: createGameDayRoutes(controller, requireAuth),
+    router: createGameDayRoutes(controller),
     gameDayRepository: repository,
   };
 }

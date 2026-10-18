@@ -53,6 +53,23 @@ export class PrismaVenueLeaderboardRepository
     }
   }
 
+  async deleteFactsForEvent(
+    venueCmsId: string,
+    sport: VenueEventFact["sport"],
+    eventId: string,
+  ): Promise<void> {
+    try {
+      await this.prisma.venueLeaderboardEventFact.deleteMany({
+        where: { venueCmsId, sport, eventId },
+      });
+    } catch (error) {
+      throw new VenueLeaderboardPersistenceError(
+        "Failed to remove venue leaderboard facts",
+        { cause: error },
+      );
+    }
+  }
+
   async replaceFactsForVenue(
     venueCmsId: string,
     facts: VenueEventFact[],

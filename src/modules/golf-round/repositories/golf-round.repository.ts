@@ -9,4 +9,11 @@ export interface GolfRoundRepository {
   listLockedByVenueCmsId(cmsId: CmsId): Promise<GolfRound[]>;
   /** Session-attributed lock timestamps for badge evaluation. */
   listLockedAtForBadges(userId: string): Promise<Date[]>;
+  /** Link a round created for a game-day card. Null stays the default. */
+  attachToGameDay(roundId: string, gameDayId: string): Promise<void>;
+  /**
+   * Insert players seated after create. Existing slots are left as stored.
+   * The round argument is the source of truth for the new roster.
+   */
+  persistRoster(round: GolfRound): Promise<GolfRound>;
 }

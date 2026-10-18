@@ -1,11 +1,14 @@
 import { CmsId } from "../../venue/entities/cms-id";
+import { DomainError } from "../../../lib/domain-error";
 import { GolfPlayer } from "../entities/golf-player";
 import { GolfRound } from "../entities/golf-round";
 import { GolfRoundLockConflictError } from "../entities/golf-round-lock-conflict-error";
+import { GolfRoundPersistenceError } from "../entities/golf-round-persistence-error";
 import { GolfRoundRepository } from "./golf-round.repository";
 
 export class InMemoryGolfRoundRepository implements GolfRoundRepository {
   private readonly byId = new Map<string, GolfRound>();
+  private readonly gameDayIdByRound = new Map<string, string>();
 
   async findById(id: string): Promise<GolfRound | null> {
     return clone(this.byId.get(id) ?? null);
@@ -46,6 +49,25 @@ export class InMemoryGolfRoundRepository implements GolfRoundRepository {
     );
   }
 
+
+  async attachToGameDay(roundId: string, gameDayId: string): Promise<void> {
+    if (!this.byId.has(roundId)) {
+      throw new GolfRoundPersistenceError("Unable to load golf round");
+    }
+    this.gameDayIdByRound.set(roundId, gameDayId);
+  }
+
+  async persistRoster(round: GolfRound): Promise<GolfRound> {
+    const stored = this.byId.get(round.id);
+    if (!stored) {
+      throw new GolfRoundPersistenceError("Unable to load golf round");
+    }
+    if (stored.isLocked) {
+      throw new DomainError("Cannot add a player to a locked round");
+    }
+    this.byId.set(round.id, clone(round)!);
+    return clone(round)!;
+  }
 
   async listLockedAtForBadges(userId: string): Promise<Date[]> {
     const rounds = await this.listLockedByPlayerUserId(userId);

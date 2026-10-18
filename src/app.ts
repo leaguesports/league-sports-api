@@ -105,6 +105,12 @@ import {
   createVenueLeaderboardsModule,
   VenueLeaderboardRepository,
 } from "./modules/venue-leaderboards";
+import {
+  createGolfGameDaysModule,
+  GameDayPublisher,
+  GameDayRateLimiter,
+  GameDayRepository,
+} from "./modules/golf-game-days";
 
 export type CreateAppDependencies = {
   venueRepository?: VenueRepository;
@@ -135,6 +141,9 @@ export type CreateAppDependencies = {
   golfTourRepository?: GolfTourRepository;
   openF1Client?: OpenF1Client;
   venueLeaderboardRepository?: VenueLeaderboardRepository;
+  gameDayRepository?: GameDayRepository;
+  gameDayPublisher?: GameDayPublisher;
+  gameDayRateLimiter?: GameDayRateLimiter;
 };
 
 export async function createApp(
@@ -372,6 +381,18 @@ export async function createApp(
   });
   ingestVenueLeaderboard = venueLeaderboards.onScorecardLocked;
 
+  const golfGameDays = createGolfGameDaysModule({
+    prisma,
+    venueRepository: venue.venueRepository,
+    golfRoundRepository: golfRound.golfRoundRepository,
+    onScorecardLocked,
+    tryGetSessionUserId: identity.tryGetSessionUserId,
+    requireAuth: identity.authorizationMiddleware,
+    gameDayRepository: dependencies.gameDayRepository,
+    gameDayPublisher: dependencies.gameDayPublisher,
+    gameDayRateLimiter: dependencies.gameDayRateLimiter,
+  });
+
   app.use(identity.router);
   app.use(venue.router);
   app.use(match.router);
@@ -395,6 +416,7 @@ export async function createApp(
   app.use(golfTours.router);
   app.use(openF1.router);
   app.use(venueLeaderboards.router);
+  app.use(golfGameDays.router);
 
   app.use(
     (

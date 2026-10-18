@@ -643,6 +643,9 @@ describe("golf rounds HTTP", () => {
         listLockedByVenueCmsId: (cmsId) =>
           rounds.listLockedByVenueCmsId(cmsId),
         listLockedAtForBadges: (userId) => rounds.listLockedAtForBadges(userId),
+        attachToGameDay: (roundId, gameDayId) =>
+          rounds.attachToGameDay(roundId, gameDayId),
+        persistRoster: (round) => rounds.persistRoster(round),
       },
     });
     server = await listen(app);

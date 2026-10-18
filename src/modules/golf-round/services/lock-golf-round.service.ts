@@ -6,7 +6,11 @@ import { GolfRoundRepository } from "../repositories/golf-round.repository";
 export type LockGolfRoundInput = {
   roundId: string;
   score: unknown;
-  lockedByUserId: string;
+  /**
+   * Signed-in scorer. Null for a guest game-day scorer so the lock is not
+   * attributed to the organiser (badges key off this id).
+   */
+  lockedByUserId: string | null;
 };
 
 export class LockGolfRound {

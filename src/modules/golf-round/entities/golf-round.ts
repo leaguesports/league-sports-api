@@ -196,6 +196,27 @@ export class GolfRound {
     return this.players.map((player) => player.slot);
   }
 
+  /**
+   * Seat one more player on a live card. Game days fill a card after the
+   * round row exists. Locked rounds and a fifth player are rejected.
+   */
+  seatPlayer(input: GolfPlayerInput): GolfPlayer {
+    if (this.statusValue === "locked") {
+      throw new DomainError("Cannot add a player to a locked round");
+    }
+    if (this.players.length >= 4) {
+      throw new DomainError("A card can have at most 4 players");
+    }
+    const player = GolfPlayer.from(input);
+    if (this.players.some((existing) => existing.slot === player.slot)) {
+      throw new DomainError("players must have unique slots");
+    }
+    const roster = this.players as GolfPlayer[];
+    roster.push(player);
+    roster.sort((left, right) => left.slot - right.slot);
+    return player;
+  }
+
   hasPlayerUserId(userId: string): boolean {
     return this.players.some((player) => player.hasUserId(userId));
   }

@@ -1,4 +1,5 @@
 import { Prisma, PrismaClient } from "../../../generated/prisma/client";
+import { DomainError } from "../../../lib/domain-error";
 import { CmsId } from "../../venue/entities/cms-id";
 import { CourseSnapshot } from "../entities/course-snapshot";
 import { GolfPlayer } from "../entities/golf-player";
@@ -195,6 +196,66 @@ export class PrismaGolfRoundRepository implements GolfRoundRepository {
       return rows.map(toDomain);
     } catch (error) {
       throw wrapPersistenceError(error, "Unable to load golf round");
+    }
+  }
+
+  async attachToGameDay(roundId: string, gameDayId: string): Promise<void> {
+    try {
+      await this.prisma.golfRound.update({
+        where: { id: roundId },
+        data: { gameDayId },
+      });
+    } catch (error) {
+      throw wrapPersistenceError(error, "Unable to save golf round");
+    }
+  }
+
+  async persistRoster(round: GolfRound): Promise<GolfRound> {
+    const snapshot = round.toSnapshot();
+    try {
+      const existing = await this.prisma.golfRound.findUnique({
+        where: { id: round.id },
+        include: { players: true },
+      });
+      if (!existing) {
+        throw new GolfRoundPersistenceError("Unable to load golf round");
+      }
+      if (existing.status === "locked") {
+        throw new DomainError("Cannot add a player to a locked round");
+      }
+      const existingSlots = new Set(existing.players.map((player) => player.slot));
+      const newcomers = snapshot.players.filter(
+        (player) => !existingSlots.has(player.slot),
+      );
+      if (newcomers.length > 0) {
+        await this.prisma.golfRoundPlayer.createMany({
+          data: newcomers.map((player) => ({
+            slot: player.slot,
+            userId: player.userId,
+            displayName: player.displayName,
+            isGuest: player.isGuest,
+            handicapIndexUsed: player.handicapIndexUsed,
+            courseHandicap: player.courseHandicap,
+            playingHandicap: player.playingHandicap,
+            grossTotal: player.grossTotal,
+            netTotal: player.netTotal,
+            roundId: round.id,
+          })),
+        });
+      }
+      const saved = await this.findById(round.id);
+      if (!saved) {
+        throw new GolfRoundPersistenceError("Unable to load golf round");
+      }
+      return saved;
+    } catch (error) {
+      if (
+        error instanceof DomainError ||
+        error instanceof GolfRoundPersistenceError
+      ) {
+        throw error;
+      }
+      throw wrapPersistenceError(error, "Unable to save golf round");
     }
   }
 

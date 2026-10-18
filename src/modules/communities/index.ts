@@ -7,6 +7,9 @@ import {
 
 import { PrismaClient } from "../../generated/prisma/client";
 import { FriendProfileLookup } from "../friends/repositories/friendship.repository";
+import { GolfRoundRepository } from "../golf-round/repositories/golf-round.repository";
+import { MatchRepository } from "../match/repositories/match.repository";
+import { VenueRepository } from "../venue/repositories/venue.repository";
 import { createCommunitiesController } from "./controllers/communities.controller";
 import { CommunityRepository } from "./repositories/community.repository";
 import { PrismaCommunityRepository } from "./repositories/prisma-community.repository";
@@ -19,10 +22,14 @@ import {
   ListCommunities,
   ListMyCommunities,
 } from "./services/communities.service";
+import { ListCommunityActivity } from "./services/list-community-activity.service";
 
 export type CreateCommunitiesModuleParams = {
   prisma: PrismaClient;
   communityRepository?: CommunityRepository;
+  matchRepository: MatchRepository;
+  golfRoundRepository: GolfRoundRepository;
+  venueRepository: VenueRepository;
   friendProfileLookup: FriendProfileLookup;
   tryGetSessionUserId: (req: Request) => string | null;
   requireAuth: (req: Request, res: Response, next: NextFunction) => void;
@@ -36,6 +43,9 @@ export type CommunitiesModule = {
 export function createCommunitiesModule({
   prisma,
   communityRepository: communityRepositoryOverride,
+  matchRepository,
+  golfRoundRepository,
+  venueRepository,
   friendProfileLookup,
   tryGetSessionUserId,
   requireAuth,
@@ -53,6 +63,12 @@ export function createCommunitiesModule({
     listMyCommunities: new ListMyCommunities(communityRepository),
     joinCommunity: new JoinCommunity(communityRepository, friendProfileLookup),
     leaveCommunity: new LeaveCommunity(communityRepository),
+    listCommunityActivity: new ListCommunityActivity(
+      communityRepository,
+      matchRepository,
+      golfRoundRepository,
+      venueRepository,
+    ),
     tryGetSessionUserId,
   });
 
@@ -84,9 +100,15 @@ export {
   ListCommunities,
   ListMyCommunities,
 } from "./services/communities.service";
+export { ListCommunityActivity } from "./services/list-community-activity.service";
 export type {
   PublicCommunity,
   PublicCommunityMember,
   PublicCommunitySummary,
   PublicMyCommunity,
 } from "./services/communities.service";
+export type {
+  CommunityActivityItem,
+  CommunityActivityPlayer,
+} from "./services/community-activity-item";
+export { COMMUNITY_ACTIVITY_LIMIT } from "./services/community-activity-item";

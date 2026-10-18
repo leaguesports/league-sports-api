@@ -26,6 +26,10 @@ export function createCommunitiesRoutes(
     void controller.get(req, res);
   });
 
+  router.get("/api/communities/:id/activity", (req, res) => {
+    void controller.activity(req, res);
+  });
+
   router.post("/api/communities/:id/join", options.requireAuth, (req, res) => {
     void controller.join(req, res);
   });

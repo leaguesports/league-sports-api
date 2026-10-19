@@ -74,7 +74,7 @@ describe("sport session plug-ins", () => {
     }
 
     const frozen = Object.freeze(state);
-    expect(frozen).toEqual({ scores: [] });
+    expect(frozen).toEqual({ scores: [], players: [], standings: [] });
     expect(
       golfSessionPlugin.applyEvent(frozen, { type: "participant.left" }),
     ).toBe(frozen);

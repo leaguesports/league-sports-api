@@ -4,22 +4,40 @@ import {
   CORE_PARTICIPANT_EVENT_TYPES,
   rejectUnknownEvent,
   SessionValidationError,
+  SportEventContext,
   SportEventValidationContext,
   SportSessionEvent,
   SportSessionPlugin,
 } from "../session-plugin";
+import { PlayerTotal, projectCard, StandingRow } from "./scoring";
 
 export const GOLF_ID = "golf";
 export const GOLF_HOLE_SCORED = "hole.scored";
 export const GOLF_HOLE_CLEARED = "hole.cleared";
 
+export type GolfHolesPlayed = "18" | "front9" | "back9";
+
 export type GolfTee = {
   id: string;
   name?: string;
+  par?: number;
+  rating?: number;
+  slope?: number;
+};
+
+export type GolfHole = {
+  n: number;
+  par: number;
+  si: number;
 };
 
 export type GolfSetup = {
   tees: GolfTee[];
+  /** Present when the client sent a course snapshot. Omitted on a legacy tees-only setup. */
+  holes?: GolfHole[];
+  holesPlayed: GolfHolesPlayed;
+  startHole: number;
+  handicapAllowance: number;
 };
 
 /** One hole on the card. Replaced, never stacked, when the same seat scores again. */
@@ -33,6 +51,8 @@ export type GolfHoleScore = {
 
 export type GolfState = {
   scores: GolfHoleScore[];
+  players: PlayerTotal[];
+  standings: StandingRow[];
 };
 
 export type GolfJoin = {
@@ -40,15 +60,26 @@ export type GolfJoin = {
   handicapIndex?: number;
 };
 
+const golfTeeSchema = z.strictObject({
+  id: z.string().trim().min(1),
+  name: z.string().trim().min(1).optional(),
+  par: z.number().int().gte(27).lte(90).optional(),
+  rating: z.number().gte(20).lte(100).optional(),
+  slope: z.number().int().gte(55).lte(155).optional(),
+});
+
+const golfHoleSchema = z.strictObject({
+  n: z.number().int().gte(1).lte(18),
+  par: z.number().int().gte(3).lte(5),
+  si: z.number().int().gte(1).lte(18),
+});
+
 const golfSetupSchema = z.strictObject({
-  tees: z
-    .array(
-      z.strictObject({
-        id: z.string().trim().min(1),
-        name: z.string().trim().min(1).optional(),
-      }),
-    )
-    .min(1),
+  tees: z.array(golfTeeSchema).min(1),
+  holes: z.array(golfHoleSchema).min(1).optional(),
+  holesPlayed: z.enum(["18", "front9", "back9"]).optional(),
+  startHole: z.number().int().gte(1).lte(18).optional(),
+  handicapAllowance: z.number().gte(0).lte(1).optional(),
 });
 
 const golfJoinSchema = z.strictObject({
@@ -73,10 +104,23 @@ const storedScoredSchema = z.object(scoredFields);
 const storedClearedSchema = z.object(clearedFields);
 
 /**
- * Holes a score may name. A course snapshot does not exist yet, so every
- * round is 1–18. A later scoring change can narrow this from the card.
+ * Holes a score may name. A course snapshot wins. Otherwise the layout is
+ * 1–18, 1–9, or 10–18. `startHole` does not rotate that set.
  */
-export function holesOnRound(_config: GolfSetup): number[] {
+export function holesOnRound(config: GolfSetup): number[] {
+  if (config.holes && config.holes.length > 0) {
+    return [...config.holes.map((hole) => hole.n)].sort((left, right) => left - right);
+  }
+  return layoutHoles(config.holesPlayed ?? "18");
+}
+
+export function layoutHoles(holesPlayed: GolfHolesPlayed): number[] {
+  if (holesPlayed === "front9") {
+    return Array.from({ length: 9 }, (_, index) => index + 1);
+  }
+  if (holesPlayed === "back9") {
+    return Array.from({ length: 9 }, (_, index) => index + 10);
+  }
   return Array.from({ length: 18 }, (_, index) => index + 1);
 }
 
@@ -101,13 +145,31 @@ export const golfSessionPlugin: SportSessionPlugin<
         issues: parsed.error.issues,
       });
     }
+
+    const holesPlayed = parsed.data.holesPlayed ?? "18";
+    const tees = parsed.data.tees.map((tee) => normalizeTee(tee));
+    const holes = parsed.data.holes ? normalizeHoles(parsed.data.holes, holesPlayed) : undefined;
+    const allowed = holes ? holes.map((hole) => hole.n) : layoutHoles(holesPlayed);
+    const startHole = parsed.data.startHole ?? (holesPlayed === "back9" ? 10 : 1);
+    if (!allowed.includes(startHole)) {
+      throw new SessionValidationError("startHole is not in this round", {
+        sport: GOLF_ID,
+        startHole,
+        holes: allowed,
+      });
+    }
+
     return {
-      tees: parsed.data.tees.map((tee) => ({ ...tee })),
+      tees,
+      ...(holes ? { holes } : {}),
+      holesPlayed,
+      startHole,
+      handicapAllowance: parsed.data.handicapAllowance ?? 1,
     };
   },
 
   buildStartingState(_config: GolfSetup): GolfState {
-    return { scores: [] };
+    return { scores: [], players: [], standings: [] };
   },
 
   validateJoin(_state: GolfState, config: GolfSetup, sportData: unknown): GolfJoin {
@@ -159,17 +221,23 @@ export const golfSessionPlugin: SportSessionPlugin<
     rejectUnknownEvent(this, {}, event);
   },
 
-  applyEvent(state: GolfState, event) {
+  applyEvent(state: GolfState, event, context?: SportEventContext) {
+    let next = state;
     if ((CORE_PARTICIPANT_EVENT_TYPES as readonly string[]).includes(event.type)) {
-      return state;
+      next = state;
+    } else if (event.type === GOLF_HOLE_SCORED) {
+      next = applyScore(state, event.data);
+    } else if (event.type === GOLF_HOLE_CLEARED) {
+      next = applyClear(state, event.data);
+    } else {
+      return rejectUnknownEvent(this, state, event);
     }
-    if (event.type === GOLF_HOLE_SCORED) {
-      return applyScore(state, event.data);
+
+    if (!context) {
+      return next;
     }
-    if (event.type === GOLF_HOLE_CLEARED) {
-      return applyClear(state, event.data);
-    }
-    return rejectUnknownEvent(this, state, event);
+    const config = this.validateSetup(context.config);
+    return projectState(next, config, context.participants);
   },
 };
 
@@ -214,6 +282,7 @@ function applyScore(state: GolfState, data: unknown): GolfState {
     (score) => !(score.participantId === parsed.participantId && score.hole === parsed.hole),
   );
   return {
+    ...state,
     scores: [
       ...scores,
       {
@@ -231,6 +300,7 @@ function applyClear(state: GolfState, data: unknown): GolfState {
   const parsed = parseEvent(storedClearedSchema, data, "Invalid golf score");
   readWriter(data);
   return {
+    ...state,
     scores: scoresOf(state).filter(
       (score) => !(score.participantId === parsed.participantId && score.hole === parsed.hole),
     ),
@@ -239,6 +309,73 @@ function applyClear(state: GolfState, data: unknown): GolfState {
 
 function scoresOf(state: GolfState): GolfHoleScore[] {
   return Array.isArray(state.scores) ? state.scores : [];
+}
+
+function projectState(
+  state: GolfState,
+  config: GolfSetup,
+  participants: SportEventContext["participants"],
+): GolfState {
+  const projected = projectCard({
+    setup: config,
+    scores: scoresOf(state),
+    participants,
+  });
+  return {
+    scores: scoresOf(state),
+    players: projected.players,
+    standings: projected.standings,
+  };
+}
+
+function normalizeTee(tee: z.infer<typeof golfTeeSchema>): GolfTee {
+  const hasPar = tee.par !== undefined;
+  const hasRating = tee.rating !== undefined;
+  const hasSlope = tee.slope !== undefined;
+  if (hasPar !== hasRating || hasRating !== hasSlope) {
+    throw new SessionValidationError("Tee ratings need par, rating, and slope", {
+      sport: GOLF_ID,
+      teeId: tee.id,
+    });
+  }
+  return {
+    id: tee.id,
+    ...(tee.name ? { name: tee.name } : {}),
+    ...(hasPar ? { par: tee.par, rating: tee.rating, slope: tee.slope } : {}),
+  };
+}
+
+function normalizeHoles(
+  holes: readonly { n: number; par: number; si: number }[],
+  holesPlayed: GolfHolesPlayed,
+): GolfHole[] {
+  const expected = layoutHoles(holesPlayed);
+  const numbers = holes.map((hole) => hole.n);
+  if (new Set(numbers).size !== numbers.length) {
+    throw new SessionValidationError("Course holes must be unique", {
+      sport: GOLF_ID,
+      holes: numbers,
+    });
+  }
+  const indexes = holes.map((hole) => hole.si);
+  if (new Set(indexes).size !== indexes.length) {
+    throw new SessionValidationError("Stroke indexes must be unique", {
+      sport: GOLF_ID,
+      si: indexes,
+    });
+  }
+  const actual = [...numbers].sort((left, right) => left - right);
+  if (actual.length !== expected.length || actual.some((hole, index) => hole !== expected[index])) {
+    throw new SessionValidationError("Course holes do not match the round", {
+      sport: GOLF_ID,
+      holesPlayed,
+      holes: actual,
+      expected,
+    });
+  }
+  return [...holes]
+    .map((hole) => ({ n: hole.n, par: hole.par, si: hole.si }))
+    .sort((left, right) => left.n - right.n);
 }
 
 /**

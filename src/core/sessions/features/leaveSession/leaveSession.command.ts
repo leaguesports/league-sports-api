@@ -52,7 +52,18 @@ export class LeaveSessionCommand {
       };
 
       return {
-        state: plugin.applyEvent(snapshot.session.state, event),
+        state: plugin.applyEvent(snapshot.session.state, event, {
+          config: snapshot.session.config,
+          participants: snapshot.participants.map((candidate) =>
+            candidate.id === next.id
+              ? { id: next.id, status: next.status, sportData: next.sportData }
+              : {
+                  id: candidate.id,
+                  status: candidate.status,
+                  sportData: candidate.sportData,
+                },
+          ),
+        }),
         event,
         updateParticipant: {
           id: participant.id,

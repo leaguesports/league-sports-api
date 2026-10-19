@@ -83,7 +83,10 @@ export class StartSessionCommand {
       createdBy: request.createdBy ?? null,
       participantId: creator.id,
     };
-    state = plugin.applyEvent(state, joined);
+    state = plugin.applyEvent(state, joined, {
+      config,
+      participants: seatViews(participants),
+    });
     events.push(joined);
 
     for (const invite of invited) {
@@ -105,8 +108,11 @@ export class StartSessionCommand {
         createdBy: request.createdBy ?? null,
         participantId: participant.id,
       };
-      state = plugin.applyEvent(state, event);
       participants.push(participant);
+      state = plugin.applyEvent(state, event, {
+        config,
+        participants: seatViews(participants),
+      });
       events.push(event);
     }
 
@@ -134,4 +140,12 @@ export class StartSessionCommand {
       creator: creatorRecord,
     };
   }
+}
+
+function seatViews(participants: readonly NewParticipant[]) {
+  return participants.map((participant) => ({
+    id: participant.id,
+    status: participant.status,
+    sportData: participant.sportData,
+  }));
 }

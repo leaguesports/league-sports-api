@@ -16,9 +16,8 @@ export type PadelJoin = Record<string, never>;
 const padelSetupSchema = z.strictObject({});
 const padelJoinSchema = z.strictObject({});
 
-// Placeholder lineup until padel scoring picks a fixed format.
-// 2 covers a pair; 4 covers doubles.
-export const PADEL_PARTICIPANT_CAPACITY = { min: 2, max: 4 };
+// Placeholder maximum until padel scoring picks a fixed format.
+export const PADEL_PARTICIPANT_CAPACITY = { max: 4 };
 
 export const padelSessionPlugin: SportSessionPlugin<
   PadelSetup,
@@ -38,6 +37,10 @@ export const padelSessionPlugin: SportSessionPlugin<
       });
     }
     return { ...parsed.data };
+  },
+
+  publicSetup(_config: PadelSetup) {
+    return {};
   },
 
   buildStartingState(_config: PadelSetup): PadelState {

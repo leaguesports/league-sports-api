@@ -19,7 +19,7 @@ export class JoinSessionController {
   async summary(request: Request, response: Response) {
     try {
       const ip = request.ip ?? "unknown";
-      if (!this.rateLimiter.consume(`join:${ip}`)) {
+      if (!(await this.rateLimiter.consume(`join:${ip}`))) {
         throw new JoinLookupRateLimitError();
       }
       const code = request.params.code;
@@ -34,10 +34,15 @@ export class JoinSessionController {
 
   async join(request: Request, response: Response) {
     try {
+      const ip = request.ip ?? "unknown";
+      if (!(await this.rateLimiter.consume(`join-write:${ip}`))) {
+        throw new JoinLookupRateLimitError();
+      }
       const body = parseJoinSessionRequest(request.body);
       const sessionId = request.params.id;
       const result = await this.joinSession.execute({
         sessionId: typeof sessionId === "string" ? sessionId : "",
+        joinCode: body.joinCode,
         actorUserId: this.tryGetSessionUserId(request),
         claimPid: "claimPid" in body ? body.claimPid : undefined,
         name: "name" in body ? body.name : undefined,

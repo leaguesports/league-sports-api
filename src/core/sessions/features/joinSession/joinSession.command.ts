@@ -5,6 +5,7 @@ import { participantEventData } from "../../participant-event";
 import {
   occupyingParticipants,
   ParticipantRecord,
+  SessionNotFoundError,
   SessionRepository,
 } from "../../repositories/session.repository";
 import {
@@ -12,6 +13,7 @@ import {
   SessionConflictError,
   SessionForbiddenError,
 } from "../../session-errors";
+import { normalizeJoinCode } from "../../utils/joinCode";
 import {
   generateParticipantToken,
   hashParticipantToken,
@@ -19,6 +21,7 @@ import {
 
 export type JoinSessionCommandInput = {
   sessionId: string;
+  joinCode: string;
   actorUserId: string | null;
   claimPid?: string;
   name?: string;
@@ -32,6 +35,11 @@ export class JoinSessionCommand {
   ) {}
 
   async execute(request: JoinSessionCommandInput) {
+    const matched = await this.sessions.findByJoinCode(normalizeJoinCode(request.joinCode));
+    if (!matched || matched.session.id !== request.sessionId) {
+      throw new SessionNotFoundError(request.sessionId);
+    }
+
     const token = generateParticipantToken();
     const tokenHash = hashParticipantToken(token);
 
@@ -121,6 +129,14 @@ function addSeat(
   tokenHash: string,
 ) {
   const name = request.name?.trim() ?? "";
+  const existing = snapshot.participants.find((participant) => participant.name === name);
+  if (existing && (existing.status === "invited" || existing.status === "joined")) {
+    throw new SessionConflictError(
+      "A participant with that name is already in this session",
+      { field: "name" },
+    );
+  }
+
   const occupying = occupyingParticipants(snapshot.participants);
   if (occupying >= plugin.participants.max) {
     throw new SessionCapacityError("This session is full", {
@@ -134,6 +150,39 @@ function addSeat(
     snapshot.session.config,
     request.sportData ?? {},
   );
+
+  if (existing) {
+    const joinedAt = new Date();
+    const next: ParticipantRecord = {
+      ...existing,
+      status: "joined",
+      userId: request.actorUserId,
+      tokenHash,
+      sportData,
+      joinedAt,
+      leftAt: null,
+    };
+    const event = {
+      type: "participant.joined",
+      data: participantEventData(next),
+      createdBy: request.actorUserId,
+      participantId: existing.id,
+    };
+    return {
+      state: plugin.applyEvent(snapshot.session.state, event),
+      event,
+      updateParticipant: {
+        id: existing.id,
+        status: "joined" as const,
+        userId: request.actorUserId,
+        tokenHash,
+        sportData,
+        joinedAt,
+        leftAt: null,
+      },
+    };
+  }
+
   const participant = {
     id: randomUUID(),
     userId: request.actorUserId,

@@ -1,6 +1,6 @@
 import { Prisma, PrismaClient } from "../../../generated/prisma/client";
 
-import { SessionConflictError } from "../session-errors";
+import { SessionConflictError, SessionForbiddenError } from "../session-errors";
 import { JoinCodeGenerator, JoinCodeSource } from "../utils/joinCodeGenerator";
 import { withJoinCodeRetries } from "../utils/joinCode";
 import {
@@ -13,7 +13,9 @@ import {
   ParticipationChange,
   ParticipationResult,
   RecordSessionInput,
+  pickJoinedSeat,
   sequenceNewSessionEvents,
+  sortParticipants,
   SessionEventRecord,
   SessionNotFoundError,
   SessionRecord,
@@ -54,6 +56,7 @@ type ParticipantRow = {
   sportData: Prisma.JsonValue;
   joinedAt: Date | null;
   leftAt: Date | null;
+  createdAt: Date;
 };
 
 type SessionEventRow = {
@@ -98,9 +101,15 @@ export class PrismaSessionRepository implements SessionRepository {
           },
         });
         const storedParticipants: ParticipantRecord[] = [];
-        for (const participant of participants) {
+        const createdAtBase = Date.now();
+        for (let index = 0; index < participants.length; index += 1) {
+          const participant = participants[index];
           const row = await tx.sessionParticipant.create({
-            data: participantData(session.id, participant),
+            data: participantData(
+              session.id,
+              participant,
+              new Date(createdAtBase + index),
+            ),
           });
           storedParticipants.push(toParticipantRecord(row));
         }
@@ -187,14 +196,16 @@ export class PrismaSessionRepository implements SessionRepository {
   async findByJoinCode(joinCode: string) {
     const lobby = await this.db.lobby.findUnique({
       where: { joinCode },
-      include: { session: { include: { participants: true } } },
+      include: {
+        session: { include: { participants: { orderBy: { createdAt: "asc" } } } },
+      },
     });
     if (!lobby?.session) {
       return null;
     }
     return {
       session: toSessionRecord(lobby.session),
-      participants: lobby.session.participants.map(toParticipantRecord),
+      participants: orderedParticipants(lobby.session.participants),
     };
   }
 
@@ -213,7 +224,7 @@ export class PrismaSessionRepository implements SessionRepository {
         return await this.db.$transaction(async (tx) => {
           const existing = await tx.session.findUnique({
             where: { id: sessionId },
-            include: { participants: true },
+            include: { participants: { orderBy: { createdAt: "asc" } } },
           });
           if (!existing) {
             throw new SessionNotFoundError(sessionId);
@@ -224,14 +235,18 @@ export class PrismaSessionRepository implements SessionRepository {
           });
           const change = build({
             session: toSessionRecord(existing),
-            participants: existing.participants.map(toParticipantRecord),
+            participants: orderedParticipants(existing.participants),
             nextSeq: (aggregate._max.seq ?? 0) + 1,
           });
 
           const participant = change.createParticipant
             ? toParticipantRecord(
                 await tx.sessionParticipant.create({
-                  data: participantData(sessionId, change.createParticipant),
+                  data: participantData(
+                    sessionId,
+                    change.createParticipant,
+                    new Date(),
+                  ),
                 }),
               )
             : toParticipantRecord(
@@ -259,9 +274,12 @@ export class PrismaSessionRepository implements SessionRepository {
               data: { state: asJson(change.state) },
             }),
           );
-          const participants = (
-            await tx.sessionParticipant.findMany({ where: { sessionId } })
-          ).map(toParticipantRecord);
+          const participants = orderedParticipants(
+            await tx.sessionParticipant.findMany({
+              where: { sessionId },
+              orderBy: { createdAt: "asc" },
+            }),
+          );
 
           return { session, participant, participants, event };
         });
@@ -284,6 +302,32 @@ export class PrismaSessionRepository implements SessionRepository {
       cause: lastError instanceof Error ? lastError.message : "seq conflict",
     });
   }
+
+  async reissueSeatToken(sessionId: string, userId: string, tokenHash: string) {
+    return this.db.$transaction(async (tx) => {
+      const existing = await tx.session.findUnique({
+        where: { id: sessionId },
+        include: { participants: { orderBy: { createdAt: "asc" } } },
+      });
+      if (!existing) {
+        throw new SessionNotFoundError(sessionId);
+      }
+      if (existing.status !== "live") {
+        throw new SessionConflictError("Session is not live", {
+          status: existing.status,
+        });
+      }
+      const seat = pickJoinedSeat(orderedParticipants(existing.participants), userId);
+      if (!seat) {
+        throw new SessionForbiddenError("No joined seat for this player");
+      }
+      const row = await tx.sessionParticipant.update({
+        where: { id: seat.id },
+        data: { tokenHash },
+      });
+      return toParticipantRecord(row);
+    });
+  }
 }
 
 function requiredUpdate(change: ParticipationChange) {
@@ -293,7 +337,11 @@ function requiredUpdate(change: ParticipationChange) {
   return change.updateParticipant;
 }
 
-function participantData(sessionId: string, participant: NewParticipant) {
+function participantData(
+  sessionId: string,
+  participant: NewParticipant,
+  createdAt: Date,
+) {
   return {
     id: participant.id,
     sessionId,
@@ -305,7 +353,12 @@ function participantData(sessionId: string, participant: NewParticipant) {
     sportData: asJson(participant.sportData),
     joinedAt: participant.joinedAt ?? null,
     leftAt: participant.leftAt ?? null,
+    createdAt,
   };
+}
+
+function orderedParticipants(rows: ParticipantRow[]): ParticipantRecord[] {
+  return sortParticipants(rows.map(toParticipantRecord));
 }
 
 function participantPatch(
@@ -364,6 +417,7 @@ function toParticipantRecord(row: ParticipantRow): ParticipantRecord {
     sportData: row.sportData,
     joinedAt: row.joinedAt,
     leftAt: row.leftAt,
+    createdAt: row.createdAt,
   };
 }
 

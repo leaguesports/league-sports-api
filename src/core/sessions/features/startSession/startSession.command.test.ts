@@ -11,7 +11,7 @@ import { SessionStartedEvent } from "./sessionStarted.event";
 const counterPlugin: SportSessionPlugin<{ step: number }, { total: number }> = {
   id: "counter",
   acceptedEventTypes: ["participant.joined", "participant.invited"],
-  participants: { min: 1, max: 4 },
+  participants: { max: 4 },
   validateSetup(config: unknown) {
     if (
       typeof config !== "object" ||
@@ -24,6 +24,9 @@ const counterPlugin: SportSessionPlugin<{ step: number }, { total: number }> = {
       });
     }
     return { step: (config as { step: number }).step };
+  },
+  publicSetup() {
+    return {};
   },
   buildStartingState(config) {
     return { total: config.step };
@@ -80,5 +83,28 @@ describe("StartSessionCommand", () => {
       command.execute({ sport: "golf", config: {} }),
     ).rejects.toBeInstanceOf(SessionValidationError);
     expect(createLiveSession).not.toHaveBeenCalled();
+  });
+
+  test("keeps the saved session when a listener throws", async () => {
+    const sessions = new InMemorySessionRepository({ generate: () => "JOIN11" });
+    const events = new EventEmitter();
+    events.on(SessionStartedEvent, () => {
+      throw new Error("notify failed");
+    });
+    const command = new StartSessionCommand(
+      sessions,
+      events,
+      createSportRegistry([counterPlugin]),
+    );
+    const errorLog = jest.spyOn(console, "error").mockImplementation(() => {});
+
+    const created = await command.execute({
+      sport: "counter",
+      config: { step: 1 },
+    });
+
+    expect(sessions.findSession(created.session.id)?.status).toBe("live");
+    await expect(sessions.findByJoinCode("JOIN11")).resolves.toBeTruthy();
+    errorLog.mockRestore();
   });
 });

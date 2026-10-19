@@ -13,6 +13,10 @@ import {
 import { JoinCodeAllocationError } from "./utils/joinCode";
 
 export function sendSessionError(response: Response, error: unknown) {
+  if (isUnknownVenueError(error)) {
+    return response.status(400).json({ error: "Unknown venue" });
+  }
+
   if (error instanceof SessionValidationError) {
     return response.status(400).json({
       error: error.message,
@@ -60,4 +64,16 @@ export function sendSessionError(response: Response, error: unknown) {
 
   console.error(error);
   return response.status(500).json({ error: "Internal server error" });
+}
+
+function isUnknownVenueError(error: unknown): boolean {
+  if (!error || typeof error !== "object" || !("code" in error)) {
+    return false;
+  }
+  if (String((error as { code?: unknown }).code) !== "P2003") {
+    return false;
+  }
+  const meta = "meta" in error ? (error as { meta?: unknown }).meta : undefined;
+  const message = error instanceof Error ? error.message : "";
+  return `${message} ${JSON.stringify(meta ?? {})}`.toLowerCase().includes("venue");
 }

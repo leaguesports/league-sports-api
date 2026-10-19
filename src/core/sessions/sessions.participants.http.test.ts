@@ -7,8 +7,8 @@ import { createApp } from "../../app";
 import { Config } from "../../config";
 import { signAuthenticationToken } from "../identity/utils/jwt";
 import { InMemoryJoinLookupRateLimiter } from "./join-rate-limiter";
-import { InMemorySessionRepository } from "./repositories/in-memory-session.repository";
 import { participantTokensMatch } from "./utils/participantToken";
+import { InMemorySessionRepository } from "./repositories/in-memory-session.repository";
 
 function makeConfig(): Config {
   return {
@@ -54,7 +54,10 @@ describe("session participants", () => {
 
   beforeEach(async () => {
     sessions = new InMemorySessionRepository({ generate: () => "JOIN99" });
-    app = await createApp(config, { sessionRepository: sessions });
+    app = await createApp(config, {
+      sessionRepository: sessions,
+      joinLookupRateLimiter: new InMemoryJoinLookupRateLimiter(100, 60_000),
+    });
     server = await listen(app);
   });
 
@@ -66,7 +69,6 @@ describe("session participants", () => {
   test("seats the creator, invites, claims, enforces golf join rules, and keeps events after leave", async () => {
     const host = signAuthenticationToken(config, { userId: "user-host" });
     const sam = signAuthenticationToken(config, { userId: "user-sam" });
-    const stranger = signAuthenticationToken(config, { userId: "user-stranger" });
 
     const started = await fetch(`${server.url}/api/sessions`, {
       method: "POST",
@@ -80,7 +82,7 @@ describe("session participants", () => {
         config: golfSetup,
         sportData: { teeId: "white", handicapIndex: 8 },
         invited: [
-          { name: "Sam", userId: "user-sam", sportData: { teeId: "blue", handicapIndex: 12 } },
+          { name: "Sam", sportData: { teeId: "blue", handicapIndex: 12 } },
           { name: "Alex", sportData: { teeId: "white" } },
         ],
       }),
@@ -125,6 +127,12 @@ describe("session participants", () => {
       sport: "golf",
       status: "live",
       openSpots: 1,
+      setup: {
+        tees: [
+          { id: "white", name: "White" },
+          { id: "blue", name: "Blue" },
+        ],
+      },
     });
     expect(summaryBody.participants).toEqual([
       expect.objectContaining({ name: "Host", role: "creator", status: "joined" }),
@@ -185,26 +193,24 @@ describe("session participants", () => {
     });
 
     const samId = startedBody.invited.find((participant) => participant.name === "Sam")?.id;
-    const wrongUser = await fetch(`${server.url}/api/sessions/${startedBody.session.id}/join`, {
+    const missingCode = await fetch(`${server.url}/api/sessions/${startedBody.session.id}/join`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Cookie: `token=${stranger}`,
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ claimPid: samId }),
     });
-    expect(wrongUser.status).toBe(403);
-    expect(await wrongUser.json()).toMatchObject({
-      error: "This invite is for a different player",
+    expect(missingCode.status).toBe(400);
+
+    const wrongCode = await fetch(`${server.url}/api/sessions/${startedBody.session.id}/join`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ claimPid: samId, joinCode: "WRONG1" }),
     });
+    expect(wrongCode.status).toBe(404);
 
     const claimed = await fetch(`${server.url}/api/sessions/${startedBody.session.id}/join`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Cookie: `token=${sam}`,
-      },
-      body: JSON.stringify({ claimPid: samId }),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ claimPid: samId, joinCode: "join99" }),
     });
     expect(claimed.status).toBe(200);
     const claimedBody = (await claimed.json()) as {
@@ -219,7 +225,7 @@ describe("session participants", () => {
         "Content-Type": "application/json",
         Cookie: `token=${sam}`,
       },
-      body: JSON.stringify({ claimPid: samId }),
+      body: JSON.stringify({ claimPid: samId, joinCode: "JOIN99" }),
     });
     expect(again.status).toBe(409);
     expect(await again.json()).toMatchObject({ error: "Invite already claimed" });
@@ -286,6 +292,76 @@ describe("session participants", () => {
     await expect(sessions.findByJoinCode("JOIN99")).resolves.toBeNull();
   });
 
+  test("reuses a departed name and restores a signed-in seat token", async () => {
+    const host = signAuthenticationToken(config, { userId: "user-host" });
+    const started = await fetch(`${server.url}/api/sessions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: `token=${host}`,
+      },
+      body: JSON.stringify({
+        sport: "golf",
+        name: "Host",
+        config: golfSetup,
+        sportData: { teeId: "white" },
+      }),
+    });
+    expect(started.status).toBe(201);
+    const startedBody = (await started.json()) as {
+      session: { id: string };
+      participant: { id: string };
+      token: string;
+    };
+
+    const restored = await fetch(
+      `${server.url}/api/sessions/${startedBody.session.id}/token`,
+      { method: "POST", headers: { Cookie: `token=${host}` } },
+    );
+    expect(restored.status).toBe(200);
+    const restoredBody = (await restored.json()) as {
+      participant: { id: string; status: string };
+      token: string;
+    };
+    expect(restoredBody.participant).toMatchObject({
+      id: startedBody.participant.id,
+      status: "joined",
+    });
+    expect(restoredBody.token).not.toBe(startedBody.token);
+
+    const oldToken = await fetch(
+      `${server.url}/api/sessions/${startedBody.session.id}/leave`,
+      { method: "POST", headers: { "X-Session-Token": startedBody.token } },
+    );
+    expect(oldToken.status).toBe(401);
+
+    const left = await fetch(`${server.url}/api/sessions/${startedBody.session.id}/leave`, {
+      method: "POST",
+      headers: { "X-Session-Token": restoredBody.token },
+    });
+    expect(left.status).toBe(200);
+
+    const rejoined = await join(server.url, startedBody.session.id, {
+      name: "Host",
+      sportData: { teeId: "blue" },
+    });
+    expect(rejoined.status).toBe(200);
+    const rejoinedBody = (await rejoined.json()) as {
+      participant: { id: string; name: string; status: string; sportData: { teeId: string } };
+    };
+    expect(rejoinedBody.participant).toMatchObject({
+      id: startedBody.participant.id,
+      name: "Host",
+      status: "joined",
+      sportData: { teeId: "blue" },
+    });
+
+    const anonymous = await fetch(`${server.url}/api/sessions/${startedBody.session.id}/token`, {
+      method: "POST",
+    });
+    expect(anonymous.status).toBe(401);
+  });
+
   test("rate-limits public join lookups", async () => {
     await server.close();
     await app.locals.prisma?.$disconnect();
@@ -305,10 +381,10 @@ describe("session participants", () => {
   });
 });
 
-function join(url: string, sessionId: string, body: unknown) {
+function join(url: string, sessionId: string, body: Record<string, unknown>) {
   return fetch(`${url}/api/sessions/${sessionId}/join`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+    body: JSON.stringify({ joinCode: "JOIN99", ...body }),
   });
 }

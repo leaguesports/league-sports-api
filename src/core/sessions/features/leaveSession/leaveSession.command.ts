@@ -1,5 +1,7 @@
 import { SportRegistry } from "../../../../sports/registry";
+import { EventEmitter } from "../../events";
 import { participantEventData } from "../../participant-event";
+import { emitCommittedSessionEvent } from "../../realtime/sessionEventCommitted.event";
 import { SessionRepository } from "../../repositories/session.repository";
 import {
   ParticipantTokenError,
@@ -15,6 +17,7 @@ export type LeaveSessionCommandInput = {
 export class LeaveSessionCommand {
   constructor(
     private readonly sessions: SessionRepository,
+    private readonly eventEmitter: EventEmitter,
     private readonly sports: SportRegistry,
   ) {}
 
@@ -71,6 +74,13 @@ export class LeaveSessionCommand {
           leftAt,
         },
       };
+    });
+
+    await emitCommittedSessionEvent(this.eventEmitter, {
+      sessionId: result.session.id,
+      seq: result.event.seq,
+      type: result.event.type,
+      state: result.session.state,
     });
 
     return { participant: result.participant };

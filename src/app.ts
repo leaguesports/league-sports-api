@@ -35,6 +35,7 @@ import {
 import {
   createSessionsModule,
   JoinLookupRateLimiter,
+  SessionPublisher,
   SessionRepository,
   SessionStartedEvent,
 } from "./core/sessions";
@@ -61,6 +62,7 @@ export type CreateAppDependencies = {
   sessionRepository?: SessionRepository;
   onSessionStarted?: (event: SessionStartedEvent) => void;
   joinLookupRateLimiter?: JoinLookupRateLimiter;
+  sessionPublisher?: SessionPublisher;
 };
 
 export async function createApp(
@@ -142,6 +144,7 @@ export async function createApp(
     sessionRepository: dependencies.sessionRepository,
     onSessionStarted: dependencies.onSessionStarted,
     joinLookupRateLimiter: dependencies.joinLookupRateLimiter,
+    sessionPublisher: dependencies.sessionPublisher,
   });
 
   app.use(identity.router);

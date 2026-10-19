@@ -55,6 +55,10 @@ export const padelSessionPlugin: SportSessionPlugin<
     return { ...parsed.data };
   },
 
+  validateEvent(_state, _config, event) {
+    rejectUnknownEvent(this, {}, event);
+  },
+
   applyEvent(state: PadelState, event) {
     return rejectUnknownEvent(this, state, event);
   },

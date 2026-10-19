@@ -37,6 +37,8 @@ function toRuntime(plugin: SportSessionPlugin<any, any>): SportSessionRuntime {
     buildStartingState: (config) => plugin.buildStartingState(config),
     validateJoin: (state, config, sportData) =>
       plugin.validateJoin(state, config, sportData),
+    validateEvent: (state, config, event, context) =>
+      plugin.validateEvent(state, config, event, context),
     applyEvent: (state, event) => plugin.applyEvent(state, event),
   };
 }

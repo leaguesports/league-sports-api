@@ -10,6 +10,9 @@ import {
   ParticipantRecord,
   ParticipantRole,
   ParticipantStatus,
+  AppendEventChange,
+  AppendEventResult,
+  AppendEventSnapshot,
   ParticipationChange,
   ParticipationResult,
   RecordSessionInput,
@@ -206,11 +209,8 @@ export class PrismaSessionRepository implements SessionRepository {
       nextSeq: number;
     }) => ParticipationChange,
   ): Promise<ParticipationResult> {
-    let lastError: unknown;
-
-    for (let attempt = 1; attempt <= MAX_SEQ_ATTEMPTS; attempt += 1) {
-      try {
-        return await this.db.$transaction(async (tx) => {
+    return withSeqRetries(() =>
+      this.db.$transaction(async (tx) => {
           const existing = await tx.session.findUnique({
             where: { id: sessionId },
             include: { participants: true },
@@ -264,25 +264,73 @@ export class PrismaSessionRepository implements SessionRepository {
           ).map(toParticipantRecord);
 
           return { session, participant, participants, event };
-        });
-      } catch (error) {
-        if (isNameConflict(error)) {
-          throw new SessionConflictError(
-            "A participant with that name is already in this session",
-            { field: "name" },
-          );
-        }
-        if (isSeqConflict(error) && attempt < MAX_SEQ_ATTEMPTS) {
-          lastError = error;
-          continue;
-        }
-        throw error;
-      }
-    }
+        }),
+    );
+  }
 
-    throw new SessionConflictError("Could not assign an event sequence", {
-      cause: lastError instanceof Error ? lastError.message : "seq conflict",
-    });
+  async appendEvent(
+    sessionId: string,
+    build: (snapshot: AppendEventSnapshot) => AppendEventChange,
+  ): Promise<AppendEventResult> {
+    return withSeqRetries(() =>
+      this.db.$transaction(async (tx) => {
+        const existing = await tx.session.findUnique({
+          where: { id: sessionId },
+          include: { participants: true },
+        });
+        if (!existing) {
+          throw new SessionNotFoundError(sessionId);
+        }
+        const storedEvents = await tx.sessionEvent.findMany({
+          where: { sessionId },
+          orderBy: { seq: "asc" },
+        });
+        const aggregate = await tx.sessionEvent.aggregate({
+          where: { sessionId },
+          _max: { seq: true },
+        });
+        const change = build({
+          session: toSessionRecord(existing),
+          participants: existing.participants.map(toParticipantRecord),
+          events: storedEvents.map(toSessionEventRecord),
+          nextSeq: (aggregate._max.seq ?? 0) + 1,
+        });
+
+        if (change.action === "replay") {
+          const prior = storedEvents.find((event) => event.seq === change.seq);
+          if (!prior) {
+            throw new SessionConflictError("Replay target is missing", {
+              seq: change.seq,
+            });
+          }
+          return {
+            session: toSessionRecord(existing),
+            event: toSessionEventRecord(prior),
+            replayed: true,
+          };
+        }
+
+        const event = toSessionEventRecord(
+          await tx.sessionEvent.create({
+            data: {
+              sessionId,
+              seq: (aggregate._max.seq ?? 0) + 1,
+              type: change.event.type,
+              data: asJson(change.event.data),
+              createdBy: change.event.createdBy ?? null,
+              participantId: change.event.participantId ?? null,
+            },
+          }),
+        );
+        const session = toSessionRecord(
+          await tx.session.update({
+            where: { id: sessionId },
+            data: { state: asJson(change.state) },
+          }),
+        );
+        return { session, event, replayed: false };
+      }),
+    );
   }
 }
 
@@ -378,6 +426,36 @@ function toSessionEventRecord(row: SessionEventRow): SessionEventRecord {
     participantId: row.participantId,
     createdAt: row.createdAt,
   };
+}
+
+/**
+ * Shared by seat changes and captured sport events. A unique (sessionId, seq)
+ * collision retries the read-build-write. Anything else, including a name
+ * clash, is returned to the caller.
+ */
+async function withSeqRetries<T>(operation: () => Promise<T>): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= MAX_SEQ_ATTEMPTS; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      if (isNameConflict(error)) {
+        throw new SessionConflictError(
+          "A participant with that name is already in this session",
+          { field: "name" },
+        );
+      }
+      if (isSeqConflict(error) && attempt < MAX_SEQ_ATTEMPTS) {
+        lastError = error;
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  throw new SessionConflictError("Could not assign an event sequence", {
+    cause: lastError instanceof Error ? lastError.message : "seq conflict",
+  });
 }
 
 function isNameConflict(error: unknown): boolean {

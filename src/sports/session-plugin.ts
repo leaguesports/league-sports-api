@@ -3,6 +3,11 @@ export type SportSessionEvent = {
   data?: unknown;
 };
 
+/** Seats a plug-in may inspect while validating an event. No account ids. */
+export type SportEventValidationContext = {
+  participants: readonly { id: string; status: string }[];
+};
+
 /** Written by the shared session layer. Every plug-in must accept these. */
 export const CORE_PARTICIPANT_EVENT_TYPES = [
   "participant.invited",
@@ -21,8 +26,14 @@ export type ParticipantCapacity = {
 
 /**
  * Each sport owns setup validation, who may take a seat, the opening state,
- * and how an event changes that state. `applyEvent` must be pure: return the
- * next state and do not mutate the previous one.
+ * and how an event changes that state.
+ *
+ * `validateEvent` rejects a payload the sport will not apply. The session
+ * core checks the writer's token and that the session is live; the plug-in
+ * checks the sport payload, including whether a target seat is joined.
+ * `applyEvent` must be pure: return the next state and do not mutate the
+ * previous one. Replay builds state from the stored event alone, so anything
+ * the next state needs (writer, seq) has to be on that event.
  */
 export interface SportSessionPlugin<
   TConfig = unknown,
@@ -35,6 +46,12 @@ export interface SportSessionPlugin<
   validateSetup(config: unknown): TConfig;
   buildStartingState(config: TConfig): TState;
   validateJoin(state: TState, config: TConfig, sportData: unknown): TJoin;
+  validateEvent(
+    state: TState,
+    config: TConfig,
+    event: SportSessionEvent,
+    context: SportEventValidationContext,
+  ): void;
   applyEvent(state: TState, event: SportSessionEvent): TState;
 }
 
@@ -46,6 +63,12 @@ export type SportSessionRuntime = {
   validateSetup(config: unknown): unknown;
   buildStartingState(config: unknown): unknown;
   validateJoin(state: unknown, config: unknown, sportData: unknown): unknown;
+  validateEvent(
+    state: unknown,
+    config: unknown,
+    event: SportSessionEvent,
+    context: SportEventValidationContext,
+  ): void;
   applyEvent(state: unknown, event: SportSessionEvent): unknown;
 };
 
@@ -57,6 +80,17 @@ export class SessionValidationError extends Error {
     this.name = "SessionValidationError";
     this.details = details;
   }
+}
+
+/** Sport events a client may post. Participant events stay on the join routes. */
+export function isCapturableEventType(
+  acceptedEventTypes: readonly string[],
+  type: string,
+): boolean {
+  return (
+    acceptedEventTypes.includes(type) &&
+    !(CORE_PARTICIPANT_EVENT_TYPES as readonly string[]).includes(type)
+  );
 }
 
 export function rejectUnknownEvent<TState>(

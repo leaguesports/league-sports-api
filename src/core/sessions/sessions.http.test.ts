@@ -221,6 +221,9 @@ describe("POST /api/sessions", () => {
       async participate() {
         throw new Error("database offline");
       },
+      async appendEvent() {
+        throw new Error("database offline");
+      },
     } as SessionRepository;
     const errorLog = jest.spyOn(console, "error").mockImplementation(() => {});
     app = await createApp(config, { sessionRepository: exploding });

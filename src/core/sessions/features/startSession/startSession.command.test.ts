@@ -31,6 +31,9 @@ const counterPlugin: SportSessionPlugin<{ step: number }, { total: number }> = {
   validateJoin() {
     return {};
   },
+  validateEvent() {
+    return undefined;
+  },
   applyEvent(state) {
     return state;
   },

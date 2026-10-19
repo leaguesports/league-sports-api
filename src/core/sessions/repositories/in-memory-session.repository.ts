@@ -6,6 +6,9 @@ import { withJoinCodeRetries } from "../utils/joinCode";
 import {
   CreateLiveSessionInput,
   LobbyRecord,
+  AppendEventChange,
+  AppendEventResult,
+  AppendEventSnapshot,
   NewParticipant,
   NewSessionEvent,
   ParticipantRecord,
@@ -219,6 +222,51 @@ export class InMemorySessionRepository implements SessionRepository {
       participants: this.participantsFor(sessionId),
       event,
     };
+  }
+
+  async appendEvent(
+    sessionId: string,
+    build: (snapshot: AppendEventSnapshot) => AppendEventChange,
+  ): Promise<AppendEventResult> {
+    const session = this.sessions.get(sessionId);
+    if (!session) {
+      throw new SessionNotFoundError(sessionId);
+    }
+
+    const nextSeq = this.nextSeq(sessionId);
+    const change = build({
+      session,
+      participants: this.participantsFor(sessionId),
+      events: this.eventsFor(sessionId),
+      nextSeq,
+    });
+    if (change.action === "replay") {
+      const event = this.events.find(
+        (candidate) => candidate.sessionId === sessionId && candidate.seq === change.seq,
+      );
+      if (!event) {
+        throw new SessionConflictError("Replay target is missing", { seq: change.seq });
+      }
+      return { session, event, replayed: true };
+    }
+
+    const now = new Date();
+    const updated: SessionRecord = {
+      ...session,
+      state: change.state,
+      updatedAt: now,
+    };
+    this.sessions.set(sessionId, updated);
+    const event = this.storeEvent(
+      sessionId,
+      {
+        ...change.event,
+        participantId: change.event.participantId ?? null,
+        seq: nextSeq,
+      },
+      now,
+    );
+    return { session: updated, event, replayed: false };
   }
 
   findSession(sessionId: string): SessionRecord | undefined {

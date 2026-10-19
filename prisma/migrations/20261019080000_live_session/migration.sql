@@ -1,6 +1,12 @@
 -- CreateEnum
 CREATE TYPE "SessionStatus" AS ENUM ('live', 'closed');
 
+-- CreateEnum
+CREATE TYPE "SessionParticipantRole" AS ENUM ('creator', 'player');
+
+-- CreateEnum
+CREATE TYPE "SessionParticipantStatus" AS ENUM ('invited', 'joined', 'left', 'removed');
+
 -- CreateTable
 CREATE TABLE "Lobby" (
     "id" TEXT NOT NULL,
@@ -28,6 +34,22 @@ CREATE TABLE "Session" (
 );
 
 -- CreateTable
+CREATE TABLE "SessionParticipant" (
+    "id" TEXT NOT NULL,
+    "sessionId" TEXT NOT NULL,
+    "userId" TEXT,
+    "name" TEXT NOT NULL,
+    "role" "SessionParticipantRole" NOT NULL DEFAULT 'player',
+    "status" "SessionParticipantStatus" NOT NULL,
+    "tokenHash" TEXT,
+    "sportData" JSONB NOT NULL DEFAULT '{}',
+    "joinedAt" TIMESTAMP(3),
+    "leftAt" TIMESTAMP(3),
+
+    CONSTRAINT "SessionParticipant_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "SessionEvent" (
     "id" TEXT NOT NULL,
     "sessionId" TEXT NOT NULL,
@@ -35,6 +57,7 @@ CREATE TABLE "SessionEvent" (
     "type" TEXT NOT NULL,
     "data" JSONB NOT NULL,
     "createdBy" TEXT,
+    "participantId" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "SessionEvent_pkey" PRIMARY KEY ("id")
@@ -59,6 +82,12 @@ CREATE INDEX "Session_createdAt_idx" ON "Session"("createdAt");
 CREATE INDEX "Session_updatedAt_idx" ON "Session"("updatedAt");
 
 -- CreateIndex
+CREATE INDEX "SessionParticipant_userId_idx" ON "SessionParticipant"("userId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "SessionParticipant_sessionId_name_key" ON "SessionParticipant"("sessionId", "name");
+
+-- CreateIndex
 CREATE INDEX "SessionEvent_createdAt_idx" ON "SessionEvent"("createdAt");
 
 -- CreateIndex
@@ -71,4 +100,10 @@ ALTER TABLE "Session" ADD CONSTRAINT "Session_venueId_fkey" FOREIGN KEY ("venueI
 ALTER TABLE "Session" ADD CONSTRAINT "Session_lobbyId_fkey" FOREIGN KEY ("lobbyId") REFERENCES "Lobby"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "SessionParticipant" ADD CONSTRAINT "SessionParticipant_sessionId_fkey" FOREIGN KEY ("sessionId") REFERENCES "Session"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "SessionEvent" ADD CONSTRAINT "SessionEvent_sessionId_fkey" FOREIGN KEY ("sessionId") REFERENCES "Session"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "SessionEvent" ADD CONSTRAINT "SessionEvent_participantId_fkey" FOREIGN KEY ("participantId") REFERENCES "SessionParticipant"("id") ON DELETE SET NULL ON UPDATE CASCADE;

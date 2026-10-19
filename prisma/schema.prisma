@@ -281,9 +281,10 @@ model Session {
   createdBy String?
   status    SessionStatus  @default(live)
   lobbyId   String?        @unique
-  events    SessionEvent[]
-  createdAt DateTime       @default(now())
-  updatedAt DateTime       @updatedAt
+  events       SessionEvent[]
+  participants SessionParticipant[]
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
 
   venue Venue? @relation(fields: [venueId], references: [id])
   lobby Lobby? @relation(fields: [lobbyId], references: [id], onDelete: SetNull)
@@ -294,6 +295,40 @@ model Session {
   @@index([updatedAt])
 }
 
+enum SessionParticipantRole {
+  creator
+  player
+}
+
+enum SessionParticipantStatus {
+  invited
+  joined
+  left
+  removed
+}
+
+// A seat in a session. Logged-in players set userId. Anonymous players leave
+// userId empty: their generated id plus the name they typed is the identity.
+model SessionParticipant {
+  id        String                   @id @default(uuid())
+  sessionId String
+  userId    String?
+  name      String
+  role      SessionParticipantRole   @default(player)
+  status    SessionParticipantStatus
+  // sha256 of the per-device token. The raw token is returned once.
+  tokenHash String?
+  sportData Json                     @default("{}")
+  joinedAt  DateTime?
+  leftAt    DateTime?
+
+  session Session        @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  events  SessionEvent[]
+
+  @@unique([sessionId, name])
+  @@index([userId])
+}
+
 model SessionEvent {
   id        String   @id @default(uuid())
   sessionId String
@@ -301,10 +336,14 @@ model SessionEvent {
   seq       Int
   type      String
   data      Json
-  createdBy String?
-  createdAt DateTime @default(now())
+  // Account of the actor when they are signed in. Null for an anonymous player.
+  // Kept beside participantId: an invite's actor is the host, while participantId is the invitee's seat.
+  createdBy     String?
+  participantId String?
+  createdAt     DateTime @default(now())
 
-  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  session     Session             @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  participant SessionParticipant? @relation(fields: [participantId], references: [id], onDelete: SetNull)
 
   @@unique([sessionId, seq])
   @@index([createdAt])

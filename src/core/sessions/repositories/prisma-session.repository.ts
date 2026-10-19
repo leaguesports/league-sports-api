@@ -1,10 +1,17 @@
 import { Prisma, PrismaClient } from "../../../generated/prisma/client";
 
+import { SessionConflictError } from "../session-errors";
 import { JoinCodeGenerator, JoinCodeSource } from "../utils/joinCodeGenerator";
 import { withJoinCodeRetries } from "../utils/joinCode";
 import {
   CreateLiveSessionInput,
   LobbyRecord,
+  NewParticipant,
+  ParticipantRecord,
+  ParticipantRole,
+  ParticipantStatus,
+  ParticipationChange,
+  ParticipationResult,
   RecordSessionInput,
   sequenceNewSessionEvents,
   SessionEventRecord,
@@ -13,6 +20,8 @@ import {
   SessionRepository,
   SessionStatus,
 } from "./session.repository";
+
+const MAX_SEQ_ATTEMPTS = 5;
 
 type SessionRow = {
   id: string;
@@ -34,6 +43,19 @@ type LobbyRow = {
   updatedAt: Date;
 };
 
+type ParticipantRow = {
+  id: string;
+  sessionId: string;
+  userId: string | null;
+  name: string;
+  role: ParticipantRole;
+  status: ParticipantStatus;
+  tokenHash: string | null;
+  sportData: Prisma.JsonValue;
+  joinedAt: Date | null;
+  leftAt: Date | null;
+};
+
 type SessionEventRow = {
   id: string;
   sessionId: string;
@@ -41,6 +63,7 @@ type SessionEventRow = {
   type: string;
   data: Prisma.JsonValue;
   createdBy: string | null;
+  participantId: string | null;
   createdAt: Date;
 };
 
@@ -54,9 +77,10 @@ export class PrismaSessionRepository implements SessionRepository {
     this.joinCodes = joinCodes;
   }
 
-  async createLiveSession(
-    input: CreateLiveSessionInput,
-  ): Promise<{ session: SessionRecord; lobby: LobbyRecord }> {
+  async createLiveSession(input: CreateLiveSessionInput) {
+    const participants = input.participants ?? [];
+    const events = sequenceNewSessionEvents(input.events ?? []);
+
     return withJoinCodeRetries(this.joinCodes, (joinCode) =>
       this.db.$transaction(async (tx) => {
         const lobby = await tx.lobby.create({
@@ -73,18 +97,39 @@ export class PrismaSessionRepository implements SessionRepository {
             lobbyId: lobby.id,
           },
         });
+        const storedParticipants: ParticipantRecord[] = [];
+        for (const participant of participants) {
+          const row = await tx.sessionParticipant.create({
+            data: participantData(session.id, participant),
+          });
+          storedParticipants.push(toParticipantRecord(row));
+        }
+        const storedEvents: SessionEventRecord[] = [];
+        for (const event of events) {
+          const row = await tx.sessionEvent.create({
+            data: {
+              sessionId: session.id,
+              seq: event.seq,
+              type: event.type,
+              data: asJson(event.data),
+              createdBy: event.createdBy ?? null,
+              participantId: event.participantId,
+            },
+          });
+          storedEvents.push(toSessionEventRecord(row));
+        }
 
         return {
           session: toSessionRecord(session),
           lobby: toLobbyRecord(lobby),
+          participants: storedParticipants,
+          events: storedEvents,
         };
       }),
     );
   }
 
-  async recordSession(
-    input: RecordSessionInput,
-  ): Promise<{ session: SessionRecord; events: SessionEventRecord[] }> {
+  async recordSession(input: RecordSessionInput) {
     const sequenced = sequenceNewSessionEvents(input.events ?? []);
 
     return this.db.$transaction(async (tx) => {
@@ -108,6 +153,7 @@ export class PrismaSessionRepository implements SessionRepository {
             type: event.type,
             data: asJson(event.data),
             createdBy: event.createdBy ?? null,
+            participantId: event.participantId,
           },
         });
         events.push(toSessionEventRecord(row));
@@ -137,6 +183,142 @@ export class PrismaSessionRepository implements SessionRepository {
       return toSessionRecord(session);
     });
   }
+
+  async findByJoinCode(joinCode: string) {
+    const lobby = await this.db.lobby.findUnique({
+      where: { joinCode },
+      include: { session: { include: { participants: true } } },
+    });
+    if (!lobby?.session) {
+      return null;
+    }
+    return {
+      session: toSessionRecord(lobby.session),
+      participants: lobby.session.participants.map(toParticipantRecord),
+    };
+  }
+
+  async participate(
+    sessionId: string,
+    build: (snapshot: {
+      session: SessionRecord;
+      participants: ParticipantRecord[];
+      nextSeq: number;
+    }) => ParticipationChange,
+  ): Promise<ParticipationResult> {
+    let lastError: unknown;
+
+    for (let attempt = 1; attempt <= MAX_SEQ_ATTEMPTS; attempt += 1) {
+      try {
+        return await this.db.$transaction(async (tx) => {
+          const existing = await tx.session.findUnique({
+            where: { id: sessionId },
+            include: { participants: true },
+          });
+          if (!existing) {
+            throw new SessionNotFoundError(sessionId);
+          }
+          const aggregate = await tx.sessionEvent.aggregate({
+            where: { sessionId },
+            _max: { seq: true },
+          });
+          const change = build({
+            session: toSessionRecord(existing),
+            participants: existing.participants.map(toParticipantRecord),
+            nextSeq: (aggregate._max.seq ?? 0) + 1,
+          });
+
+          const participant = change.createParticipant
+            ? toParticipantRecord(
+                await tx.sessionParticipant.create({
+                  data: participantData(sessionId, change.createParticipant),
+                }),
+              )
+            : toParticipantRecord(
+                await tx.sessionParticipant.update({
+                  where: { id: requiredUpdate(change).id },
+                  data: participantPatch(requiredUpdate(change)),
+                }),
+              );
+
+          const event = toSessionEventRecord(
+            await tx.sessionEvent.create({
+              data: {
+                sessionId,
+                seq: (aggregate._max.seq ?? 0) + 1,
+                type: change.event.type,
+                data: asJson(change.event.data),
+                createdBy: change.event.createdBy ?? null,
+                participantId: change.event.participantId ?? participant.id,
+              },
+            }),
+          );
+          const session = toSessionRecord(
+            await tx.session.update({
+              where: { id: sessionId },
+              data: { state: asJson(change.state) },
+            }),
+          );
+          const participants = (
+            await tx.sessionParticipant.findMany({ where: { sessionId } })
+          ).map(toParticipantRecord);
+
+          return { session, participant, participants, event };
+        });
+      } catch (error) {
+        if (isNameConflict(error)) {
+          throw new SessionConflictError(
+            "A participant with that name is already in this session",
+            { field: "name" },
+          );
+        }
+        if (isSeqConflict(error) && attempt < MAX_SEQ_ATTEMPTS) {
+          lastError = error;
+          continue;
+        }
+        throw error;
+      }
+    }
+
+    throw new SessionConflictError("Could not assign an event sequence", {
+      cause: lastError instanceof Error ? lastError.message : "seq conflict",
+    });
+  }
+}
+
+function requiredUpdate(change: ParticipationChange) {
+  if (!change.updateParticipant) {
+    throw new Error("Participation change is missing a participant");
+  }
+  return change.updateParticipant;
+}
+
+function participantData(sessionId: string, participant: NewParticipant) {
+  return {
+    id: participant.id,
+    sessionId,
+    userId: participant.userId ?? null,
+    name: participant.name,
+    role: participant.role,
+    status: participant.status,
+    tokenHash: participant.tokenHash ?? null,
+    sportData: asJson(participant.sportData),
+    joinedAt: participant.joinedAt ?? null,
+    leftAt: participant.leftAt ?? null,
+  };
+}
+
+function participantPatch(
+  update: NonNullable<ParticipationChange["updateParticipant"]>,
+) {
+  return {
+    ...(update.userId !== undefined ? { userId: update.userId } : {}),
+    ...(update.status !== undefined ? { status: update.status } : {}),
+    ...(update.tokenHash !== undefined ? { tokenHash: update.tokenHash } : {}),
+    ...(update.sportData !== undefined ? { sportData: asJson(update.sportData) } : {}),
+    ...(update.joinedAt !== undefined ? { joinedAt: update.joinedAt } : {}),
+    ...(update.leftAt !== undefined ? { leftAt: update.leftAt } : {}),
+  };
 }
 
 function asJson(value: unknown): Prisma.InputJsonValue {
@@ -170,6 +352,21 @@ function toLobbyRecord(row: LobbyRow): LobbyRecord {
   };
 }
 
+function toParticipantRecord(row: ParticipantRow): ParticipantRecord {
+  return {
+    id: row.id,
+    sessionId: row.sessionId,
+    userId: row.userId,
+    name: row.name,
+    role: row.role,
+    status: row.status,
+    tokenHash: row.tokenHash,
+    sportData: row.sportData,
+    joinedAt: row.joinedAt,
+    leftAt: row.leftAt,
+  };
+}
+
 function toSessionEventRecord(row: SessionEventRow): SessionEventRecord {
   return {
     id: row.id,
@@ -178,6 +375,36 @@ function toSessionEventRecord(row: SessionEventRow): SessionEventRecord {
     type: row.type,
     data: row.data,
     createdBy: row.createdBy,
+    participantId: row.participantId,
     createdAt: row.createdAt,
   };
+}
+
+function isNameConflict(error: unknown): boolean {
+  return uniqueConflictIncludes(error, "name") && !uniqueConflictIncludes(error, "joincode");
+}
+
+function isSeqConflict(error: unknown): boolean {
+  return uniqueConflictIncludes(error, "seq");
+}
+
+function uniqueConflictIncludes(error: unknown, fragment: string): boolean {
+  if (!error || typeof error !== "object" || !("code" in error)) {
+    return false;
+  }
+  if (String((error as { code?: unknown }).code) !== "P2002") {
+    return false;
+  }
+  const meta = "meta" in error ? (error as { meta?: unknown }).meta : undefined;
+  const target =
+    meta && typeof meta === "object" && meta !== null && "target" in meta
+      ? (meta as { target?: unknown }).target
+      : undefined;
+  const fields = Array.isArray(target)
+    ? target.map(String)
+    : typeof target === "string"
+      ? [target]
+      : [];
+  const message = error instanceof Error ? error.message : "";
+  return `${fields.join(" ")} ${message}`.toLowerCase().includes(fragment);
 }

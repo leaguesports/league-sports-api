@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import {
+  CORE_PARTICIPANT_EVENT_TYPES,
   rejectUnknownEvent,
   SessionValidationError,
   SportSessionPlugin,
@@ -10,12 +11,23 @@ export const PADEL_ID = "padel";
 
 export type PadelSetup = Record<string, never>;
 export type PadelState = Record<string, never>;
+export type PadelJoin = Record<string, never>;
 
 const padelSetupSchema = z.strictObject({});
+const padelJoinSchema = z.strictObject({});
 
-export const padelSessionPlugin: SportSessionPlugin<PadelSetup, PadelState> = {
+// Placeholder lineup until padel scoring picks a fixed format.
+// 2 covers a pair; 4 covers doubles.
+export const PADEL_PARTICIPANT_CAPACITY = { min: 2, max: 4 };
+
+export const padelSessionPlugin: SportSessionPlugin<
+  PadelSetup,
+  PadelState,
+  PadelJoin
+> = {
   id: PADEL_ID,
-  acceptedEventTypes: [],
+  acceptedEventTypes: [...CORE_PARTICIPANT_EVENT_TYPES],
+  participants: PADEL_PARTICIPANT_CAPACITY,
 
   validateSetup(config: unknown): PadelSetup {
     const parsed = z.safeParse(padelSetupSchema, config);
@@ -30,6 +42,17 @@ export const padelSessionPlugin: SportSessionPlugin<PadelSetup, PadelState> = {
 
   buildStartingState(_config: PadelSetup): PadelState {
     return {};
+  },
+
+  validateJoin(_state: PadelState, _config: PadelSetup, sportData: unknown): PadelJoin {
+    const parsed = z.safeParse(padelJoinSchema, sportData ?? {});
+    if (!parsed.success) {
+      throw new SessionValidationError("Invalid padel player", {
+        sport: PADEL_ID,
+        issues: parsed.error.issues,
+      });
+    }
+    return { ...parsed.data };
   },
 
   applyEvent(state: PadelState, event) {

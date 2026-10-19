@@ -34,6 +34,7 @@ import {
 } from "./core/roadmap";
 import {
   createSessionsModule,
+  JoinLookupRateLimiter,
   SessionRepository,
   SessionStartedEvent,
 } from "./core/sessions";
@@ -59,6 +60,7 @@ export type CreateAppDependencies = {
   coverageRateLimiter?: CoverageRateLimiter;
   sessionRepository?: SessionRepository;
   onSessionStarted?: (event: SessionStartedEvent) => void;
+  joinLookupRateLimiter?: JoinLookupRateLimiter;
 };
 
 export async function createApp(
@@ -139,6 +141,7 @@ export async function createApp(
     tryGetSessionUserId: identity.tryGetSessionUserId,
     sessionRepository: dependencies.sessionRepository,
     onSessionStarted: dependencies.onSessionStarted,
+    joinLookupRateLimiter: dependencies.joinLookupRateLimiter,
   });
 
   app.use(identity.router);

@@ -10,6 +10,7 @@ import { RecordSessionCommand } from "./recordSession.command";
 const counterPlugin: SportSessionPlugin<{ step: number }, { total: number }> = {
   id: "counter",
   acceptedEventTypes: ["add"],
+  participants: { min: 1, max: 4 },
   validateSetup(config: unknown) {
     if (
       typeof config !== "object" ||
@@ -24,6 +25,9 @@ const counterPlugin: SportSessionPlugin<{ step: number }, { total: number }> = {
   },
   buildStartingState(config) {
     return { total: config.step };
+  },
+  validateJoin() {
+    return {};
   },
   applyEvent(state, event) {
     if (!this.acceptedEventTypes.includes(event.type)) {
@@ -83,7 +87,7 @@ describe("RecordSessionCommand", () => {
     await expect(
       command.execute({
         sport: "golf",
-        config: {},
+        config: { tees: [{ id: "white" }] },
         events: [{ type: "swing" }],
       }),
     ).rejects.toBeInstanceOf(SessionValidationError);

@@ -2,55 +2,87 @@ import { golfSessionPlugin } from "./golf/session";
 import { padelSessionPlugin } from "./padel/session";
 import { createSportRegistry, sportRegistry } from "./registry";
 import {
+  CORE_PARTICIPANT_EVENT_TYPES,
   SessionValidationError,
   SportSessionPlugin,
 } from "./session-plugin";
 
+const golfConfig = { tees: [{ id: "white", name: "White" }, { id: "blue" }] };
+
 describe("sport session plug-ins", () => {
-  test.each([
-    ["golf", golfSessionPlugin],
-    ["padel", padelSessionPlugin],
-  ] as const)("%s accepts an empty setup and rejects events", (id, plugin) => {
-    expect(plugin.id).toBe(id);
-    expect(plugin.acceptedEventTypes).toEqual([]);
+  test("padel accepts an empty setup and both sports pass core events through", () => {
+    expect(padelSessionPlugin.participants).toEqual({ min: 2, max: 4 });
+    expect(golfSessionPlugin.participants).toEqual({ min: 1, max: 4 });
+    expect(padelSessionPlugin.acceptedEventTypes).toEqual([
+      ...CORE_PARTICIPANT_EVENT_TYPES,
+    ]);
+    expect(golfSessionPlugin.acceptedEventTypes).toEqual([
+      ...CORE_PARTICIPANT_EVENT_TYPES,
+    ]);
 
-    const config = {};
-    expect(plugin.validateSetup(config)).toEqual({});
-    expect(plugin.validateSetup(config)).not.toBe(config);
-
-    const first = plugin.buildStartingState({});
-    const second = plugin.buildStartingState({});
-    expect(first).toEqual({});
-    expect(second).toEqual({});
-    expect(first).not.toBe(second);
-
-    const state = { marker: true };
-    expect(() => plugin.applyEvent(state, { type: "point" })).toThrow(
+    const config = padelSessionPlugin.validateSetup({});
+    expect(config).toEqual({});
+    const state = Object.freeze(padelSessionPlugin.buildStartingState(config));
+    const next = padelSessionPlugin.applyEvent(state, {
+      type: "participant.joined",
+    });
+    expect(next).toBe(state);
+    expect(() => padelSessionPlugin.applyEvent(state, { type: "point" })).toThrow(
       SessionValidationError,
     );
-    expect(state).toEqual({ marker: true });
-
-    try {
-      plugin.applyEvent(state, { type: "point" });
-    } catch (error) {
-      expect(error).toBeInstanceOf(SessionValidationError);
-      expect((error as SessionValidationError).details).toEqual({
-        sport: id,
-        type: "point",
-      });
-    }
   });
 
-  test("golf and padel reject a non-empty setup", () => {
-    expect(() => golfSessionPlugin.validateSetup({ holes: 18 })).toThrow(
-      SessionValidationError,
-    );
-    expect(() => padelSessionPlugin.validateSetup(null)).toThrow(
-      SessionValidationError,
-    );
-    expect(() => padelSessionPlugin.validateSetup([])).toThrow(
-      SessionValidationError,
-    );
+  test("golf setup requires tees and validateJoin checks handicap and tee", () => {
+    const config = golfSessionPlugin.validateSetup(golfConfig);
+    expect(config.tees.map((tee) => tee.id)).toEqual(["white", "blue"]);
+    const state = golfSessionPlugin.buildStartingState(config);
+
+    expect(golfSessionPlugin.validateJoin(state, config, { teeId: "white" })).toEqual({
+      teeId: "white",
+    });
+    expect(
+      golfSessionPlugin.validateJoin(state, config, {
+        teeId: "blue",
+        handicapIndex: -10,
+      }),
+    ).toEqual({ teeId: "blue", handicapIndex: -10 });
+    expect(
+      golfSessionPlugin.validateJoin(state, config, {
+        teeId: "white",
+        handicapIndex: 54,
+      }).handicapIndex,
+    ).toBe(54);
+
+    expect(() => golfSessionPlugin.validateSetup({})).toThrow(SessionValidationError);
+    expect(() =>
+      golfSessionPlugin.validateJoin(state, config, { teeId: "white", handicapIndex: 54.1 }),
+    ).toThrow(SessionValidationError);
+    expect(() =>
+      golfSessionPlugin.validateJoin(state, config, { teeId: "white", handicapIndex: -10.1 }),
+    ).toThrow(SessionValidationError);
+    try {
+      golfSessionPlugin.validateJoin(state, config, { teeId: "gold" });
+    } catch (error) {
+      expect(error).toBeInstanceOf(SessionValidationError);
+      expect((error as SessionValidationError).message).toBe("Unknown tee");
+      expect((error as SessionValidationError).details).toMatchObject({
+        teeId: "gold",
+        tees: ["white", "blue"],
+      });
+    }
+
+    const frozen = Object.freeze(state);
+    expect(
+      golfSessionPlugin.applyEvent(frozen, { type: "participant.left" }),
+    ).toBe(frozen);
+  });
+
+  test("padel rejects a non-object setup and join payload", () => {
+    expect(() => padelSessionPlugin.validateSetup(null)).toThrow(SessionValidationError);
+    expect(() => padelSessionPlugin.validateSetup([])).toThrow(SessionValidationError);
+    expect(() =>
+      padelSessionPlugin.validateJoin({}, {}, { side: "left" }),
+    ).toThrow(SessionValidationError);
   });
 });
 
@@ -75,6 +107,7 @@ describe("sport registry", () => {
     const custom: SportSessionPlugin<{ ready: boolean }, { ready: boolean }> = {
       id: "custom",
       acceptedEventTypes: ["tick"],
+      participants: { min: 1, max: 2 },
       validateSetup(config: unknown) {
         if (
           typeof config !== "object" ||
@@ -89,6 +122,9 @@ describe("sport registry", () => {
       },
       buildStartingState(config) {
         return { ready: config.ready };
+      },
+      validateJoin() {
+        return {};
       },
       applyEvent(state, event) {
         if (event.type !== "tick") {

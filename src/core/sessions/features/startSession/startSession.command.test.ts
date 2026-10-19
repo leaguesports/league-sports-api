@@ -10,7 +10,8 @@ import { SessionStartedEvent } from "./sessionStarted.event";
 
 const counterPlugin: SportSessionPlugin<{ step: number }, { total: number }> = {
   id: "counter",
-  acceptedEventTypes: [],
+  acceptedEventTypes: ["participant.joined", "participant.invited"],
+  participants: { min: 1, max: 4 },
   validateSetup(config: unknown) {
     if (
       typeof config !== "object" ||
@@ -26,6 +27,9 @@ const counterPlugin: SportSessionPlugin<{ step: number }, { total: number }> = {
   },
   buildStartingState(config) {
     return { total: config.step };
+  },
+  validateJoin() {
+    return {};
   },
   applyEvent(state) {
     return state;

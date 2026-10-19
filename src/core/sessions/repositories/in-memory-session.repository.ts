@@ -1,10 +1,17 @@
 import { randomUUID } from "crypto";
 
+import { SessionConflictError } from "../session-errors";
 import { JoinCodeGenerator, JoinCodeSource } from "../utils/joinCodeGenerator";
 import { withJoinCodeRetries } from "../utils/joinCode";
 import {
   CreateLiveSessionInput,
   LobbyRecord,
+  NewParticipant,
+  NewSessionEvent,
+  ParticipantRecord,
+  ParticipationChange,
+  ParticipationResult,
+  ParticipationSnapshot,
   RecordSessionInput,
   sequenceNewSessionEvents,
   SessionEventRecord,
@@ -16,6 +23,7 @@ import {
 export class InMemorySessionRepository implements SessionRepository {
   private readonly sessions = new Map<string, SessionRecord>();
   private readonly lobbies = new Map<string, LobbyRecord>();
+  private readonly participants = new Map<string, ParticipantRecord>();
   private readonly events: SessionEventRecord[] = [];
   private readonly joinCodes: JoinCodeSource;
 
@@ -23,12 +31,17 @@ export class InMemorySessionRepository implements SessionRepository {
     this.joinCodes = joinCodes;
   }
 
-  async createLiveSession(
-    input: CreateLiveSessionInput,
-  ): Promise<{ session: SessionRecord; lobby: LobbyRecord }> {
+  async createLiveSession(input: CreateLiveSessionInput) {
     return withJoinCodeRetries(this.joinCodes, async (joinCode) => {
       if (this.hasJoinCode(joinCode)) {
         throw joinCodeConflict();
+      }
+
+      const names = (input.participants ?? []).map((participant) => participant.name);
+      if (new Set(names).size !== names.length) {
+        throw new SessionConflictError("Participant names must be unique", {
+          names,
+        });
       }
 
       const now = new Date();
@@ -50,16 +63,20 @@ export class InMemorySessionRepository implements SessionRepository {
         createdAt: now,
         updatedAt: now,
       };
+      const participants = (input.participants ?? []).map((participant) =>
+        this.storeParticipant(session.id, participant, now),
+      );
+      const events = sequenceNewSessionEvents(input.events ?? []).map((event) =>
+        this.storeEvent(session.id, event, now),
+      );
 
       this.lobbies.set(lobby.id, lobby);
       this.sessions.set(session.id, session);
-      return { session, lobby };
+      return { session, lobby, participants, events };
     });
   }
 
-  async recordSession(
-    input: RecordSessionInput,
-  ): Promise<{ session: SessionRecord; events: SessionEventRecord[] }> {
+  async recordSession(input: RecordSessionInput) {
     const now = new Date();
     const session: SessionRecord = {
       id: randomUUID(),
@@ -73,21 +90,10 @@ export class InMemorySessionRepository implements SessionRepository {
       createdAt: now,
       updatedAt: now,
     };
-    const events = sequenceNewSessionEvents(input.events ?? []).map((event) => {
-      const row: SessionEventRecord = {
-        id: randomUUID(),
-        sessionId: session.id,
-        seq: event.seq,
-        type: event.type,
-        data: event.data,
-        createdBy: event.createdBy ?? null,
-        createdAt: now,
-      };
-      return row;
-    });
-
+    const events = sequenceNewSessionEvents(input.events ?? []).map((event) =>
+      this.storeEvent(session.id, event, now),
+    );
     this.sessions.set(session.id, session);
-    this.events.push(...events);
     return { session, events };
   }
 
@@ -111,12 +117,175 @@ export class InMemorySessionRepository implements SessionRepository {
     return closed;
   }
 
+  async findByJoinCode(joinCode: string) {
+    const lobby = [...this.lobbies.values()].find(
+      (candidate) => candidate.joinCode === joinCode,
+    );
+    if (!lobby) {
+      return null;
+    }
+    const session = [...this.sessions.values()].find(
+      (candidate) => candidate.lobbyId === lobby.id,
+    );
+    if (!session) {
+      return null;
+    }
+    return {
+      session,
+      participants: this.participantsFor(session.id),
+    };
+  }
+
+  async participate(
+    sessionId: string,
+    build: (snapshot: ParticipationSnapshot) => ParticipationChange,
+  ): Promise<ParticipationResult> {
+    const session = this.sessions.get(sessionId);
+    if (!session) {
+      throw new SessionNotFoundError(sessionId);
+    }
+
+    const participants = this.participantsFor(sessionId);
+    const change = build({
+      session,
+      participants,
+      nextSeq: this.nextSeq(sessionId),
+    });
+    const now = new Date();
+    let participant: ParticipantRecord;
+
+    if (change.createParticipant) {
+      if (
+        participants.some(
+          (existing) => existing.name === change.createParticipant?.name,
+        )
+      ) {
+        throw new SessionConflictError(
+          "A participant with that name is already in this session",
+          { name: change.createParticipant.name },
+        );
+      }
+      participant = this.storeParticipant(sessionId, change.createParticipant, now);
+    } else if (change.updateParticipant) {
+      const existing = this.participants.get(change.updateParticipant.id);
+      if (!existing || existing.sessionId !== sessionId) {
+        throw new SessionNotFoundError(change.updateParticipant.id);
+      }
+      participant = {
+        ...existing,
+        userId:
+          change.updateParticipant.userId === undefined
+            ? existing.userId
+            : change.updateParticipant.userId,
+        status: change.updateParticipant.status ?? existing.status,
+        tokenHash:
+          change.updateParticipant.tokenHash === undefined
+            ? existing.tokenHash
+            : change.updateParticipant.tokenHash,
+        sportData: change.updateParticipant.sportData ?? existing.sportData,
+        joinedAt:
+          change.updateParticipant.joinedAt === undefined
+            ? existing.joinedAt
+            : change.updateParticipant.joinedAt,
+        leftAt:
+          change.updateParticipant.leftAt === undefined
+            ? existing.leftAt
+            : change.updateParticipant.leftAt,
+      };
+      this.participants.set(participant.id, participant);
+    } else {
+      throw new Error("Participation change is missing a participant");
+    }
+
+    const updated: SessionRecord = {
+      ...session,
+      state: change.state,
+      updatedAt: now,
+    };
+    this.sessions.set(sessionId, updated);
+    const event = this.storeEvent(
+      sessionId,
+      {
+        ...change.event,
+        participantId: change.event.participantId ?? participant.id,
+        seq: this.nextSeq(sessionId),
+      },
+      now,
+    );
+
+    return {
+      session: updated,
+      participant,
+      participants: this.participantsFor(sessionId),
+      event,
+    };
+  }
+
   findSession(sessionId: string): SessionRecord | undefined {
     return this.sessions.get(sessionId);
   }
 
   findLobby(lobbyId: string): LobbyRecord | undefined {
     return this.lobbies.get(lobbyId);
+  }
+
+  participantsFor(sessionId: string): ParticipantRecord[] {
+    return [...this.participants.values()].filter(
+      (participant) => participant.sessionId === sessionId,
+    );
+  }
+
+  eventsFor(sessionId: string): SessionEventRecord[] {
+    return this.events
+      .filter((event) => event.sessionId === sessionId)
+      .sort((left, right) => left.seq - right.seq);
+  }
+
+  private storeParticipant(
+    sessionId: string,
+    participant: NewParticipant,
+    now: Date,
+  ): ParticipantRecord {
+    const row: ParticipantRecord = {
+      id: participant.id,
+      sessionId,
+      userId: participant.userId ?? null,
+      name: participant.name,
+      role: participant.role,
+      status: participant.status,
+      tokenHash: participant.tokenHash ?? null,
+      sportData: participant.sportData,
+      joinedAt: participant.joinedAt ?? (participant.status === "joined" ? now : null),
+      leftAt: participant.leftAt ?? null,
+    };
+    this.participants.set(row.id, row);
+    return row;
+  }
+
+  private storeEvent(
+    sessionId: string,
+    event: NewSessionEvent & { seq?: number; participantId?: string | null },
+    now: Date,
+  ): SessionEventRecord {
+    const row: SessionEventRecord = {
+      id: randomUUID(),
+      sessionId,
+      seq: event.seq ?? this.nextSeq(sessionId),
+      type: event.type,
+      data: event.data,
+      createdBy: event.createdBy ?? null,
+      participantId: event.participantId ?? null,
+      createdAt: now,
+    };
+    this.events.push(row);
+    return row;
+  }
+
+  private nextSeq(sessionId: string): number {
+    const seqs = this.events
+      .filter((event) => event.sessionId === sessionId)
+      .map((event) => event.seq);
+    return seqs.length === 0 ? 1 : Math.max(...seqs) + 1;
   }
 
   private hasJoinCode(joinCode: string): boolean {

@@ -47,7 +47,11 @@ describe("POST /api/sessions", () => {
   let server: { url: string; close: () => Promise<void> };
 
   beforeEach(async () => {
-    sessions = new InMemorySessionRepository({ generate: () => "AB12CD" });
+    const codes = ["AB12CD", "BB12CD", "CB12CD", "DB12CD", "EB12CD"];
+    let index = 0;
+    sessions = new InMemorySessionRepository({
+      generate: () => codes[index++] ?? "ZZZZZZ",
+    });
     started = [];
     app = await createApp(config, {
       sessionRepository: sessions,
@@ -72,7 +76,7 @@ describe("POST /api/sessions", () => {
         Cookie: `token=${token}`,
       },
       body: JSON.stringify({
-        sport: "golf",
+        sport: "padel",
         config: {},
         venueId: "venue-1",
       }),
@@ -92,16 +96,30 @@ describe("POST /api/sessions", () => {
         createdAt: string;
       };
       lobby: { id: string; joinCode: string };
+      participant: { id: string; name: string; role: string; status: string };
+      token: string;
     };
 
     expect(body.session).toMatchObject({
-      sport: "golf",
+      sport: "padel",
       config: {},
       state: {},
       status: "live",
       venueId: "venue-1",
       createdBy: "user-1",
     });
+    expect(body.participant).toMatchObject({
+      name: "Host",
+      role: "creator",
+      status: "joined",
+    });
+    expect(body.token.length).toBeGreaterThan(20);
+    const stored = sessions
+      .participantsFor(body.session.id)
+      .find((participant) => participant.role === "creator");
+    expect(stored?.tokenHash).toBeTruthy();
+    expect(stored?.tokenHash).not.toBe(body.token);
+    expect(stored?.userId).toBe("user-1");
     expect(body.session.lobbyId).toBe(body.lobby.id);
     expect(body.lobby.joinCode).toBe("AB12CD");
     expect(body.session.createdAt).toEqual(expect.any(String));
@@ -130,7 +148,7 @@ describe("POST /api/sessions", () => {
         "Content-Type": "application/json",
         Cookie: "token=not-a-jwt",
       },
-      body: JSON.stringify({ sport: "golf", config: {} }),
+      body: JSON.stringify({ sport: "padel", config: {} }),
     });
     expect(invalid.status).toBe(201);
     const invalidBody = (await invalid.json()) as {
@@ -197,12 +215,18 @@ describe("POST /api/sessions", () => {
       async closeSession() {
         throw new Error("database offline");
       },
+      async findByJoinCode() {
+        throw new Error("database offline");
+      },
+      async participate() {
+        throw new Error("database offline");
+      },
     } as SessionRepository;
     const errorLog = jest.spyOn(console, "error").mockImplementation(() => {});
     app = await createApp(config, { sessionRepository: exploding });
     server = await listen(app);
 
-    const response = await post(server.url, { sport: "golf", config: {} });
+    const response = await post(server.url, { sport: "padel", config: {} });
     expect(response.status).toBe(500);
     expect(await response.json()).toEqual({ error: "Internal server error" });
     errorLog.mockRestore();

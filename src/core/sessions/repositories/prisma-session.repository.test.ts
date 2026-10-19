@@ -43,12 +43,49 @@ function joinCodeConflict() {
   });
 }
 
+type FakeDb = {
+  lobby: {
+    create(args: { data: { joinCode: string } }): Promise<LobbyRow>;
+    delete(args: { where: { id: string } }): Promise<LobbyRow>;
+  };
+  session: {
+    create(args: {
+      data: {
+        sport: string;
+        config: unknown;
+        state: unknown;
+        status: "live" | "closed";
+        venueId: string | null;
+        createdBy: string | null;
+        lobbyId?: string | null;
+      };
+    }): Promise<SessionRow>;
+    findUnique(args: { where: { id: string } }): Promise<SessionRow | null>;
+    update(args: {
+      where: { id: string };
+      data: { status: "closed"; lobbyId: null };
+    }): Promise<SessionRow>;
+  };
+  sessionEvent: {
+    create(args: {
+      data: {
+        sessionId: string;
+        seq: number;
+        type: string;
+        data: unknown;
+        createdBy: string | null;
+      };
+    }): Promise<EventRow>;
+  };
+  $transaction<T>(fn: (tx: FakeDb) => Promise<T>): Promise<T>;
+};
+
 function createFakeDb() {
   const lobbies = new Map<string, LobbyRow>();
   const sessions = new Map<string, SessionRow>();
   const events: EventRow[] = [];
 
-  const db = {
+  const db: FakeDb = {
     lobby: {
       async create({ data }: { data: { joinCode: string } }) {
         for (const lobby of lobbies.values()) {

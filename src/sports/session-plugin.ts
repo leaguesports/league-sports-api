@@ -3,16 +3,38 @@ export type SportSessionEvent = {
   data?: unknown;
 };
 
+/** Written by the shared session layer. Every plug-in must accept these. */
+export const CORE_PARTICIPANT_EVENT_TYPES = [
+  "participant.invited",
+  "participant.claimed",
+  "participant.joined",
+  "participant.left",
+] as const;
+
+export type CoreParticipantEventType =
+  (typeof CORE_PARTICIPANT_EVENT_TYPES)[number];
+
+export type ParticipantCapacity = {
+  min: number;
+  max: number;
+};
+
 /**
- * Each sport owns setup validation, the opening state, and how an event
- * changes that state. `applyEvent` must be pure: return the next state and
- * do not mutate the previous one.
+ * Each sport owns setup validation, who may take a seat, the opening state,
+ * and how an event changes that state. `applyEvent` must be pure: return the
+ * next state and do not mutate the previous one.
  */
-export interface SportSessionPlugin<TConfig = unknown, TState = unknown> {
+export interface SportSessionPlugin<
+  TConfig = unknown,
+  TState = unknown,
+  TJoin = unknown,
+> {
   readonly id: string;
   readonly acceptedEventTypes: readonly string[];
+  readonly participants: ParticipantCapacity;
   validateSetup(config: unknown): TConfig;
   buildStartingState(config: TConfig): TState;
+  validateJoin(state: TState, config: TConfig, sportData: unknown): TJoin;
   applyEvent(state: TState, event: SportSessionEvent): TState;
 }
 
@@ -20,8 +42,10 @@ export interface SportSessionPlugin<TConfig = unknown, TState = unknown> {
 export type SportSessionRuntime = {
   readonly id: string;
   readonly acceptedEventTypes: readonly string[];
+  readonly participants: ParticipantCapacity;
   validateSetup(config: unknown): unknown;
   buildStartingState(config: unknown): unknown;
+  validateJoin(state: unknown, config: unknown, sportData: unknown): unknown;
   applyEvent(state: unknown, event: SportSessionEvent): unknown;
 };
 

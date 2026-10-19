@@ -9,6 +9,8 @@ import {
   AppendEventChange,
   AppendEventResult,
   AppendEventSnapshot,
+  FinishSessionChange,
+  FinishSessionResult,
   NewParticipant,
   NewSessionEvent,
   ParticipantRecord,
@@ -63,6 +65,7 @@ export class InMemorySessionRepository implements SessionRepository {
         venueId: input.venueId ?? null,
         lobbyId: lobby.id,
         createdBy: input.createdBy ?? null,
+        endedAt: null,
         createdAt: now,
         updatedAt: now,
       };
@@ -90,6 +93,7 @@ export class InMemorySessionRepository implements SessionRepository {
       venueId: input.venueId ?? null,
       lobbyId: null,
       createdBy: input.createdBy ?? null,
+      endedAt: null,
       createdAt: now,
       updatedAt: now,
     };
@@ -267,6 +271,58 @@ export class InMemorySessionRepository implements SessionRepository {
       now,
     );
     return { session: updated, event, replayed: false };
+  }
+
+  async finishSession(
+    sessionId: string,
+    build: (snapshot: AppendEventSnapshot) => FinishSessionChange,
+  ): Promise<FinishSessionResult> {
+    const session = this.sessions.get(sessionId);
+    if (!session) {
+      throw new SessionNotFoundError(sessionId);
+    }
+
+    const nextSeq = this.nextSeq(sessionId);
+    const change = build({
+      session,
+      participants: this.participantsFor(sessionId),
+      events: this.eventsFor(sessionId),
+      nextSeq,
+    });
+    const now = new Date();
+    const closed: SessionRecord = {
+      ...session,
+      state: change.state,
+      status: "closed",
+      lobbyId: null,
+      endedAt: now,
+      updatedAt: now,
+    };
+    this.sessions.set(sessionId, closed);
+    if (session.lobbyId) {
+      this.lobbies.delete(session.lobbyId);
+    }
+    const event = this.storeEvent(
+      sessionId,
+      {
+        ...change.event,
+        participantId: change.event.participantId ?? null,
+        seq: nextSeq,
+      },
+      now,
+    );
+    return { session: closed, event };
+  }
+
+  async findById(sessionId: string) {
+    const session = this.sessions.get(sessionId);
+    if (!session) {
+      return null;
+    }
+    return {
+      session,
+      participants: this.participantsFor(sessionId),
+    };
   }
 
   findSession(sessionId: string): SessionRecord | undefined {

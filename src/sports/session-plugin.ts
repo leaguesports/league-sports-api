@@ -26,6 +26,9 @@ export const CORE_PARTICIPANT_EVENT_TYPES = [
   "participant.left",
 ] as const;
 
+/** Written by finish, not by the capture route. */
+export const ROUND_FINISHED_EVENT = "round.finished";
+
 export type CoreParticipantEventType =
   (typeof CORE_PARTICIPANT_EVENT_TYPES)[number];
 
@@ -99,7 +102,8 @@ export function isCapturableEventType(
 ): boolean {
   return (
     acceptedEventTypes.includes(type) &&
-    !(CORE_PARTICIPANT_EVENT_TYPES as readonly string[]).includes(type)
+    !(CORE_PARTICIPANT_EVENT_TYPES as readonly string[]).includes(type) &&
+    type !== ROUND_FINISHED_EVENT
   );
 }
 

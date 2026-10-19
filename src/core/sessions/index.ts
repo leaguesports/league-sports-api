@@ -5,6 +5,10 @@ import { SportRegistry, sportRegistry } from "../../sports/registry";
 import { EventEmitter } from "./events";
 import { CaptureSessionEventCommand } from "./features/captureEvent/captureEvent.command";
 import { CaptureSessionEventController } from "./features/captureEvent/captureEvent.controller";
+import { FinishSessionCommand } from "./features/finishSession/finishSession.command";
+import { FinishSessionController } from "./features/finishSession/finishSession.controller";
+import { GetSession } from "./features/getSession/getSession";
+import { GetSessionController } from "./features/getSession/getSession.controller";
 import { GetJoinSummary } from "./features/joinSession/getJoinSummary";
 import { JoinSessionCommand } from "./features/joinSession/joinSession.command";
 import { JoinSessionController } from "./features/joinSession/joinSession.controller";
@@ -60,6 +64,7 @@ export function createSessionsModule({
   const joinSession = new JoinSessionCommand(repository, sports);
   const leaveSession = new LeaveSessionCommand(repository, sports);
   const captureEvent = new CaptureSessionEventCommand(repository, sports);
+  const finishSession = new FinishSessionCommand(repository, sports);
 
   return {
     router: createSessionRoutes({
@@ -72,6 +77,8 @@ export function createSessionsModule({
       ),
       leave: new LeaveSessionController(leaveSession),
       capture: new CaptureSessionEventController(captureEvent),
+      finish: new FinishSessionController(finishSession),
+      getSession: new GetSessionController(new GetSession(repository)),
     }),
     sessionRepository: repository,
     eventEmitter,

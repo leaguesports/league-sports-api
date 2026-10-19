@@ -15,9 +15,11 @@ describe("sport session plug-ins", () => {
     expect(golfSessionPlugin.participants).toEqual({ min: 1, max: 4 });
     expect(padelSessionPlugin.acceptedEventTypes).toEqual([
       ...CORE_PARTICIPANT_EVENT_TYPES,
+      "round.finished",
     ]);
     expect(golfSessionPlugin.acceptedEventTypes).toEqual([
       ...CORE_PARTICIPANT_EVENT_TYPES,
+      "round.finished",
       "hole.scored",
       "hole.cleared",
     ]);

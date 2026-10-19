@@ -13,6 +13,8 @@ import {
   AppendEventChange,
   AppendEventResult,
   AppendEventSnapshot,
+  FinishSessionChange,
+  FinishSessionResult,
   ParticipationChange,
   ParticipationResult,
   RecordSessionInput,
@@ -35,6 +37,7 @@ type SessionRow = {
   venueId: string | null;
   lobbyId: string | null;
   createdBy: string | null;
+  endedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -332,6 +335,81 @@ export class PrismaSessionRepository implements SessionRepository {
       }),
     );
   }
+
+  async finishSession(
+    sessionId: string,
+    build: (snapshot: AppendEventSnapshot) => FinishSessionChange,
+  ): Promise<FinishSessionResult> {
+    return withSeqRetries(() =>
+      this.db.$transaction(async (tx) => {
+        const existing = await tx.session.findUnique({
+          where: { id: sessionId },
+          include: { participants: true },
+        });
+        if (!existing) {
+          throw new SessionNotFoundError(sessionId);
+        }
+        const storedEvents = await tx.sessionEvent.findMany({
+          where: { sessionId },
+          orderBy: { seq: "asc" },
+        });
+        const aggregate = await tx.sessionEvent.aggregate({
+          where: { sessionId },
+          _max: { seq: true },
+        });
+        const nextSeq = (aggregate._max.seq ?? 0) + 1;
+        const change = build({
+          session: toSessionRecord(existing),
+          participants: existing.participants.map(toParticipantRecord),
+          events: storedEvents.map(toSessionEventRecord),
+          nextSeq,
+        });
+        const event = toSessionEventRecord(
+          await tx.sessionEvent.create({
+            data: {
+              sessionId,
+              seq: nextSeq,
+              type: change.event.type,
+              data: asJson(change.event.data),
+              createdBy: change.event.createdBy ?? null,
+              participantId: change.event.participantId ?? null,
+            },
+          }),
+        );
+        const lobbyId = existing.lobbyId;
+        const endedAt = new Date();
+        const session = toSessionRecord(
+          await tx.session.update({
+            where: { id: sessionId },
+            data: {
+              state: asJson(change.state),
+              status: "closed",
+              lobbyId: null,
+              endedAt,
+            },
+          }),
+        );
+        if (lobbyId) {
+          await tx.lobby.delete({ where: { id: lobbyId } });
+        }
+        return { session, event };
+      }),
+    );
+  }
+
+  async findById(sessionId: string) {
+    const existing = await this.db.session.findUnique({
+      where: { id: sessionId },
+      include: { participants: true },
+    });
+    if (!existing) {
+      return null;
+    }
+    return {
+      session: toSessionRecord(existing),
+      participants: existing.participants.map(toParticipantRecord),
+    };
+  }
 }
 
 function requiredUpdate(change: ParticipationChange) {
@@ -386,6 +464,7 @@ function toSessionRecord(row: SessionRow): SessionRecord {
     venueId: row.venueId,
     lobbyId: row.lobbyId,
     createdBy: row.createdBy,
+    endedAt: row.endedAt ?? null,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };

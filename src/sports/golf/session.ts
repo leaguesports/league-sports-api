@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import {
   CORE_PARTICIPANT_EVENT_TYPES,
+  ROUND_FINISHED_EVENT,
   rejectUnknownEvent,
   SessionValidationError,
   SportEventContext,
@@ -49,10 +50,17 @@ export type GolfHoleScore = {
   seq: number;
 };
 
+export type GolfResult = {
+  seq: number;
+  standings: StandingRow[];
+};
+
 export type GolfState = {
   scores: GolfHoleScore[];
   players: PlayerTotal[];
   standings: StandingRow[];
+  /** Copied at finish. Later projections do not rewrite it. */
+  result?: GolfResult;
 };
 
 export type GolfJoin = {
@@ -132,6 +140,7 @@ export const golfSessionPlugin: SportSessionPlugin<
   id: GOLF_ID,
   acceptedEventTypes: [
     ...CORE_PARTICIPANT_EVENT_TYPES,
+    ROUND_FINISHED_EVENT,
     GOLF_HOLE_SCORED,
     GOLF_HOLE_CLEARED,
   ],
@@ -203,7 +212,10 @@ export const golfSessionPlugin: SportSessionPlugin<
     event: SportSessionEvent,
     context: SportEventValidationContext,
   ): void {
-    if ((CORE_PARTICIPANT_EVENT_TYPES as readonly string[]).includes(event.type)) {
+    if (
+      (CORE_PARTICIPANT_EVENT_TYPES as readonly string[]).includes(event.type) ||
+      event.type === ROUND_FINISHED_EVENT
+    ) {
       return;
     }
     if (event.type === GOLF_HOLE_SCORED) {
@@ -223,7 +235,10 @@ export const golfSessionPlugin: SportSessionPlugin<
 
   applyEvent(state: GolfState, event, context?: SportEventContext) {
     let next = state;
-    if ((CORE_PARTICIPANT_EVENT_TYPES as readonly string[]).includes(event.type)) {
+    if (
+      (CORE_PARTICIPANT_EVENT_TYPES as readonly string[]).includes(event.type) ||
+      event.type === ROUND_FINISHED_EVENT
+    ) {
       next = state;
     } else if (event.type === GOLF_HOLE_SCORED) {
       next = applyScore(state, event.data);
@@ -233,11 +248,14 @@ export const golfSessionPlugin: SportSessionPlugin<
       return rejectUnknownEvent(this, state, event);
     }
 
-    if (!context) {
-      return next;
+    if (context) {
+      const config = this.validateSetup(context.config);
+      next = projectState(next, config, context.participants);
     }
-    const config = this.validateSetup(context.config);
-    return projectState(next, config, context.participants);
+    if (event.type === ROUND_FINISHED_EVENT) {
+      return freezeResult(next, event);
+    }
+    return next;
   },
 };
 
@@ -311,6 +329,18 @@ function scoresOf(state: GolfState): GolfHoleScore[] {
   return Array.isArray(state.scores) ? state.scores : [];
 }
 
+function freezeResult(state: GolfState, event: SportSessionEvent): GolfState {
+  const seq = readSeq(event.data);
+  const standings = Array.isArray(state.standings) ? state.standings : [];
+  return {
+    ...state,
+    result: {
+      seq,
+      standings: standings.map((row) => ({ ...row })),
+    },
+  };
+}
+
 function projectState(
   state: GolfState,
   config: GolfSetup,
@@ -382,6 +412,17 @@ function normalizeHoles(
  * The capture route stamps the writer and the seq onto the stored event so a
  * replay of the log rebuilds the same card. Clients cannot send these.
  */
+function readSeq(data: unknown): number {
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
+    throw new SessionValidationError("Golf event is missing seq", { sport: GOLF_ID });
+  }
+  const seq = (data as { seq?: unknown }).seq;
+  if (typeof seq !== "number" || !Number.isInteger(seq) || seq < 1) {
+    throw new SessionValidationError("Golf event is missing seq", { sport: GOLF_ID });
+  }
+  return seq;
+}
+
 function readWriter(data: unknown): { scoredBy: string; seq: number } {
   if (!data || typeof data !== "object" || Array.isArray(data)) {
     throw new SessionValidationError("Invalid golf score", { sport: GOLF_ID });

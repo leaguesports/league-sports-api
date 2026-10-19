@@ -217,6 +217,45 @@ describe("golf hole events", () => {
     ]);
     expect(start.players).toEqual([]);
   });
+
+  test("round.finished freezes a copy of the standings", () => {
+    const setup = golfSessionPlugin.validateSetup({
+      tees: [{ id: "white", par: 72, rating: 72, slope: 113 }],
+      holes: layoutHoles("18").map((n) => ({ n, par: 4, si: n })),
+    });
+    const scored = golfSessionPlugin.applyEvent(
+      golfSessionPlugin.buildStartingState(setup),
+      {
+        type: "hole.scored",
+        data: { participantId: "p1", hole: 1, strokes: 4, scoredBy: "p1", seq: 2 },
+      },
+      {
+        config: setup,
+        participants: [
+          { id: "p1", status: "joined", sportData: { teeId: "white", handicapIndex: 0 } },
+        ],
+      },
+    );
+    const finished = golfSessionPlugin.applyEvent(
+      scored,
+      { type: "round.finished", data: { seq: 3 } },
+      {
+        config: setup,
+        participants: [
+          { id: "p1", status: "joined", sportData: { teeId: "white", handicapIndex: 0 } },
+        ],
+      },
+    );
+
+    expect(finished.result?.seq).toBe(3);
+    expect(finished.result?.standings).toEqual(finished.standings);
+    expect(finished.result?.standings).not.toBe(finished.standings);
+    const row = finished.standings[0];
+    if (row) {
+      row.stableford = 99;
+    }
+    expect(finished.result?.standings[0]?.stableford).not.toBe(99);
+  });
 });
 
 function apply(state: GolfState, type: string, data: unknown): GolfState {

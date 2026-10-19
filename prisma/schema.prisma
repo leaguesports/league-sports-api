@@ -255,14 +255,20 @@ model CoverageIntent {
   @@index([unsubscribedAt])
 }
 
+// Join lobby for a live session. The foreign key lives on Session.lobbyId
+// so a session can exist without a lobby, and deleting the lobby clears it.
 model Lobby {
   id        String   @id @default(uuid())
-  sessionId String   @unique
   joinCode  String   @unique
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  session Session?
+}
+
+enum SessionStatus {
+  live
+  closed
 }
 
 model Session {
@@ -271,12 +277,16 @@ model Session {
   sport     String
   config    Json
   state     Json
+  // No FK to User — same as CommunityMember. Absent when the caller is anonymous.
+  createdBy String?
+  status    SessionStatus  @default(live)
+  lobbyId   String?        @unique
   events    SessionEvent[]
   createdAt DateTime       @default(now())
   updatedAt DateTime       @updatedAt
 
   venue Venue? @relation(fields: [venueId], references: [id])
-  lobby Lobby?
+  lobby Lobby? @relation(fields: [lobbyId], references: [id], onDelete: SetNull)
 
   @@index([venueId])
   @@index([sport])
@@ -287,12 +297,15 @@ model Session {
 model SessionEvent {
   id        String   @id @default(uuid())
   sessionId String
+  // Server-assigned, starting at 1. Unique with sessionId so a replay cannot insert the same slot.
+  seq       Int
   type      String
   data      Json
+  createdBy String?
   createdAt DateTime @default(now())
 
   session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
-  @@index([sessionId])
+  @@unique([sessionId, seq])
   @@index([createdAt])
 }

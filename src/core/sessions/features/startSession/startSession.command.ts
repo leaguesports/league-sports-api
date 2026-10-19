@@ -1,23 +1,38 @@
+import { SportRegistry } from "../../../../sports/registry";
 import { EventEmitter } from "../../events";
-import { CreateSessionRepository } from "./createSession.repository";
+import { prepareSession } from "../../prepare-session";
+import { SessionRepository } from "../../repositories/session.repository";
 import { SessionStartedEvent } from "./sessionStarted.event";
-import { StartSessionRequest } from "./startSession.schema";
+
+export type StartSessionCommandInput = {
+  sport: string;
+  config: unknown;
+  venueId?: string | null;
+  createdBy?: string | null;
+};
 
 export class StartSessionCommand {
-    constructor(
-        private readonly createSession: CreateSessionRepository,
-        private readonly eventEmitter: EventEmitter,
-    ) {}
+  constructor(
+    private readonly sessions: SessionRepository,
+    private readonly eventEmitter: EventEmitter,
+    private readonly sports: SportRegistry,
+  ) {}
 
-    async execute(request: StartSessionRequest) {
-        const session = await this.createSession.execute(request);
+  async execute(request: StartSessionCommandInput) {
+    const plugin = this.sports.require(request.sport);
+    const prepared = prepareSession(plugin, request.config);
+    const created = await this.sessions.createLiveSession({
+      sport: plugin.id,
+      config: prepared.config,
+      state: prepared.state,
+      venueId: request.venueId ?? null,
+      createdBy: request.createdBy ?? null,
+    });
 
-        // THIS WOULD HAPPEN IN THE BOOTSTRAP OF THE APPLICATION
-        this.eventEmitter.on(SessionStartedEvent, (event) => {
-        })
+    await this.eventEmitter.publish(
+      new SessionStartedEvent({ sessionId: created.session.id }),
+    );
 
-        this.eventEmitter.publish(new SessionStartedEvent({ sessionId: session.session.id }))
-        
-        return { session };
-    }
+    return created;
+  }
 }

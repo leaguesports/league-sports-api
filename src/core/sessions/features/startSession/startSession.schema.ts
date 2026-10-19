@@ -1,27 +1,15 @@
-import { z } from 'zod'
+import { z } from "zod";
 
-const GOLF_ID = 'golf';
-const PADEL_ID = 'padel';
-
-const GolfIdSchema = z.literal(GOLF_ID);
-const PadelIdSchema = z.literal(PADEL_ID);
-
-const SportIdSchema = z.union([GolfIdSchema, PadelIdSchema]);
-
-export const StartSessionRequestSchema = z.object({
-    sport: SportIdSchema,
-    config: z.object(),
-    state: z.object(),
-});
+export const StartSessionRequestSchema = z
+  .object({
+    sport: z.string().trim().min(1),
+    config: z.unknown().refine((value) => value !== undefined, "config is required"),
+    venueId: z.string().trim().min(1).nullish(),
+  })
+  .strict();
 
 export type StartSessionRequest = z.infer<typeof StartSessionRequestSchema>;
 
-export function parseStartSessionRequest(body: any): StartSessionRequest {
-    const parsedRequest = z.safeParse(StartSessionRequestSchema, body);
-    
-    if (!parsedRequest.success) {
-        throw new Error('Invalid request body');
-    }
-
-    return parsedRequest.data;
+export function parseStartSessionRequest(body: unknown): StartSessionRequest {
+  return z.parse(StartSessionRequestSchema, body);
 }

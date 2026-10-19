@@ -1,11 +1,11 @@
 import { Event } from "../../events";
 
-type StartSessionEventData = {
-    sessionId: string;
-}
+type SessionStartedData = {
+  sessionId: string;
+};
 
-export class SessionStartedEvent extends Event<StartSessionEventData> {
-    constructor(data: StartSessionEventData) {
-        super(data);
-    }
+export class SessionStartedEvent extends Event<SessionStartedData> {
+  constructor(data: SessionStartedData) {
+    super(data);
+  }
 }

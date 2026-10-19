@@ -1,1 +1,1 @@
-export const GOLF_ID = 'golf';
+export { GOLF_ID, golfSessionPlugin } from "./session";

@@ -1,1 +1,1 @@
-export const PADEL_ID = 'padel';
+export { PADEL_ID, padelSessionPlugin } from "./session";

@@ -3,6 +3,7 @@ import { Router } from "express";
 import { CaptureSessionEventController } from "../features/captureEvent/captureEvent.controller";
 import { JoinSessionController } from "../features/joinSession/joinSession.controller";
 import { LeaveSessionController } from "../features/leaveSession/leaveSession.controller";
+import { ReissueSeatTokenController } from "../features/reissueSeatToken/reissueSeatToken.controller";
 import { StartSessionController } from "../features/startSession/startSession.controller";
 
 export function createSessionRoutes(controllers: {
@@ -10,6 +11,7 @@ export function createSessionRoutes(controllers: {
   join: JoinSessionController;
   leave: LeaveSessionController;
   capture: CaptureSessionEventController;
+  reissue: ReissueSeatTokenController;
 }): Router {
   const router = Router();
 
@@ -31,6 +33,10 @@ export function createSessionRoutes(controllers: {
 
   router.post("/api/sessions/:id/events", (req, res) => {
     void controllers.capture.handle(req, res);
+  });
+
+  router.post("/api/sessions/:id/token", (req, res) => {
+    void controllers.reissue.handle(req, res);
   });
 
   return router;

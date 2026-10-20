@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 
+import { JoinLookupRateLimiter } from "../../join-rate-limiter";
 import { presentParticipant } from "../../present-participant";
 import {
   LobbyRecord,
@@ -7,6 +8,7 @@ import {
   SessionRecord,
 } from "../../repositories/session.repository";
 import { sendSessionError } from "../../send-session-error";
+import { JoinLookupRateLimitError } from "../../session-errors";
 import { StartSessionCommand } from "./startSession.command";
 import { parseStartSessionRequest } from "./startSession.schema";
 
@@ -14,10 +16,15 @@ export class StartSessionController {
   constructor(
     private readonly startSession: StartSessionCommand,
     private readonly tryGetSessionUserId: (req: Request) => string | null,
+    private readonly rateLimiter: JoinLookupRateLimiter,
   ) {}
 
   async handle(request: Request, response: Response) {
     try {
+      const ip = request.ip ?? "unknown";
+      if (!(await this.rateLimiter.consume(`start:${ip}`))) {
+        throw new JoinLookupRateLimitError();
+      }
       const body = parseStartSessionRequest(request.body);
       const created = await this.startSession.execute({
         sport: body.sport,

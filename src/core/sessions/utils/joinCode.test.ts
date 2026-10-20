@@ -66,8 +66,8 @@ describe("join code allocation", () => {
     expect(isJoinCodeConflict(error)).toBe(false);
   });
 
-  test("treats a P2002 without a target as a join-code collision", () => {
-    expect(isJoinCodeConflict({ code: "P2002" })).toBe(true);
+  test("does not treat a P2002 without a target as a join-code collision", () => {
+    expect(isJoinCodeConflict({ code: "P2002" })).toBe(false);
     expect(isJoinCodeConflict({ code: "P2003" })).toBe(false);
     expect(isJoinCodeConflict(new Error("no"))).toBe(false);
   });

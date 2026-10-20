@@ -19,6 +19,8 @@ describe("sport session plug-ins", () => {
     ]);
     expect(golfSessionPlugin.acceptedEventTypes).toEqual([
       ...CORE_PARTICIPANT_EVENT_TYPES,
+      "hole.scored",
+      "hole.cleared",
     ]);
 
     const config = padelSessionPlugin.validateSetup({});
@@ -84,6 +86,7 @@ describe("sport session plug-ins", () => {
     }
 
     const frozen = Object.freeze(state);
+    expect(frozen).toEqual({ scores: [] });
     expect(
       golfSessionPlugin.applyEvent(frozen, { type: "participant.left" }),
     ).toBe(frozen);
@@ -140,6 +143,9 @@ describe("sport registry", () => {
       },
       validateJoin() {
         return {};
+      },
+      validateEvent() {
+        return undefined;
       },
       applyEvent(state, event) {
         if (event.type !== "tick") {

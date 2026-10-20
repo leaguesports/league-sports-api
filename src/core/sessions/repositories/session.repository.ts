@@ -113,6 +113,30 @@ export type ParticipationResult = {
   event: SessionEventRecord;
 };
 
+export type AppendEventSnapshot = {
+  session: SessionRecord;
+  participants: ParticipantRecord[];
+  events: SessionEventRecord[];
+  nextSeq: number;
+};
+
+export type AppendEventChange =
+  | {
+      action: "append";
+      state: unknown;
+      event: NewSessionEvent;
+    }
+  | {
+      action: "replay";
+      seq: number;
+    };
+
+export type AppendEventResult = {
+  session: SessionRecord;
+  event: SessionEventRecord;
+  replayed: boolean;
+};
+
 export class SessionNotFoundError extends Error {
   constructor(sessionId: string) {
     super(`Session not found: ${sessionId}`);
@@ -162,6 +186,14 @@ export interface SessionRepository {
     sessionId: string,
     build: (snapshot: ParticipationSnapshot) => ParticipationChange,
   ): Promise<ParticipationResult>;
+  /**
+   * Append one sport event and the state it produces, or return an existing
+   * event when `build` reports a replay. Seq conflicts retry the whole build.
+   */
+  appendEvent(
+    sessionId: string,
+    build: (snapshot: AppendEventSnapshot) => AppendEventChange,
+  ): Promise<AppendEventResult>;
   reissueSeatToken(
     sessionId: string,
     userId: string,

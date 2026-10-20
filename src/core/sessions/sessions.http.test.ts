@@ -251,6 +251,9 @@ describe("POST /api/sessions", () => {
       async participate() {
         throw new Error("database offline");
       },
+      async appendEvent() {
+        throw new Error("database offline");
+      },
       async reissueSeatToken() {
         throw new Error("database offline");
       },

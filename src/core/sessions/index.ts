@@ -3,6 +3,8 @@ import { Request, Router } from "express";
 import { PrismaClient } from "../../generated/prisma/client";
 import { SportRegistry, sportRegistry } from "../../sports/registry";
 import { EventEmitter } from "./events";
+import { CaptureSessionEventCommand } from "./features/captureEvent/captureEvent.command";
+import { CaptureSessionEventController } from "./features/captureEvent/captureEvent.controller";
 import { GetJoinSummary } from "./features/joinSession/getJoinSummary";
 import { JoinSessionCommand } from "./features/joinSession/joinSession.command";
 import { JoinSessionController } from "./features/joinSession/joinSession.controller";
@@ -59,6 +61,7 @@ export function createSessionsModule({
   const recordSession = new RecordSessionCommand(repository, sports);
   const joinSession = new JoinSessionCommand(repository, sports);
   const leaveSession = new LeaveSessionCommand(repository, sports);
+  const captureEvent = new CaptureSessionEventCommand(repository, sports);
   const reissueSeatToken = new ReissueSeatTokenCommand(repository);
 
   return {
@@ -75,6 +78,7 @@ export function createSessionsModule({
         joinLookupRateLimiter,
       ),
       leave: new LeaveSessionController(leaveSession),
+      capture: new CaptureSessionEventController(captureEvent),
       reissue: new ReissueSeatTokenController(reissueSeatToken, tryGetSessionUserId),
     }),
     sessionRepository: repository,

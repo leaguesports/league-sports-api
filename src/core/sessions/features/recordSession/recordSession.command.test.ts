@@ -32,6 +32,9 @@ const counterPlugin: SportSessionPlugin<{ step: number }, { total: number }> = {
   validateJoin() {
     return {};
   },
+  validateEvent() {
+    return undefined;
+  },
   applyEvent(state, event) {
     if (!this.acceptedEventTypes.includes(event.type)) {
       throw new SessionValidationError("Unknown event type", {

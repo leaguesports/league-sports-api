@@ -3,152 +3,55 @@ import cors from "cors";
 import express from "express";
 
 import { Config, corsReflectOrigin } from "./config";
-import { createPrismaClient } from "./lib/prisma";
 import {
-  createDartsModule,
-  DartsMatchRepository,
-} from "./modules/darts";
-import {
-  createGolfRoundModule,
-  GolfHandicapIndexLookup,
-  GolfRoundRepository,
-} from "./modules/golf-round";
-import { createIdentityModule } from "./modules/identity";
-import {
-  createMatchModule,
-  MatchRepository,
-} from "./modules/padel";
+  CommunityRepository,
+  createCommunitiesModule,
+} from "./core/communities";
 import {
   createFriendsModule,
   FriendProfileLookup,
   FriendshipRepository,
-} from "./modules/friends";
+} from "./core/friends";
+import { createIdentityModule } from "./core/identity";
 import {
-  createBadgesModule,
-  BadgeAwardRepository,
-} from "./modules/badges";
-import {
-  createCommunitiesModule,
-  CommunityRepository,
-} from "./modules/communities";
-import {
-  createPreferencesModule,
-  PreferencesRepository,
-} from "./modules/preferences";
-import {
-  createTrainingModule,
-  TrainingEnrollmentRepository,
-} from "./modules/training";
-import {
-  createIntegrationsModule,
-  IntegrationConnectionRepository,
-} from "./modules/integrations";
-import {
-  createVenueModule,
-  VenueRepository,
-} from "./modules/venue";
-import {
-  createPoolsModule,
-  PoolRepository,
-} from "./modules/pools";
-import {
-  createOrganisedGamesModule,
-  OrganisedGameRepository,
-} from "./modules/organised-games";
+  CoverageIntentRepository,
+  CoverageRateLimiter,
+  createIntentsModule,
+} from "./core/intents";
 import {
   createNotificationsModule,
   NotificationRepository,
-} from "./modules/notifications";
+} from "./core/notifications";
 import {
-  createTeamsModule,
-  TeamRepository,
-} from "./modules/teams";
-import {
-  createTeamMatchesModule,
-  TeamMatchRepository,
-} from "./modules/team-matches";
-import { PrismaTeamMatchRepository } from "./modules/team-matches/repositories/prisma-team-match.repository";
-import { CompleteTeamMatchOnScorecardLock } from "./modules/team-matches/services/complete-on-scorecard-lock";
-import {
-  ScorecardLockedEvent,
-  ScorecardUnlockedEvent,
-} from "./modules/scorecards/on-scorecard-locked";
-import {
-  createTournamentsModule,
-  TournamentRepository,
-} from "./modules/tournaments";
-import { PrismaTournamentRepository } from "./modules/tournaments/repositories/prisma-tournament.repository";
-import { AdvanceTournamentOnTeamMatchComplete } from "./modules/tournaments/services/advance-on-team-match-complete";
+  createPreferencesModule,
+  PreferencesRepository,
+} from "./core/preferences";
 import {
   createRoadmapModule,
   RoadmapEmailSender,
   RoadmapRateLimiter,
   RoadmapRepository,
-} from "./modules/roadmap";
+} from "./core/roadmap";
 import {
-  CoverageIntentRepository,
-  CoverageRateLimiter,
-  createIntentsModule,
-} from "./modules/intents";
-import {
-  createLobbyModule,
-  LobbyRepository,
-} from "./modules/lobby";
-import {
-  createGolfToursModule,
-  GolfTourRepository,
-} from "./modules/golf-tours";
-import { PrismaGolfTourRepository } from "./modules/golf-tours/repositories/prisma-golf-tour.repository";
-import { LockGolfTourFourballOnScorecardLock } from "./modules/golf-tours/services/lock-fourball-on-scorecard-lock";
-import {
-  createOpenF1Module,
-  OpenF1Client,
-} from "./modules/openf1";
-import {
-  createVenueLeaderboardsModule,
-  VenueLeaderboardRepository,
-} from "./modules/venue-leaderboards";
-import {
-  createGolfGameDaysModule,
-  GameDayPublisher,
-  GameDayRateLimiter,
-  GameDayRepository,
-} from "./modules/golf-game-days";
+  createVenueModule,
+  VenueFollowRepository,
+  VenueRepository,
+} from "./core/venue";
+import { createPrismaClient } from "./lib/prisma";
 
 export type CreateAppDependencies = {
   venueRepository?: VenueRepository;
-  venueFollowRepository?: import("./modules/venue").VenueFollowRepository;
+  venueFollowRepository?: VenueFollowRepository;
   friendshipRepository?: FriendshipRepository;
   friendProfileLookup?: FriendProfileLookup;
-  matchRepository?: MatchRepository;
-  golfRoundRepository?: GolfRoundRepository;
-  golfHandicapIndexLookup?: GolfHandicapIndexLookup;
-  dartsMatchRepository?: DartsMatchRepository;
-  badgeAwardRepository?: BadgeAwardRepository;
   preferencesRepository?: PreferencesRepository;
   communityRepository?: CommunityRepository;
-  trainingEnrollmentRepository?: TrainingEnrollmentRepository;
-  integrationConnectionRepository?: IntegrationConnectionRepository;
-  poolRepository?: PoolRepository;
-  organisedGameRepository?: OrganisedGameRepository;
   notificationRepository?: NotificationRepository;
-  teamRepository?: TeamRepository;
-  teamMatchRepository?: TeamMatchRepository;
-  tournamentRepository?: TournamentRepository;
   roadmapRepository?: RoadmapRepository;
   roadmapEmailSender?: RoadmapEmailSender;
   roadmapVoteRateLimiter?: RoadmapRateLimiter;
   coverageIntentRepository?: CoverageIntentRepository;
   coverageRateLimiter?: CoverageRateLimiter;
-  lobbyRepository?: LobbyRepository;
-  golfTourRepository?: GolfTourRepository;
-  openF1Client?: OpenF1Client;
-  venueLeaderboardRepository?: VenueLeaderboardRepository;
-  gameDayRepository?: GameDayRepository;
-  gameDayPublisher?: GameDayPublisher;
-  gameDayRateLimiter?: GameDayRateLimiter;
-  gameDayAnonymousCreateRateLimiter?: GameDayRateLimiter;
-  gameDaySignedInCreateRateLimiter?: GameDayRateLimiter;
 };
 
 export async function createApp(
@@ -183,62 +86,6 @@ export async function createApp(
     tryGetSessionUserId: identity.tryGetSessionUserId,
     requireAuth: identity.authorizationMiddleware,
   });
-  const teamMatchRepository =
-    dependencies.teamMatchRepository ??
-    new PrismaTeamMatchRepository(prisma);
-  const tournamentRepository =
-    dependencies.tournamentRepository ??
-    new PrismaTournamentRepository(prisma);
-  const advanceTournament = new AdvanceTournamentOnTeamMatchComplete(
-    tournamentRepository,
-  );
-  const onTeamMatchCompleted = (match: import("./modules/team-matches/entities/team-match").TeamMatch) =>
-    advanceTournament.execute(match);
-  const completeOnLock = new CompleteTeamMatchOnScorecardLock(
-    teamMatchRepository,
-    onTeamMatchCompleted,
-  );
-  const golfTourRepository =
-    dependencies.golfTourRepository ??
-    new PrismaGolfTourRepository(prisma);
-  const lockFourballOnScorecardLock = new LockGolfTourFourballOnScorecardLock(
-    golfTourRepository,
-  );
-  let ingestVenueLeaderboard: (event: ScorecardLockedEvent) => Promise<void> =
-    async () => {};
-  let withdrawVenueLeaderboard: (event: ScorecardUnlockedEvent) => Promise<void> =
-    async () => {};
-  const onScorecardLocked = async (event: ScorecardLockedEvent) => {
-    await completeOnLock.execute(event);
-    await lockFourballOnScorecardLock.execute(event);
-    await ingestVenueLeaderboard(event);
-  };
-  const onScorecardUnlocked = async (event: ScorecardUnlockedEvent) => {
-    await withdrawVenueLeaderboard(event);
-  };
-
-  const match = createMatchModule({
-    prisma,
-    venueRepository: venue.venueRepository,
-    matchRepository: dependencies.matchRepository,
-    tryGetSessionUserId: identity.tryGetSessionUserId,
-    onScorecardLocked,
-  });
-  const golfRound = createGolfRoundModule({
-    prisma,
-    venueRepository: venue.venueRepository,
-    golfRoundRepository: dependencies.golfRoundRepository,
-    golfHandicapIndexLookup: dependencies.golfHandicapIndexLookup,
-    tryGetSessionUserId: identity.tryGetSessionUserId,
-    onScorecardLocked,
-  });
-  const darts = createDartsModule({
-    prisma,
-    venueRepository: venue.venueRepository,
-    dartsMatchRepository: dependencies.dartsMatchRepository,
-    tryGetSessionUserId: identity.tryGetSessionUserId,
-    onScorecardLocked,
-  });
   const friends = createFriendsModule({
     prisma,
     friendshipRepository: dependencies.friendshipRepository,
@@ -252,39 +99,9 @@ export async function createApp(
     tryGetSessionUserId: identity.tryGetSessionUserId,
     requireAuth: identity.authorizationMiddleware,
   });
-  const badges = createBadgesModule({
-    prisma,
-    matchRepository: match.matchRepository,
-    golfRoundRepository: golfRound.golfRoundRepository,
-    friendshipRepository: friends.friendshipRepository,
-    badgeAwardRepository: dependencies.badgeAwardRepository,
-    tryGetSessionUserId: identity.tryGetSessionUserId,
-    requireAuth: identity.authorizationMiddleware,
-  });
   const communities = createCommunitiesModule({
     prisma,
     communityRepository: dependencies.communityRepository,
-    friendProfileLookup: friends.friendProfileLookup,
-    tryGetSessionUserId: identity.tryGetSessionUserId,
-    requireAuth: identity.authorizationMiddleware,
-  });
-  const training = createTrainingModule({
-    prisma,
-    trainingEnrollmentRepository: dependencies.trainingEnrollmentRepository,
-    tryGetSessionUserId: identity.tryGetSessionUserId,
-    requireAuth: identity.authorizationMiddleware,
-  });
-  const integrations = createIntegrationsModule({
-    prisma,
-    tokenEncryptionKey: config.JWT_SECRET,
-    integrationConnectionRepository:
-      dependencies.integrationConnectionRepository,
-    tryGetSessionUserId: identity.tryGetSessionUserId,
-    requireAuth: identity.authorizationMiddleware,
-  });
-  const pools = createPoolsModule({
-    prisma,
-    poolRepository: dependencies.poolRepository,
     friendProfileLookup: friends.friendProfileLookup,
     tryGetSessionUserId: identity.tryGetSessionUserId,
     requireAuth: identity.authorizationMiddleware,
@@ -293,47 +110,6 @@ export async function createApp(
     prisma,
     notificationRepository: dependencies.notificationRepository,
     friendProfileLookup: friends.friendProfileLookup,
-    tryGetSessionUserId: identity.tryGetSessionUserId,
-    requireAuth: identity.authorizationMiddleware,
-  });
-  const organisedGames = createOrganisedGamesModule({
-    prisma,
-    venueRepository: venue.venueRepository,
-    friendshipRepository: friends.friendshipRepository,
-    friendProfileLookup: friends.friendProfileLookup,
-    matchRepository: match.matchRepository,
-    golfRoundRepository: golfRound.golfRoundRepository,
-    organisedGameRepository: dependencies.organisedGameRepository,
-    inviteNotifier: notifications.organisedGameInviteNotifier,
-    tryGetSessionUserId: identity.tryGetSessionUserId,
-    requireAuth: identity.authorizationMiddleware,
-  });
-  const teams = createTeamsModule({
-    prisma,
-    teamRepository: dependencies.teamRepository,
-    friendshipRepository: friends.friendshipRepository,
-    friendProfileLookup: friends.friendProfileLookup,
-    tryGetSessionUserId: identity.tryGetSessionUserId,
-    requireAuth: identity.authorizationMiddleware,
-  });
-  const teamMatches = createTeamMatchesModule({
-    prisma,
-    teamRepository: teams.teamRepository,
-    venueRepository: venue.venueRepository,
-    matchRepository: match.matchRepository,
-    golfRoundRepository: golfRound.golfRoundRepository,
-    dartsMatchRepository: darts.dartsMatchRepository,
-    friendProfileLookup: friends.friendProfileLookup,
-    teamMatchRepository,
-    onTeamMatchCompleted,
-    tryGetSessionUserId: identity.tryGetSessionUserId,
-    requireAuth: identity.authorizationMiddleware,
-  });
-  const tournaments = createTournamentsModule({
-    prisma,
-    teamRepository: teams.teamRepository,
-    teamMatchRepository,
-    tournamentRepository,
     tryGetSessionUserId: identity.tryGetSessionUserId,
     requireAuth: identity.authorizationMiddleware,
   });
@@ -351,86 +127,15 @@ export async function createApp(
     coverageIntentRepository: dependencies.coverageIntentRepository,
     coverageRateLimiter: dependencies.coverageRateLimiter,
   });
-  const lobby = createLobbyModule({
-    prisma,
-    lobbyRepository: dependencies.lobbyRepository,
-    organisedGameRepository: organisedGames.organisedGameRepository,
-    venueRepository: venue.venueRepository,
-    friendshipRepository: friends.friendshipRepository,
-    teamRepository: teams.teamRepository,
-    friendProfileLookup: friends.friendProfileLookup,
-    lobbyNotifier: notifications.lobbyNotifier,
-    tryGetSessionUserId: identity.tryGetSessionUserId,
-    requireAuth: identity.authorizationMiddleware,
-  });
-  const golfTours = createGolfToursModule({
-    prisma,
-    venueRepository: venue.venueRepository,
-    golfRoundRepository: golfRound.golfRoundRepository,
-    golfTourRepository,
-    tryGetSessionUserId: identity.tryGetSessionUserId,
-    requireAuth: identity.authorizationMiddleware,
-  });
-  const openF1 = createOpenF1Module({
-    config,
-    openF1Client: dependencies.openF1Client,
-  });
-  const venueLeaderboards = createVenueLeaderboardsModule({
-    prisma,
-    venueRepository: venue.venueRepository,
-    matchRepository: match.matchRepository,
-    golfRoundRepository: golfRound.golfRoundRepository,
-    dartsMatchRepository: darts.dartsMatchRepository,
-    friendshipRepository: friends.friendshipRepository,
-    venueLeaderboardRepository: dependencies.venueLeaderboardRepository,
-    useInMemoryLeaderboards: Boolean(
-      dependencies.venueRepository || dependencies.venueLeaderboardRepository,
-    ),
-    tryGetSessionUserId: identity.tryGetSessionUserId,
-    requireAuth: identity.authorizationMiddleware,
-  });
-  ingestVenueLeaderboard = venueLeaderboards.onScorecardLocked;
-  withdrawVenueLeaderboard = venueLeaderboards.onScorecardUnlocked;
-
-  const golfGameDays = createGolfGameDaysModule({
-    prisma,
-    venueRepository: venue.venueRepository,
-    golfRoundRepository: golfRound.golfRoundRepository,
-    onScorecardLocked,
-    onScorecardUnlocked,
-    tryGetSessionUserId: identity.tryGetSessionUserId,
-    requireAuth: identity.authorizationMiddleware,
-    gameDayRepository: dependencies.gameDayRepository,
-    gameDayPublisher: dependencies.gameDayPublisher,
-    gameDayRateLimiter: dependencies.gameDayRateLimiter,
-    anonymousCreateRateLimiter: dependencies.gameDayAnonymousCreateRateLimiter,
-    signedInCreateRateLimiter: dependencies.gameDaySignedInCreateRateLimiter,
-  });
 
   app.use(identity.router);
   app.use(venue.router);
-  app.use(match.router);
-  app.use(golfRound.router);
-  app.use(darts.router);
   app.use(friends.router);
   app.use(preferences.router);
-  app.use(badges.router);
   app.use(communities.router);
-  app.use(training.router);
-  app.use(integrations.router);
-  app.use(pools.router);
   app.use(notifications.router);
-  app.use(organisedGames.router);
-  app.use(teams.router);
-  app.use(teamMatches.router);
-  app.use(tournaments.router);
   app.use(roadmap.router);
   app.use(intents.router);
-  app.use(lobby.router);
-  app.use(golfTours.router);
-  app.use(openF1.router);
-  app.use(venueLeaderboards.router);
-  app.use(golfGameDays.router);
 
   app.use(
     (

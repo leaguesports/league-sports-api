@@ -2,10 +2,9 @@ import dotenv from "dotenv";
 
 import { z } from "zod";
 
-import { identityConfigSchema } from "./modules/identity/config";
-import { googleOauthConfigSchema } from "./modules/google-oauth/config";
-import { openF1ConfigSchema } from "./modules/openf1/config";
-import { roadmapConfigSchema } from "./modules/roadmap/config";
+import { identityConfigSchema } from "./core/identity/config";
+import { googleOauthConfigSchema } from "./core/google-oauth/config";
+import { roadmapConfigSchema } from "./core/roadmap/config";
 
 const appConfigSchema = z.object({
   PORT: z.number().default(3000),
@@ -14,10 +13,9 @@ const appConfigSchema = z.object({
 });
 
 export const configSchema = appConfigSchema
-  .merge(identityConfigSchema)
-  .merge(googleOauthConfigSchema)
-  .merge(roadmapConfigSchema)
-  .merge(openF1ConfigSchema);
+  .extend(identityConfigSchema.shape)
+  .extend(googleOauthConfigSchema.shape)
+  .extend(roadmapConfigSchema.shape);
 
 export type Config = z.infer<typeof configSchema>;
 
@@ -110,8 +108,6 @@ export function getConfig(): Config {
       ROADMAP_FROM_EMAIL: process.env.ROADMAP_FROM_EMAIL || undefined,
       RESEND_API_KEY: process.env.RESEND_API_KEY || undefined,
       SENDGRID_API_KEY: process.env.SENDGRID_API_KEY || undefined,
-      OPENF1_BASE_URL: process.env.OPENF1_BASE_URL || undefined,
-      OPENF1_API_KEY: process.env.OPENF1_API_KEY || undefined,
     });
   } catch (error) {
     console.error(error);

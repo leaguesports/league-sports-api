@@ -1,6 +1,6 @@
 # League Sports API
 
-Backend for the **Sport Hub**: tools for fans, players, and pros across sports (padel, golf, darts today). Venues and events are part of discovery; live play is recorded on scorecards that lock when finished.
+Backend for the **Sport Hub**. Sport-specific play is not implemented yet; `src/sports` is reserved for it. The API today is the hub: identity, venues, friends, preferences, communities, notifications, roadmap, and coverage intents.
 
 ## Domain docs
 
@@ -39,22 +39,6 @@ yarn dev
 
 Default port: `3000` (see `.env.example`).
 
-## Code layout (today)
+## Code layout
 
-Feature modules live under `src/modules/*` (controllers → services → repositories). Composition root: `src/app.ts`.
-
-We are moving toward **sport segments** plus a **thin hub** (docs → Domain Event bus → move sport modules). See ADR-0003. HTTP routes and payloads stay stable across that work.
-
-## Target layout
-
-| Segment | Owns (roughly) |
-| --- | --- |
-| Padel | padel Scorecard (`match`) |
-| Golf | golf Scorecard (`golf-round`), GolfTour |
-| Darts | darts Scorecard (`darts`) |
-| Identity | accounts, sessions, profiles, Google OAuth |
-| Discovery | venues, venue leaderboards; future Event |
-| Organise | lobby; OrganisedGame (starts via Padel/Golf) |
-| Competition | teams, TeamMatch, Tournament (calls into the Sport) |
-| Social | friends, communities, notifications |
-| Platform | parked tools (badges, preferences, integrations, roadmap, intents, openf1, pools, training) |
+Hub modules live under `src/core/*` (controllers → services → repositories). Sport implementations will live under `src/sports/*`. Composition root: `src/app.ts`.

@@ -109,7 +109,18 @@ function claimSeat(
   };
 
   return {
-    state: plugin.applyEvent(snapshot.session.state, event),
+    state: plugin.applyEvent(snapshot.session.state, event, {
+      config: snapshot.session.config,
+      participants: snapshot.participants.map((participant) =>
+        participant.id === next.id
+          ? { id: next.id, status: next.status, sportData: next.sportData }
+          : {
+              id: participant.id,
+              status: participant.status,
+              sportData: participant.sportData,
+            },
+      ),
+    }),
     event,
     updateParticipant: {
       id: existing.id,
@@ -169,7 +180,18 @@ function addSeat(
       participantId: existing.id,
     };
     return {
-      state: plugin.applyEvent(snapshot.session.state, event),
+      state: plugin.applyEvent(snapshot.session.state, event, {
+        config: snapshot.session.config,
+        participants: snapshot.participants.map((participant) =>
+          participant.id === next.id
+            ? { id: next.id, status: next.status, sportData: next.sportData }
+            : {
+                id: participant.id,
+                status: participant.status,
+                sportData: participant.sportData,
+              },
+        ),
+      }),
       event,
       updateParticipant: {
         id: existing.id,
@@ -202,7 +224,21 @@ function addSeat(
   };
 
   return {
-    state: plugin.applyEvent(snapshot.session.state, event),
+    state: plugin.applyEvent(snapshot.session.state, event, {
+      config: snapshot.session.config,
+      participants: [
+        ...snapshot.participants.map((existing) => ({
+          id: existing.id,
+          status: existing.status,
+          sportData: existing.sportData,
+        })),
+        {
+          id: participant.id,
+          status: participant.status,
+          sportData: participant.sportData,
+        },
+      ],
+    }),
     event,
     createParticipant: participant,
   };

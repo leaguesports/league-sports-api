@@ -95,10 +95,21 @@ export class CaptureSessionEventCommand {
         seq: snapshot.nextSeq,
         ...(request.clientEventId ? { clientEventId: request.clientEventId } : {}),
       };
-      const state = plugin.applyEvent(snapshot.session.state, {
-        type: request.type,
-        data: storedData,
-      });
+      const state = plugin.applyEvent(
+        snapshot.session.state,
+        {
+          type: request.type,
+          data: storedData,
+        },
+        {
+          config: snapshot.session.config,
+          participants: snapshot.participants.map((participant) => ({
+            id: participant.id,
+            status: participant.status,
+            sportData: participant.sportData,
+          })),
+        },
+      );
 
       return {
         action: "append" as const,

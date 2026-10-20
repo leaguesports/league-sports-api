@@ -8,6 +8,16 @@ export type SportEventValidationContext = {
   participants: readonly { id: string; status: string }[];
 };
 
+/**
+ * Optional context for `applyEvent`. Live commands pass the validated config
+ * and the current seats so a sport can derive a scoreboard. Replay through
+ * `prepareSession` omits it.
+ */
+export type SportEventContext = {
+  config: unknown;
+  participants: readonly { id: string; status: string; sportData?: unknown }[];
+};
+
 /** Written by the shared session layer. Every plug-in must accept these. */
 export const CORE_PARTICIPANT_EVENT_TYPES = [
   "participant.invited",
@@ -53,7 +63,7 @@ export interface SportSessionPlugin<
     event: SportSessionEvent,
     context: SportEventValidationContext,
   ): void;
-  applyEvent(state: TState, event: SportSessionEvent): TState;
+  applyEvent(state: TState, event: SportSessionEvent, context?: SportEventContext): TState;
 }
 
 /** Widened plug-in the session flow can call without naming a sport. */
@@ -71,7 +81,7 @@ export type SportSessionRuntime = {
     event: SportSessionEvent,
     context: SportEventValidationContext,
   ): void;
-  applyEvent(state: unknown, event: SportSessionEvent): unknown;
+  applyEvent(state: unknown, event: SportSessionEvent, context?: SportEventContext): unknown;
 };
 
 export class SessionValidationError extends Error {

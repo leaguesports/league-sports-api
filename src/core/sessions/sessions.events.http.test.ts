@@ -160,21 +160,32 @@ describe("POST /api/sessions/:id/events", () => {
       clientEventId: "offline-1",
     });
     expect(scored.status).toBe(201);
-    const scoredBody = (await scored.json()) as { seq: number; state: unknown };
-    expect(scoredBody).toEqual({
-      seq: eventsBefore + 1,
-      state: {
-        scores: [
-          {
-            participantId: guest.participant.id,
-            hole: 1,
-            strokes: 4,
-            scoredBy: started.participant.id,
-            seq: eventsBefore + 1,
-          },
-        ],
+    const scoredBody = (await scored.json()) as {
+      seq: number;
+      state: { scores: unknown; players: unknown; standings: unknown };
+    };
+    expect(scoredBody.seq).toBe(eventsBefore + 1);
+    expect(scoredBody.state.scores).toEqual([
+      {
+        participantId: guest.participant.id,
+        hole: 1,
+        strokes: 4,
+        scoredBy: started.participant.id,
+        seq: eventsBefore + 1,
       },
-    });
+    ]);
+    expect(scoredBody.state.players).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          participantId: guest.participant.id,
+          thru: 1,
+          gross: 4,
+          net: null,
+          stableford: null,
+        }),
+      ]),
+    );
+    expect(Array.isArray(scoredBody.state.standings)).toBe(true);
     expect(JSON.stringify(scoredBody)).not.toContain("user-host");
     expect(JSON.stringify(scoredBody)).not.toContain(started.token);
 

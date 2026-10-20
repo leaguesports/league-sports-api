@@ -2,6 +2,10 @@ import { JoinCodeSource } from "./joinCodeGenerator";
 
 export const MAX_JOIN_CODE_ATTEMPTS = 5;
 
+export function normalizeJoinCode(code: string): string {
+  return code.trim().toUpperCase();
+}
+
 export class JoinCodeAllocationError extends Error {
   constructor(message: string, options?: { cause?: unknown }) {
     super(message, options);
@@ -32,7 +36,7 @@ export function isJoinCodeConflict(error: unknown): boolean {
       : [];
 
   if (fields.length === 0) {
-    return true;
+    return false;
   }
 
   return fields.some((field) => field.toLowerCase().includes("joincode"));

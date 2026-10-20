@@ -18,7 +18,6 @@ import { SessionStartedEvent } from "./sessionStarted.event";
 
 export type InvitedParticipantInput = {
   name: string;
-  userId?: string | null;
   sportData?: unknown;
 };
 
@@ -90,7 +89,7 @@ export class StartSessionCommand {
       const sportData = plugin.validateJoin(state, config, invite.sportData ?? {});
       const participant: NewParticipant = {
         id: randomUUID(),
-        userId: invite.userId ?? null,
+        userId: null,
         name: invite.name.trim(),
         role: "player",
         status: "invited",
@@ -120,9 +119,13 @@ export class StartSessionCommand {
       events,
     });
 
-    await this.eventEmitter.publish(
-      new SessionStartedEvent({ sessionId: created.session.id }),
-    );
+    try {
+      await this.eventEmitter.publish(
+        new SessionStartedEvent({ sessionId: created.session.id }),
+      );
+    } catch (error) {
+      console.error("Session started, but a listener failed", error);
+    }
 
     const creatorRecord =
       created.participants.find((participant) => participant.id === creator.id) ??

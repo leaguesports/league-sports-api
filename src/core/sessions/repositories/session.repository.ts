@@ -33,6 +33,7 @@ export type ParticipantRecord = {
   sportData: unknown;
   joinedAt: Date | null;
   leftAt: Date | null;
+  createdAt: Date;
 };
 
 export type SessionEventRecord = {
@@ -161,4 +162,41 @@ export interface SessionRepository {
     sessionId: string,
     build: (snapshot: ParticipationSnapshot) => ParticipationChange,
   ): Promise<ParticipationResult>;
+  reissueSeatToken(
+    sessionId: string,
+    userId: string,
+    tokenHash: string,
+  ): Promise<ParticipantRecord>;
+}
+
+export function sortParticipants<T extends { createdAt: Date; id: string }>(
+  participants: readonly T[],
+): T[] {
+  return [...participants].sort((left, right) => {
+    const byTime = left.createdAt.getTime() - right.createdAt.getTime();
+    if (byTime !== 0) {
+      return byTime;
+    }
+    if (left.id < right.id) {
+      return -1;
+    }
+    if (left.id > right.id) {
+      return 1;
+    }
+    return 0;
+  });
+}
+
+/** The signed-in player's joined seat. The creator seat wins when they have more than one. */
+export function pickJoinedSeat(
+  participants: readonly ParticipantRecord[],
+  userId: string,
+): ParticipantRecord | undefined {
+  const matches = participants.filter(
+    (participant) => participant.userId === userId && participant.status === "joined",
+  );
+  return (
+    matches.find((participant) => participant.role === "creator") ??
+    sortParticipants(matches)[0]
+  );
 }

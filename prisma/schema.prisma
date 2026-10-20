@@ -316,11 +316,12 @@ model SessionParticipant {
   name      String
   role      SessionParticipantRole   @default(player)
   status    SessionParticipantStatus
-  // sha256 of the per-device token. The raw token is returned once.
+  // sha256 of the per-device token. The raw token is returned when the seat is taken.
   tokenHash String?
   sportData Json                     @default("{}")
   joinedAt  DateTime?
   leftAt    DateTime?
+  createdAt DateTime                 @default(now())
 
   session Session        @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   events  SessionEvent[]
@@ -347,4 +348,13 @@ model SessionEvent {
 
   @@unique([sessionId, seq])
   @@index([createdAt])
+}
+
+// Shared request counts for session start, join, and join-code lookup.
+model SessionRateHit {
+  id        String   @id @default(uuid())
+  bucket    String
+  createdAt DateTime @default(now())
+
+  @@index([bucket, createdAt])
 }

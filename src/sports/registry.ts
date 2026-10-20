@@ -34,6 +34,7 @@ function toRuntime(plugin: SportSessionPlugin<any, any>): SportSessionRuntime {
     acceptedEventTypes: plugin.acceptedEventTypes,
     participants: plugin.participants,
     validateSetup: (config) => plugin.validateSetup(config),
+    publicSetup: (config) => plugin.publicSetup(config),
     buildStartingState: (config) => plugin.buildStartingState(config),
     validateJoin: (state, config, sportData) =>
       plugin.validateJoin(state, config, sportData),

@@ -10,7 +10,7 @@ import { RecordSessionCommand } from "./recordSession.command";
 const counterPlugin: SportSessionPlugin<{ step: number }, { total: number }> = {
   id: "counter",
   acceptedEventTypes: ["add"],
-  participants: { min: 1, max: 4 },
+  participants: { max: 4 },
   validateSetup(config: unknown) {
     if (
       typeof config !== "object" ||
@@ -22,6 +22,9 @@ const counterPlugin: SportSessionPlugin<{ step: number }, { total: number }> = {
       });
     }
     return { step: (config as { step: number }).step };
+  },
+  publicSetup() {
+    return {};
   },
   buildStartingState(config) {
     return { total: config.step };

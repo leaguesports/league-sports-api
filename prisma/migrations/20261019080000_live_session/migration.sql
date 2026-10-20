@@ -45,6 +45,7 @@ CREATE TABLE "SessionParticipant" (
     "sportData" JSONB NOT NULL DEFAULT '{}',
     "joinedAt" TIMESTAMP(3),
     "leftAt" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "SessionParticipant_pkey" PRIMARY KEY ("id")
 );
@@ -107,3 +108,15 @@ ALTER TABLE "SessionEvent" ADD CONSTRAINT "SessionEvent_sessionId_fkey" FOREIGN 
 
 -- AddForeignKey
 ALTER TABLE "SessionEvent" ADD CONSTRAINT "SessionEvent_participantId_fkey" FOREIGN KEY ("participantId") REFERENCES "SessionParticipant"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- CreateTable
+CREATE TABLE "SessionRateHit" (
+    "id" TEXT NOT NULL,
+    "bucket" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "SessionRateHit_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateIndex
+CREATE INDEX "SessionRateHit_bucket_createdAt_idx" ON "SessionRateHit"("bucket", "createdAt");

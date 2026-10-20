@@ -40,19 +40,23 @@ export type GolfJoin = {
   handicapIndex?: number;
 };
 
+const MAX_GOLF_TEES = 8;
+const MAX_TEE_TEXT = 40;
+
 const golfSetupSchema = z.strictObject({
   tees: z
     .array(
       z.strictObject({
-        id: z.string().trim().min(1),
-        name: z.string().trim().min(1).optional(),
+        id: z.string().trim().min(1).max(MAX_TEE_TEXT),
+        name: z.string().trim().min(1).max(MAX_TEE_TEXT).optional(),
       }),
     )
-    .min(1),
+    .min(1)
+    .max(MAX_GOLF_TEES),
 });
 
 const golfJoinSchema = z.strictObject({
-  teeId: z.string().trim().min(1),
+  teeId: z.string().trim().min(1).max(MAX_TEE_TEXT),
   handicapIndex: z.number().gte(-10).lte(54).nullish(),
 });
 
@@ -91,7 +95,7 @@ export const golfSessionPlugin: SportSessionPlugin<
     GOLF_HOLE_SCORED,
     GOLF_HOLE_CLEARED,
   ],
-  participants: { min: 1, max: 4 },
+  participants: { max: 4 },
 
   validateSetup(config: unknown): GolfSetup {
     const parsed = z.safeParse(golfSetupSchema, config);
@@ -103,6 +107,14 @@ export const golfSessionPlugin: SportSessionPlugin<
     }
     return {
       tees: parsed.data.tees.map((tee) => ({ ...tee })),
+    };
+  },
+
+  publicSetup(config: GolfSetup) {
+    return {
+      tees: config.tees.map((tee) =>
+        tee.name ? { id: tee.id, name: tee.name } : { id: tee.id },
+      ),
     };
   },
 

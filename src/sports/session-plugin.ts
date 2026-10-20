@@ -20,7 +20,6 @@ export type CoreParticipantEventType =
   (typeof CORE_PARTICIPANT_EVENT_TYPES)[number];
 
 export type ParticipantCapacity = {
-  min: number;
   max: number;
 };
 
@@ -44,6 +43,8 @@ export interface SportSessionPlugin<
   readonly acceptedEventTypes: readonly string[];
   readonly participants: ParticipantCapacity;
   validateSetup(config: unknown): TConfig;
+  /** Fields a joining player needs. Must not include private seat data. */
+  publicSetup(config: TConfig): unknown;
   buildStartingState(config: TConfig): TState;
   validateJoin(state: TState, config: TConfig, sportData: unknown): TJoin;
   validateEvent(
@@ -61,6 +62,7 @@ export type SportSessionRuntime = {
   readonly acceptedEventTypes: readonly string[];
   readonly participants: ParticipantCapacity;
   validateSetup(config: unknown): unknown;
+  publicSetup(config: unknown): unknown;
   buildStartingState(config: unknown): unknown;
   validateJoin(state: unknown, config: unknown, sportData: unknown): unknown;
   validateEvent(

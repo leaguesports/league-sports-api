@@ -7,6 +7,7 @@ import type { Express } from "express";
 import { createApp } from "../../app";
 import { Config } from "../../config";
 import { signAuthenticationToken } from "../identity/utils/jwt";
+import { InMemoryJoinLookupRateLimiter } from "./join-rate-limiter";
 import { InMemorySessionRepository } from "./repositories/in-memory-session.repository";
 
 function makeConfig(): Config {
@@ -53,7 +54,10 @@ describe("POST /api/sessions/:id/events", () => {
 
   beforeEach(async () => {
     sessions = new InMemorySessionRepository({ generate: () => "JOIN99" });
-    app = await createApp(config, { sessionRepository: sessions });
+    app = await createApp(config, {
+      sessionRepository: sessions,
+      joinLookupRateLimiter: new InMemoryJoinLookupRateLimiter(100, 60_000),
+    });
     server = await listen(app);
   });
 
@@ -337,11 +341,11 @@ async function start(
   };
 }
 
-async function join(url: string, sessionId: string, body: unknown) {
+async function join(url: string, sessionId: string, body: Record<string, unknown>) {
   const response = await fetch(`${url}/api/sessions/${sessionId}/join`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+    body: JSON.stringify({ joinCode: "JOIN99", ...body }),
   });
   expect(response.status).toBe(200);
   return (await response.json()) as {

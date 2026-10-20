@@ -254,6 +254,12 @@ describe("POST /api/sessions", () => {
       async appendEvent() {
         throw new Error("database offline");
       },
+      async finishSession() {
+        throw new Error("database offline");
+      },
+      async findById() {
+        throw new Error("database offline");
+      },
       async reissueSeatToken() {
         throw new Error("database offline");
       },

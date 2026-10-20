@@ -1,6 +1,8 @@
 import { Router } from "express";
 
 import { CaptureSessionEventController } from "../features/captureEvent/captureEvent.controller";
+import { FinishSessionController } from "../features/finishSession/finishSession.controller";
+import { GetSessionController } from "../features/getSession/getSession.controller";
 import { JoinSessionController } from "../features/joinSession/joinSession.controller";
 import { LeaveSessionController } from "../features/leaveSession/leaveSession.controller";
 import { ReissueSeatTokenController } from "../features/reissueSeatToken/reissueSeatToken.controller";
@@ -11,6 +13,8 @@ export function createSessionRoutes(controllers: {
   join: JoinSessionController;
   leave: LeaveSessionController;
   capture: CaptureSessionEventController;
+  finish: FinishSessionController;
+  getSession: GetSessionController;
   reissue: ReissueSeatTokenController;
 }): Router {
   const router = Router();
@@ -23,6 +27,10 @@ export function createSessionRoutes(controllers: {
     void controllers.join.summary(req, res);
   });
 
+  router.get("/api/sessions/:id", (req, res) => {
+    void controllers.getSession.handle(req, res);
+  });
+
   router.post("/api/sessions/:id/join", (req, res) => {
     void controllers.join.join(req, res);
   });
@@ -33,6 +41,10 @@ export function createSessionRoutes(controllers: {
 
   router.post("/api/sessions/:id/events", (req, res) => {
     void controllers.capture.handle(req, res);
+  });
+
+  router.post("/api/sessions/:id/finish", (req, res) => {
+    void controllers.finish.handle(req, res);
   });
 
   router.post("/api/sessions/:id/token", (req, res) => {

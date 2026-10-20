@@ -280,6 +280,7 @@ model Session {
   // No FK to User — same as CommunityMember. Absent when the caller is anonymous.
   createdBy String?
   status    SessionStatus  @default(live)
+  endedAt   DateTime?
   lobbyId   String?        @unique
   events       SessionEvent[]
   participants SessionParticipant[]

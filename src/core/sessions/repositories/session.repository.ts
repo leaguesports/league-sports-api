@@ -11,6 +11,7 @@ export type SessionRecord = {
   venueId: string | null;
   lobbyId: string | null;
   createdBy: string | null;
+  endedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -137,6 +138,16 @@ export type AppendEventResult = {
   replayed: boolean;
 };
 
+export type FinishSessionChange = {
+  state: unknown;
+  event: NewSessionEvent;
+};
+
+export type FinishSessionResult = {
+  session: SessionRecord;
+  event: SessionEventRecord;
+};
+
 export class SessionNotFoundError extends Error {
   constructor(sessionId: string) {
     super(`Session not found: ${sessionId}`);
@@ -194,6 +205,18 @@ export interface SessionRepository {
     sessionId: string,
     build: (snapshot: AppendEventSnapshot) => AppendEventChange,
   ): Promise<AppendEventResult>;
+  /**
+   * Append `round.finished`, store the frozen state, set `endedAt`, and
+   * delete the lobby. One transaction, same seq retry as `appendEvent`.
+   */
+  finishSession(
+    sessionId: string,
+    build: (snapshot: AppendEventSnapshot) => FinishSessionChange,
+  ): Promise<FinishSessionResult>;
+  findById(sessionId: string): Promise<{
+    session: SessionRecord;
+    participants: ParticipantRecord[];
+  } | null>;
   reissueSeatToken(
     sessionId: string,
     userId: string,

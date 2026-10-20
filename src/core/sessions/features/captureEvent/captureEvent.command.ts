@@ -2,6 +2,7 @@ import { SportRegistry } from "../../../../sports/registry";
 import {
   CORE_PARTICIPANT_EVENT_TYPES,
   isCapturableEventType,
+  ROUND_FINISHED_EVENT,
   SessionValidationError,
 } from "../../../../sports/session-plugin";
 import {
@@ -51,7 +52,10 @@ export class CaptureSessionEventCommand {
       }
 
       const plugin = this.sports.require(snapshot.session.sport);
-      if ((CORE_PARTICIPANT_EVENT_TYPES as readonly string[]).includes(request.type)) {
+      if (
+        (CORE_PARTICIPANT_EVENT_TYPES as readonly string[]).includes(request.type) ||
+        request.type === ROUND_FINISHED_EVENT
+      ) {
         throw new SessionValidationError("Event type cannot be captured", {
           sport: plugin.id,
           type: request.type,

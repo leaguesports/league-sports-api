@@ -12,6 +12,14 @@ Padel allows up to 4 players until that sport picks a fixed format. Golf allows 
 
 `RecordSession` stores a finished session with no lobby and status `closed`. It uses the same plug-in to validate setup, build state, and fold events. Event `seq` is assigned by the server, starting at 1. It does not create participant rows.
 
-`SessionRepository.closeSession` sets status to `closed` and deletes the linked lobby. The foreign key is `Session.lobbyId`, so deleting the lobby clears it.
+`POST /api/sessions/:id/finish` is the creator's joined seat only (`X-Session-Token`). Anyone else is 403, including a creator who has left. A session that is already closed is 409. It writes `round.finished` at the next `seq`, sets `status` to `closed` and `endedAt`, freezes golf standings onto `state.result`, and deletes the lobby. That is the same lobby delete as `closeSession`, inside the one transaction. Posting `round.finished` to the capture route is 400. Response `200`:
+
+```json
+{ "seq": 4, "status": "closed", "endedAt": "2026-10-19T12:00:00.000Z", "state": {}, "session": {} }
+```
+
+`GET /api/sessions/:id` is public, like the join summary: knowing the id (which that summary already returns) is enough. It does not require a token. The body is `{ session, state, participants }`. `session` omits `createdBy`. Participants are `{ id, name, role, status, sportData, joinedAt, leftAt }` — the join summary's fields plus the tee data the card needs. `userId`, `token`, and `tokenHash` are never included.
+
+`SessionRepository.closeSession` sets status to `closed` and deletes the linked lobby. The foreign key is `Session.lobbyId`, so deleting the lobby clears it. `endedAt` is set by finish, not by `closeSession`.
 
 Sport rules live in `src/sports/<sport>/session.ts` and are registered by id (`golf`, `padel`). Start, join, leave, capture, and record call the registry and do not branch on sport. `recordSession` folds events without a seat list, so a recorded golf round keeps scores and does not rebuild handicaps. Rate limits for start, join, and join lookup are stored in `SessionRateHit` so every server shares one count.

@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import {
   CORE_PARTICIPANT_EVENT_TYPES,
+  ROUND_FINISHED_EVENT,
   rejectUnknownEvent,
   SessionValidationError,
   SportSessionPlugin,
@@ -25,7 +26,7 @@ export const padelSessionPlugin: SportSessionPlugin<
   PadelJoin
 > = {
   id: PADEL_ID,
-  acceptedEventTypes: [...CORE_PARTICIPANT_EVENT_TYPES],
+  acceptedEventTypes: [...CORE_PARTICIPANT_EVENT_TYPES, ROUND_FINISHED_EVENT],
   participants: PADEL_PARTICIPANT_CAPACITY,
 
   validateSetup(config: unknown): PadelSetup {

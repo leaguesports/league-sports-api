@@ -1,5 +1,7 @@
 import { SportRegistry } from "../../../../sports/registry";
 import { ROUND_FINISHED_EVENT } from "../../../../sports/session-plugin";
+import { EventEmitter } from "../../events";
+import { emitCommittedSessionEvent } from "../../realtime/sessionEventCommitted.event";
 import {
   ParticipantRecord,
   SessionRepository,
@@ -19,6 +21,7 @@ export type FinishSessionCommandInput = {
 export class FinishSessionCommand {
   constructor(
     private readonly sessions: SessionRepository,
+    private readonly eventEmitter: EventEmitter,
     private readonly sports: SportRegistry,
   ) {}
 
@@ -65,6 +68,13 @@ export class FinishSessionCommand {
           participantId: writer.id,
         },
       };
+    });
+
+    await emitCommittedSessionEvent(this.eventEmitter, {
+      sessionId: result.session.id,
+      seq: result.event.seq,
+      type: result.event.type,
+      state: result.session.state,
     });
 
     return {

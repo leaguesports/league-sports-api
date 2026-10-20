@@ -1,7 +1,9 @@
 import { randomUUID } from "crypto";
 
 import { SportRegistry } from "../../../../sports/registry";
+import { EventEmitter } from "../../events";
 import { participantEventData } from "../../participant-event";
+import { emitCommittedSessionEvent } from "../../realtime/sessionEventCommitted.event";
 import {
   occupyingParticipants,
   ParticipantRecord,
@@ -31,6 +33,7 @@ export type JoinSessionCommandInput = {
 export class JoinSessionCommand {
   constructor(
     private readonly sessions: SessionRepository,
+    private readonly eventEmitter: EventEmitter,
     private readonly sports: SportRegistry,
   ) {}
 
@@ -55,6 +58,13 @@ export class JoinSessionCommand {
         return claimSeat(snapshot, request, plugin, tokenHash);
       }
       return addSeat(snapshot, request, plugin, tokenHash);
+    });
+
+    await emitCommittedSessionEvent(this.eventEmitter, {
+      sessionId: result.session.id,
+      seq: result.event.seq,
+      type: result.event.type,
+      state: result.session.state,
     });
 
     return { participant: result.participant, token };

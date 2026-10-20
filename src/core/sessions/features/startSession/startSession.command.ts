@@ -14,6 +14,7 @@ import {
   generateParticipantToken,
   hashParticipantToken,
 } from "../../utils/participantToken";
+import { emitCommittedSessionEvent } from "../../realtime/sessionEventCommitted.event";
 import { SessionStartedEvent } from "./sessionStarted.event";
 
 export type InvitedParticipantInput = {
@@ -124,6 +125,16 @@ export class StartSessionCommand {
       participants,
       events,
     });
+
+    // Every event in this transaction shares the state after the last apply.
+    for (const event of created.events) {
+      await emitCommittedSessionEvent(this.eventEmitter, {
+        sessionId: created.session.id,
+        seq: event.seq,
+        type: event.type,
+        state: created.session.state,
+      });
+    }
 
     try {
       await this.eventEmitter.publish(

@@ -24,6 +24,10 @@ import {
   JoinLookupRateLimiter,
   prismaSessionRateLimiter,
 } from "./join-rate-limiter";
+import {
+  createSessionPublisherFromEnv,
+  SessionPublisher,
+} from "./realtime/publisher";
 import { registerSessionEventHandlers } from "./register-handlers";
 import { SessionRepository } from "./repositories/session.repository";
 import { PrismaSessionRepository } from "./repositories/prisma-session.repository";
@@ -36,6 +40,7 @@ export type CreateSessionsModuleParams = {
   sports?: SportRegistry;
   onSessionStarted?: (event: SessionStartedEvent) => void;
   joinLookupRateLimiter?: JoinLookupRateLimiter;
+  sessionPublisher?: SessionPublisher;
 };
 
 export type SessionsModule = {
@@ -53,9 +58,10 @@ export function createSessionsModule({
   sports = sportRegistry,
   onSessionStarted,
   joinLookupRateLimiter = prismaSessionRateLimiter(prisma),
+  sessionPublisher = createSessionPublisherFromEnv(),
 }: CreateSessionsModuleParams): SessionsModule {
   const eventEmitter = new EventEmitter();
-  registerSessionEventHandlers(eventEmitter);
+  registerSessionEventHandlers(eventEmitter, sessionPublisher);
   if (onSessionStarted) {
     eventEmitter.on(SessionStartedEvent, onSessionStarted);
   }
@@ -63,10 +69,10 @@ export function createSessionsModule({
   const repository = sessionRepository ?? new PrismaSessionRepository(prisma);
   const startSession = new StartSessionCommand(repository, eventEmitter, sports);
   const recordSession = new RecordSessionCommand(repository, sports);
-  const joinSession = new JoinSessionCommand(repository, sports);
-  const leaveSession = new LeaveSessionCommand(repository, sports);
-  const captureEvent = new CaptureSessionEventCommand(repository, sports);
-  const finishSession = new FinishSessionCommand(repository, sports);
+  const joinSession = new JoinSessionCommand(repository, eventEmitter, sports);
+  const leaveSession = new LeaveSessionCommand(repository, eventEmitter, sports);
+  const captureEvent = new CaptureSessionEventCommand(repository, eventEmitter, sports);
+  const finishSession = new FinishSessionCommand(repository, eventEmitter, sports);
   const reissueSeatToken = new ReissueSeatTokenCommand(repository);
 
   return {
@@ -111,6 +117,7 @@ export type {
 } from "./repositories/session.repository";
 export { JoinCodeAllocationError } from "./utils/joinCode";
 export { JoinCodeGenerator } from "./utils/joinCodeGenerator";
+export type { SessionPublisher } from "./realtime/publisher";
 export type { JoinLookupRateLimiter } from "./join-rate-limiter";
 export {
   InMemoryJoinLookupRateLimiter,

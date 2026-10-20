@@ -1,4 +1,6 @@
 import { SportRegistry } from "../../../../sports/registry";
+import { EventEmitter } from "../../events";
+import { emitCommittedSessionEvent } from "../../realtime/sessionEventCommitted.event";
 import {
   CORE_PARTICIPANT_EVENT_TYPES,
   isCapturableEventType,
@@ -28,6 +30,7 @@ export type CaptureSessionEventInput = {
 export class CaptureSessionEventCommand {
   constructor(
     private readonly sessions: SessionRepository,
+    private readonly eventEmitter: EventEmitter,
     private readonly sports: SportRegistry,
   ) {}
 
@@ -126,6 +129,15 @@ export class CaptureSessionEventCommand {
         },
       };
     });
+
+    if (!result.replayed) {
+      await emitCommittedSessionEvent(this.eventEmitter, {
+        sessionId: result.session.id,
+        seq: result.event.seq,
+        type: result.event.type,
+        state: result.session.state,
+      });
+    }
 
     return {
       seq: result.event.seq,

@@ -15,12 +15,14 @@ import { JoinSessionController } from "./features/joinSession/joinSession.contro
 import { LeaveSessionCommand } from "./features/leaveSession/leaveSession.command";
 import { LeaveSessionController } from "./features/leaveSession/leaveSession.controller";
 import { RecordSessionCommand } from "./features/recordSession/recordSession.command";
+import { ReissueSeatTokenCommand } from "./features/reissueSeatToken/reissueSeatToken.command";
+import { ReissueSeatTokenController } from "./features/reissueSeatToken/reissueSeatToken.controller";
 import { StartSessionCommand } from "./features/startSession/startSession.command";
 import { StartSessionController } from "./features/startSession/startSession.controller";
 import { SessionStartedEvent } from "./features/startSession/sessionStarted.event";
 import {
-  defaultJoinLookupRateLimiter,
   JoinLookupRateLimiter,
+  prismaSessionRateLimiter,
 } from "./join-rate-limiter";
 import {
   createSessionPublisherFromEnv,
@@ -55,7 +57,7 @@ export function createSessionsModule({
   sessionRepository,
   sports = sportRegistry,
   onSessionStarted,
-  joinLookupRateLimiter = defaultJoinLookupRateLimiter(),
+  joinLookupRateLimiter = prismaSessionRateLimiter(prisma),
   sessionPublisher = createSessionPublisherFromEnv(),
 }: CreateSessionsModuleParams): SessionsModule {
   const eventEmitter = new EventEmitter();
@@ -71,10 +73,15 @@ export function createSessionsModule({
   const leaveSession = new LeaveSessionCommand(repository, eventEmitter, sports);
   const captureEvent = new CaptureSessionEventCommand(repository, eventEmitter, sports);
   const finishSession = new FinishSessionCommand(repository, eventEmitter, sports);
+  const reissueSeatToken = new ReissueSeatTokenCommand(repository);
 
   return {
     router: createSessionRoutes({
-      start: new StartSessionController(startSession, tryGetSessionUserId),
+      start: new StartSessionController(
+        startSession,
+        tryGetSessionUserId,
+        joinLookupRateLimiter,
+      ),
       join: new JoinSessionController(
         joinSession,
         new GetJoinSummary(repository, sports),
@@ -85,6 +92,7 @@ export function createSessionsModule({
       capture: new CaptureSessionEventController(captureEvent),
       finish: new FinishSessionController(finishSession),
       getSession: new GetSessionController(new GetSession(repository)),
+      reissue: new ReissueSeatTokenController(reissueSeatToken, tryGetSessionUserId),
     }),
     sessionRepository: repository,
     eventEmitter,
@@ -111,4 +119,7 @@ export { JoinCodeAllocationError } from "./utils/joinCode";
 export { JoinCodeGenerator } from "./utils/joinCodeGenerator";
 export type { SessionPublisher } from "./realtime/publisher";
 export type { JoinLookupRateLimiter } from "./join-rate-limiter";
-export { InMemoryJoinLookupRateLimiter } from "./join-rate-limiter";
+export {
+  InMemoryJoinLookupRateLimiter,
+  PrismaSessionRateLimiter,
+} from "./join-rate-limiter";

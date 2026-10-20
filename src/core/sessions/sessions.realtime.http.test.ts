@@ -6,8 +6,10 @@ import type { Express } from "express";
 import { createApp } from "../../app";
 import { Config } from "../../config";
 import { signAuthenticationToken } from "../identity/utils/jwt";
+import { InMemoryJoinLookupRateLimiter } from "./join-rate-limiter";
 import {
   CommittedSessionEvent,
+  resetMissingAblyKeyWarningForTests,
   SessionPublisher,
 } from "./realtime/publisher";
 import { InMemorySessionRepository } from "./repositories/in-memory-session.repository";
@@ -64,6 +66,7 @@ describe("session realtime publish", () => {
     const app = await createApp(config, {
       sessionRepository: sessions,
       sessionPublisher: publisher,
+      joinLookupRateLimiter: new InMemoryJoinLookupRateLimiter(100, 60_000),
     });
     const server = await listen(app);
 
@@ -92,7 +95,7 @@ describe("session realtime publish", () => {
       const claimed = await fetch(`${server.url}/api/sessions/${started.session.id}/join`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ claimPid: sam?.id }),
+        body: JSON.stringify({ claimPid: sam?.id, joinCode: "JOIN99" }),
       });
       expect(claimed.status).toBe(200);
       const samSeat = (await claimed.json()) as { token: string; participant: { id: string } };
@@ -161,12 +164,48 @@ describe("session realtime publish", () => {
     }
   });
 
+  test("boots and serves requests when ABLY_API_KEY is unset", async () => {
+    const previous = process.env.ABLY_API_KEY;
+    delete process.env.ABLY_API_KEY;
+    resetMissingAblyKeyWarningForTests();
+    const warn = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const sessions = new InMemorySessionRepository({ generate: () => "JOIN99" });
+    const app = await createApp(config, {
+      sessionRepository: sessions,
+      joinLookupRateLimiter: new InMemoryJoinLookupRateLimiter(100, 60_000),
+    });
+    const server = await listen(app);
+
+    try {
+      const started = await start(server.url, null);
+      const summary = await fetch(`${server.url}/api/sessions/join/JOIN99`);
+      const read = await fetch(`${server.url}/api/sessions/${started.session.id}`);
+      expect(summary.status).toBe(200);
+      expect(read.status).toBe(200);
+      expect(sessions.findSession(started.session.id)?.status).toBe("live");
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn).toHaveBeenCalledWith(
+        "ABLY_API_KEY is unset; session realtime publish is disabled",
+      );
+    } finally {
+      warn.mockRestore();
+      if (previous === undefined) {
+        delete process.env.ABLY_API_KEY;
+      } else {
+        process.env.ABLY_API_KEY = previous;
+      }
+      await server.close();
+      await app.locals.prisma?.$disconnect();
+    }
+  });
+
   test("a publisher failure still returns the written session", async () => {
     const sessions = new InMemorySessionRepository({ generate: () => "JOIN99" });
     const warn = jest.spyOn(console, "warn").mockImplementation(() => {});
     const app = await createApp(config, {
       sessionRepository: sessions,
       sessionPublisher: new ThrowingPublisher(),
+      joinLookupRateLimiter: new InMemoryJoinLookupRateLimiter(100, 60_000),
     });
     const server = await listen(app);
 

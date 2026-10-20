@@ -1,8 +1,11 @@
 import { z } from "zod";
 
+const joinCodeSchema = z.string().trim().min(1).max(16);
+
 const claimSchema = z
   .object({
     claimPid: z.string().trim().min(1),
+    joinCode: joinCodeSchema,
   })
   .strict();
 
@@ -10,6 +13,7 @@ const addSchema = z
   .object({
     name: z.string().trim().min(1).max(40),
     sportData: z.unknown().optional(),
+    joinCode: joinCodeSchema,
   })
   .strict();
 

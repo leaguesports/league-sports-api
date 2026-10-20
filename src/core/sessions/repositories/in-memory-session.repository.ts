@@ -1,6 +1,6 @@
 import { randomUUID } from "crypto";
 
-import { SessionConflictError } from "../session-errors";
+import { SessionConflictError, SessionForbiddenError } from "../session-errors";
 import { JoinCodeGenerator, JoinCodeSource } from "../utils/joinCodeGenerator";
 import { withJoinCodeRetries } from "../utils/joinCode";
 import {
@@ -17,8 +17,10 @@ import {
   ParticipationChange,
   ParticipationResult,
   ParticipationSnapshot,
+  pickJoinedSeat,
   RecordSessionInput,
   sequenceNewSessionEvents,
+  sortParticipants,
   SessionEventRecord,
   SessionNotFoundError,
   SessionRecord,
@@ -69,8 +71,9 @@ export class InMemorySessionRepository implements SessionRepository {
         createdAt: now,
         updatedAt: now,
       };
-      const participants = (input.participants ?? []).map((participant) =>
-        this.storeParticipant(session.id, participant, now),
+      const createdAtBase = now.getTime();
+      const participants = (input.participants ?? []).map((participant, index) =>
+        this.storeParticipant(session.id, participant, new Date(createdAtBase + index)),
       );
       const events = sequenceNewSessionEvents(input.events ?? []).map((event) =>
         this.storeEvent(session.id, event, now),
@@ -189,7 +192,10 @@ export class InMemorySessionRepository implements SessionRepository {
           change.updateParticipant.tokenHash === undefined
             ? existing.tokenHash
             : change.updateParticipant.tokenHash,
-        sportData: change.updateParticipant.sportData ?? existing.sportData,
+        sportData:
+          change.updateParticipant.sportData === undefined
+            ? existing.sportData
+            : change.updateParticipant.sportData,
         joinedAt:
           change.updateParticipant.joinedAt === undefined
             ? existing.joinedAt
@@ -325,6 +331,25 @@ export class InMemorySessionRepository implements SessionRepository {
     };
   }
 
+  async reissueSeatToken(sessionId: string, userId: string, tokenHash: string) {
+    const session = this.sessions.get(sessionId);
+    if (!session) {
+      throw new SessionNotFoundError(sessionId);
+    }
+    if (session.status !== "live") {
+      throw new SessionConflictError("Session is not live", {
+        status: session.status,
+      });
+    }
+    const seat = pickJoinedSeat(this.participantsFor(sessionId), userId);
+    if (!seat) {
+      throw new SessionForbiddenError("No joined seat for this player");
+    }
+    const updated: ParticipantRecord = { ...seat, tokenHash };
+    this.participants.set(updated.id, updated);
+    return updated;
+  }
+
   findSession(sessionId: string): SessionRecord | undefined {
     return this.sessions.get(sessionId);
   }
@@ -334,8 +359,10 @@ export class InMemorySessionRepository implements SessionRepository {
   }
 
   participantsFor(sessionId: string): ParticipantRecord[] {
-    return [...this.participants.values()].filter(
-      (participant) => participant.sessionId === sessionId,
+    return sortParticipants(
+      [...this.participants.values()].filter(
+        (participant) => participant.sessionId === sessionId,
+      ),
     );
   }
 
@@ -361,6 +388,7 @@ export class InMemorySessionRepository implements SessionRepository {
       sportData: participant.sportData,
       joinedAt: participant.joinedAt ?? (participant.status === "joined" ? now : null),
       leftAt: participant.leftAt ?? null,
+      createdAt: now,
     };
     this.participants.set(row.id, row);
     return row;

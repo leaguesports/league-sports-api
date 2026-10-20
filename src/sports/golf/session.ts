@@ -68,9 +68,12 @@ export type GolfJoin = {
   handicapIndex?: number;
 };
 
+const MAX_GOLF_TEES = 8;
+const MAX_TEE_TEXT = 40;
+
 const golfTeeSchema = z.strictObject({
-  id: z.string().trim().min(1),
-  name: z.string().trim().min(1).optional(),
+  id: z.string().trim().min(1).max(MAX_TEE_TEXT),
+  name: z.string().trim().min(1).max(MAX_TEE_TEXT).optional(),
   par: z.number().int().gte(27).lte(90).optional(),
   rating: z.number().gte(20).lte(100).optional(),
   slope: z.number().int().gte(55).lte(155).optional(),
@@ -83,7 +86,7 @@ const golfHoleSchema = z.strictObject({
 });
 
 const golfSetupSchema = z.strictObject({
-  tees: z.array(golfTeeSchema).min(1),
+  tees: z.array(golfTeeSchema).min(1).max(MAX_GOLF_TEES),
   holes: z.array(golfHoleSchema).min(1).optional(),
   holesPlayed: z.enum(["18", "front9", "back9"]).optional(),
   startHole: z.number().int().gte(1).lte(18).optional(),
@@ -91,7 +94,7 @@ const golfSetupSchema = z.strictObject({
 });
 
 const golfJoinSchema = z.strictObject({
-  teeId: z.string().trim().min(1),
+  teeId: z.string().trim().min(1).max(MAX_TEE_TEXT),
   handicapIndex: z.number().gte(-10).lte(54).nullish(),
 });
 
@@ -144,7 +147,7 @@ export const golfSessionPlugin: SportSessionPlugin<
     GOLF_HOLE_SCORED,
     GOLF_HOLE_CLEARED,
   ],
-  participants: { min: 1, max: 4 },
+  participants: { max: 4 },
 
   validateSetup(config: unknown): GolfSetup {
     const parsed = z.safeParse(golfSetupSchema, config);
@@ -174,6 +177,14 @@ export const golfSessionPlugin: SportSessionPlugin<
       holesPlayed,
       startHole,
       handicapAllowance: parsed.data.handicapAllowance ?? 1,
+    };
+  },
+
+  publicSetup(config: GolfSetup) {
+    return {
+      tees: config.tees.map((tee) =>
+        tee.name ? { id: tee.id, name: tee.name } : { id: tee.id },
+      ),
     };
   },
 

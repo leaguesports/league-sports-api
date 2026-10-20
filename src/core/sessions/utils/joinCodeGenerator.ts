@@ -1,7 +1,7 @@
 import { randomInt } from "crypto";
 
 const DEFAULT_JOIN_CODE_CHARACTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-const DEFAULT_JOIN_CODE_LENGTH = 6;
+const DEFAULT_JOIN_CODE_LENGTH = 8;
 
 export type JoinCodeSource = {
   generate(): string;

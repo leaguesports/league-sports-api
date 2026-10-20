@@ -16,8 +16,8 @@ datasource db {
 model User {
   id String @id @default(uuid())
 
-  profile        Profile?
-  accounts       Account[]
+  profile  Profile?
+  accounts Account[]
 }
 
 model Account {
@@ -36,18 +36,18 @@ model Account {
 }
 
 model Profile {
-  id                     String    @id @default(uuid())
-  userId                 String    @unique
-  firstName              String
-  lastName               String
-  email                  String    @unique @default("")
-  handle                 String    @unique
-  avatarUrl              String?
-  activeSportSlug        String?
-  onboardingCompletedAt  DateTime?
-  onboardingSkippedAt    DateTime?
-  golfHandicapIndex      Decimal?  @db.Decimal(4, 1)
-  appearOnVenueLeaderboards Boolean @default(true)
+  id                        String    @id @default(uuid())
+  userId                    String    @unique
+  firstName                 String
+  lastName                  String
+  email                     String    @unique @default("")
+  handle                    String    @unique
+  avatarUrl                 String?
+  activeSportSlug           String?
+  onboardingCompletedAt     DateTime?
+  onboardingSkippedAt       DateTime?
+  golfHandicapIndex         Decimal?  @db.Decimal(4, 1)
+  appearOnVenueLeaderboards Boolean   @default(true)
 
   user User @relation(fields: [userId], references: [id])
 }
@@ -68,6 +68,8 @@ model Venue {
   name    String
   slug    String
   follows VenueFollow[]
+
+  sessions Session[]
 }
 
 model VenueFollow {
@@ -251,4 +253,108 @@ model CoverageIntent {
   @@unique([email, sport, city])
   @@index([email])
   @@index([unsubscribedAt])
+}
+
+// Join lobby for a live session. The foreign key lives on Session.lobbyId
+// so a session can exist without a lobby, and deleting the lobby clears it.
+model Lobby {
+  id        String   @id @default(uuid())
+  joinCode  String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  session Session?
+}
+
+enum SessionStatus {
+  live
+  closed
+}
+
+model Session {
+  id        String         @id @default(uuid())
+  venueId   String?
+  sport     String
+  config    Json
+  state     Json
+  // No FK to User — same as CommunityMember. Absent when the caller is anonymous.
+  createdBy String?
+  status    SessionStatus  @default(live)
+  lobbyId   String?        @unique
+  events       SessionEvent[]
+  participants SessionParticipant[]
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  venue Venue? @relation(fields: [venueId], references: [id])
+  lobby Lobby? @relation(fields: [lobbyId], references: [id], onDelete: SetNull)
+
+  @@index([venueId])
+  @@index([sport])
+  @@index([createdAt])
+  @@index([updatedAt])
+}
+
+enum SessionParticipantRole {
+  creator
+  player
+}
+
+enum SessionParticipantStatus {
+  invited
+  joined
+  left
+  removed
+}
+
+// A seat in a session. Logged-in players set userId. Anonymous players leave
+// userId empty: their generated id plus the name they typed is the identity.
+model SessionParticipant {
+  id        String                   @id @default(uuid())
+  sessionId String
+  userId    String?
+  name      String
+  role      SessionParticipantRole   @default(player)
+  status    SessionParticipantStatus
+  // sha256 of the per-device token. The raw token is returned when the seat is taken.
+  tokenHash String?
+  sportData Json                     @default("{}")
+  joinedAt  DateTime?
+  leftAt    DateTime?
+  createdAt DateTime                 @default(now())
+
+  session Session        @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  events  SessionEvent[]
+
+  @@unique([sessionId, name])
+  @@index([userId])
+}
+
+model SessionEvent {
+  id        String   @id @default(uuid())
+  sessionId String
+  // Server-assigned, starting at 1. Unique with sessionId so a replay cannot insert the same slot.
+  seq       Int
+  type      String
+  data      Json
+  // Account of the actor when they are signed in. Null for an anonymous player.
+  // Kept beside participantId: an invite's actor is the host, while participantId is the invitee's seat.
+  createdBy     String?
+  participantId String?
+  createdAt     DateTime @default(now())
+
+  session     Session             @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  participant SessionParticipant? @relation(fields: [participantId], references: [id], onDelete: SetNull)
+
+  @@unique([sessionId, seq])
+  @@index([createdAt])
+}
+
+// Shared request counts for session start, join, and join-code lookup.
+model SessionRateHit {
+  id        String   @id @default(uuid())
+  bucket    String
+  createdAt DateTime @default(now())
+
+  @@index([bucket, createdAt])
 }

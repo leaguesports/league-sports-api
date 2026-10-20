@@ -33,6 +33,12 @@ import {
   RoadmapRepository,
 } from "./core/roadmap";
 import {
+  createSessionsModule,
+  JoinLookupRateLimiter,
+  SessionRepository,
+  SessionStartedEvent,
+} from "./core/sessions";
+import {
   createVenueModule,
   VenueFollowRepository,
   VenueRepository,
@@ -52,6 +58,9 @@ export type CreateAppDependencies = {
   roadmapVoteRateLimiter?: RoadmapRateLimiter;
   coverageIntentRepository?: CoverageIntentRepository;
   coverageRateLimiter?: CoverageRateLimiter;
+  sessionRepository?: SessionRepository;
+  onSessionStarted?: (event: SessionStartedEvent) => void;
+  joinLookupRateLimiter?: JoinLookupRateLimiter;
 };
 
 export async function createApp(
@@ -127,6 +136,13 @@ export async function createApp(
     coverageIntentRepository: dependencies.coverageIntentRepository,
     coverageRateLimiter: dependencies.coverageRateLimiter,
   });
+  const sessions = createSessionsModule({
+    prisma,
+    tryGetSessionUserId: identity.tryGetSessionUserId,
+    sessionRepository: dependencies.sessionRepository,
+    onSessionStarted: dependencies.onSessionStarted,
+    joinLookupRateLimiter: dependencies.joinLookupRateLimiter,
+  });
 
   app.use(identity.router);
   app.use(venue.router);
@@ -136,6 +152,7 @@ export async function createApp(
   app.use(notifications.router);
   app.use(roadmap.router);
   app.use(intents.router);
+  app.use(sessions.router);
 
   app.use(
     (

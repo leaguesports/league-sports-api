@@ -6,6 +6,7 @@ import type { Express } from "express";
 import { createApp } from "../../app";
 import { Config } from "../../config";
 import { signAuthenticationToken } from "../identity/utils/jwt";
+import { InMemoryJoinLookupRateLimiter } from "./join-rate-limiter";
 import { InMemorySessionRepository } from "./repositories/in-memory-session.repository";
 import { SessionRepository } from "./repositories/session.repository";
 
@@ -55,6 +56,7 @@ describe("POST /api/sessions", () => {
     started = [];
     app = await createApp(config, {
       sessionRepository: sessions,
+      joinLookupRateLimiter: new InMemoryJoinLookupRateLimiter(100, 60_000),
       onSessionStarted: (event) => {
         started.push(event.data.sessionId);
       },
@@ -199,6 +201,34 @@ describe("POST /api/sessions", () => {
     const missingBody = (await missing.json()) as { error: string; details: unknown };
     expect(missingBody.error).toBe("Invalid session payload");
     expect(missingBody.details).toBeDefined();
+
+    const withAccount = await post(server.url, {
+      sport: "padel",
+      config: {},
+      invited: [{ name: "Sam", userId: "user-sam" }],
+    });
+    expect(withAccount.status).toBe(400);
+
+    const huge = await post(server.url, {
+      sport: "padel",
+      config: { note: "x".repeat(5_000) },
+    });
+    expect(huge.status).toBe(400);
+  });
+
+  test("rate-limits session starts", async () => {
+    await server.close();
+    await app.locals.prisma?.$disconnect();
+    app = await createApp(config, {
+      sessionRepository: sessions,
+      joinLookupRateLimiter: new InMemoryJoinLookupRateLimiter(1, 60_000),
+    });
+    server = await listen(app);
+
+    const first = await post(server.url, { sport: "padel", config: {} });
+    const second = await post(server.url, { sport: "padel", config: {} });
+    expect(first.status).toBe(201);
+    expect(second.status).toBe(429);
   });
 
   test("returns 500 without details for an unexpected failure", async () => {
@@ -230,9 +260,15 @@ describe("POST /api/sessions", () => {
       async findById() {
         throw new Error("database offline");
       },
+      async reissueSeatToken() {
+        throw new Error("database offline");
+      },
     } as SessionRepository;
     const errorLog = jest.spyOn(console, "error").mockImplementation(() => {});
-    app = await createApp(config, { sessionRepository: exploding });
+    app = await createApp(config, {
+      sessionRepository: exploding,
+      joinLookupRateLimiter: new InMemoryJoinLookupRateLimiter(100, 60_000),
+    });
     server = await listen(app);
 
     const response = await post(server.url, { sport: "padel", config: {} });

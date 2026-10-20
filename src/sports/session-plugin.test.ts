@@ -11,8 +11,9 @@ const golfConfig = { tees: [{ id: "white", name: "White" }, { id: "blue" }] };
 
 describe("sport session plug-ins", () => {
   test("padel accepts an empty setup and both sports pass core events through", () => {
-    expect(padelSessionPlugin.participants).toEqual({ min: 2, max: 4 });
-    expect(golfSessionPlugin.participants).toEqual({ min: 1, max: 4 });
+    expect(padelSessionPlugin.participants).toEqual({ max: 4 });
+    expect(golfSessionPlugin.participants).toEqual({ max: 4 });
+    expect(padelSessionPlugin.publicSetup({})).toEqual({});
     expect(padelSessionPlugin.acceptedEventTypes).toEqual([
       ...CORE_PARTICIPANT_EVENT_TYPES,
       "round.finished",
@@ -39,6 +40,17 @@ describe("sport session plug-ins", () => {
   test("golf setup requires tees and validateJoin checks handicap and tee", () => {
     const config = golfSessionPlugin.validateSetup(golfConfig);
     expect(config.tees.map((tee) => tee.id)).toEqual(["white", "blue"]);
+    expect(golfSessionPlugin.publicSetup(config)).toEqual({
+      tees: [
+        { id: "white", name: "White" },
+        { id: "blue" },
+      ],
+    });
+    expect(() =>
+      golfSessionPlugin.validateSetup({
+        tees: Array.from({ length: 9 }, (_, index) => ({ id: `t${index}` })),
+      }),
+    ).toThrow(SessionValidationError);
     const state = golfSessionPlugin.buildStartingState(config);
 
     expect(golfSessionPlugin.validateJoin(state, config, { teeId: "white" })).toEqual({
@@ -112,7 +124,7 @@ describe("sport registry", () => {
     const custom: SportSessionPlugin<{ ready: boolean }, { ready: boolean }> = {
       id: "custom",
       acceptedEventTypes: ["tick"],
-      participants: { min: 1, max: 2 },
+      participants: { max: 2 },
       validateSetup(config: unknown) {
         if (
           typeof config !== "object" ||
@@ -124,6 +136,9 @@ describe("sport registry", () => {
           });
         }
         return { ready: Boolean((config as { ready: unknown }).ready) };
+      },
+      publicSetup() {
+        return {};
       },
       buildStartingState(config) {
         return { ready: config.ready };

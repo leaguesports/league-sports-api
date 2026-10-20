@@ -4,6 +4,7 @@ import {
   SessionNotFoundError,
   SessionRepository,
 } from "../../repositories/session.repository";
+import { normalizeJoinCode } from "../../utils/joinCode";
 
 export class GetJoinSummary {
   constructor(
@@ -12,7 +13,7 @@ export class GetJoinSummary {
   ) {}
 
   async execute(joinCode: string) {
-    const found = await this.sessions.findByJoinCode(joinCode.trim().toUpperCase());
+    const found = await this.sessions.findByJoinCode(normalizeJoinCode(joinCode));
     if (!found) {
       throw new SessionNotFoundError(joinCode);
     }
@@ -25,6 +26,7 @@ export class GetJoinSummary {
       sport: found.session.sport,
       status: found.session.status,
       openSpots: Math.max(0, plugin.participants.max - occupying),
+      setup: plugin.publicSetup(found.session.config),
       participants: found.participants.map((participant) => ({
         id: participant.id,
         name: participant.name,

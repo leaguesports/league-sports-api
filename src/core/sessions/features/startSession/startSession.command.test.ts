@@ -5,6 +5,7 @@ import {
 } from "../../../../sports/session-plugin";
 import { EventEmitter } from "../../events";
 import { InMemorySessionRepository } from "../../repositories/in-memory-session.repository";
+import { RealtimeClient } from "../../../realtime";
 import { StartSessionCommand } from "./startSession.command";
 import { SessionStartedEvent } from "./sessionStarted.event";
 
@@ -108,6 +109,63 @@ describe("StartSessionCommand", () => {
 
     expect(sessions.findSession(created.session.id)?.status).toBe("live");
     await expect(sessions.findByJoinCode("JOIN11")).resolves.toBeTruthy();
+    errorLog.mockRestore();
+  });
+
+  test("publishes session.started on the lobby channel", async () => {
+    const sessions = new InMemorySessionRepository({ generate: () => "JOIN11" });
+    const published: { channel: string; event: string; data: unknown }[] = [];
+    const realtime: RealtimeClient = {
+      async publish(channel, event, data) {
+        published.push({ channel, event, data });
+      },
+    };
+    const command = new StartSessionCommand(
+      sessions,
+      new EventEmitter(),
+      createSportRegistry([counterPlugin]),
+      realtime,
+    );
+
+    const created = await command.execute({
+      sport: "counter",
+      config: { step: 1 },
+    });
+
+    expect(published).toEqual([
+      {
+        channel: created.lobby.id,
+        event: "session.started",
+        data: { sessionId: created.session.id },
+      },
+    ]);
+  });
+
+  test("keeps the saved session when realtime publish throws", async () => {
+    const sessions = new InMemorySessionRepository({ generate: () => "JOIN11" });
+    const realtime: RealtimeClient = {
+      async publish() {
+        throw new Error("ably down");
+      },
+    };
+    const command = new StartSessionCommand(
+      sessions,
+      new EventEmitter(),
+      createSportRegistry([counterPlugin]),
+      realtime,
+    );
+    const errorLog = jest.spyOn(console, "error").mockImplementation(() => {});
+
+    const created = await command.execute({
+      sport: "counter",
+      config: { step: 1 },
+    });
+
+    expect(sessions.findSession(created.session.id)?.status).toBe("live");
+    expect(errorLog).toHaveBeenCalledWith(
+      `Failed to publish event session.started to channel ${created.lobby.id}`,
+      expect.any(Error),
+    );
     errorLog.mockRestore();
   });
 });

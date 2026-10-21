@@ -26,6 +26,7 @@ import {
   createPreferencesModule,
   PreferencesRepository,
 } from "./core/preferences";
+import { RealtimeClient } from "./core/realtime";
 import {
   createRoadmapModule,
   RoadmapEmailSender,
@@ -44,7 +45,8 @@ import {
   VenueFollowRepository,
   VenueRepository,
 } from "./core/venue";
-import { createPrismaClient } from "./lib/prisma";
+import { createRealtimeClient } from "./infra/ably";
+import { createPrismaClient } from "./infra/prisma";
 
 export type CreateAppDependencies = {
   venueRepository?: VenueRepository;
@@ -63,6 +65,7 @@ export type CreateAppDependencies = {
   onSessionStarted?: (event: SessionStartedEvent) => void;
   joinLookupRateLimiter?: JoinLookupRateLimiter;
   sessionPublisher?: SessionPublisher;
+  realtimeClient?: RealtimeClient;
 };
 
 export async function createApp(
@@ -145,6 +148,7 @@ export async function createApp(
     onSessionStarted: dependencies.onSessionStarted,
     joinLookupRateLimiter: dependencies.joinLookupRateLimiter,
     sessionPublisher: dependencies.sessionPublisher,
+    realtime: dependencies.realtimeClient ?? createRealtimeClient(config),
   });
 
   app.use(identity.router);

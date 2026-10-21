@@ -1,5 +1,5 @@
 import { getConfig } from "../../../config";
-import { createPrismaClient } from "../../../lib/prisma";
+import { createPrismaClient } from "../../../infra/prisma";
 import { RoadmapFeature } from "../entities/roadmap-feature";
 import { RoadmapFeatureStatus } from "../entities/roadmap-feature-status";
 import { PrismaRoadmapRepository } from "../repositories/prisma-roadmap.repository";

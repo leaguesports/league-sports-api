@@ -2,6 +2,7 @@ import { randomUUID } from "crypto";
 
 import { SportRegistry } from "../../../../sports/registry";
 import { SessionValidationError } from "../../../../sports/session-plugin";
+import { NoopRealtimeClient, RealtimeClient } from "../../../realtime";
 import { EventEmitter } from "../../events";
 import { participantEventData } from "../../participant-event";
 import {
@@ -37,6 +38,7 @@ export class StartSessionCommand {
     private readonly sessions: SessionRepository,
     private readonly eventEmitter: EventEmitter,
     private readonly sports: SportRegistry,
+    private readonly realtime: RealtimeClient = new NoopRealtimeClient(),
   ) {}
 
   async execute(request: StartSessionCommandInput) {
@@ -125,6 +127,17 @@ export class StartSessionCommand {
       participants,
       events,
     });
+
+    try {
+      await this.realtime.publish(created.lobby.id, "session.started", {
+        sessionId: created.session.id,
+      });
+    } catch (error) {
+      console.error(
+        `Failed to publish event session.started to channel ${created.lobby.id}`,
+        error,
+      );
+    }
 
     // Every event in this transaction shares the state after the last apply.
     for (const event of created.events) {

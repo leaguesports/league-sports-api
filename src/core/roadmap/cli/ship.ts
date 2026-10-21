@@ -1,5 +1,5 @@
 import { getConfig } from "../../../config";
-import { createPrismaClient } from "../../../lib/prisma";
+import { createPrismaClient } from "../../../infra/prisma";
 import { PrismaRoadmapRepository } from "../repositories/prisma-roadmap.repository";
 import { createRoadmapEmailSender } from "../services/email-sender";
 import { ShipRoadmapFeature } from "../services/roadmap.service";

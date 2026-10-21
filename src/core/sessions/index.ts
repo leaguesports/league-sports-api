@@ -2,6 +2,7 @@ import { Request, Router } from "express";
 
 import { PrismaClient } from "../../generated/prisma/client";
 import { SportRegistry, sportRegistry } from "../../sports/registry";
+import { NoopRealtimeClient, RealtimeClient } from "../realtime";
 import { EventEmitter } from "./events";
 import { CaptureSessionEventCommand } from "./features/captureEvent/captureEvent.command";
 import { CaptureSessionEventController } from "./features/captureEvent/captureEvent.controller";
@@ -41,6 +42,7 @@ export type CreateSessionsModuleParams = {
   onSessionStarted?: (event: SessionStartedEvent) => void;
   joinLookupRateLimiter?: JoinLookupRateLimiter;
   sessionPublisher?: SessionPublisher;
+  realtime?: RealtimeClient;
 };
 
 export type SessionsModule = {
@@ -59,6 +61,7 @@ export function createSessionsModule({
   onSessionStarted,
   joinLookupRateLimiter = prismaSessionRateLimiter(prisma),
   sessionPublisher = createSessionPublisherFromEnv(),
+  realtime = new NoopRealtimeClient(),
 }: CreateSessionsModuleParams): SessionsModule {
   const eventEmitter = new EventEmitter();
   registerSessionEventHandlers(eventEmitter, sessionPublisher);
@@ -67,7 +70,12 @@ export function createSessionsModule({
   }
 
   const repository = sessionRepository ?? new PrismaSessionRepository(prisma);
-  const startSession = new StartSessionCommand(repository, eventEmitter, sports);
+  const startSession = new StartSessionCommand(
+    repository,
+    eventEmitter,
+    sports,
+    realtime,
+  );
   const recordSession = new RecordSessionCommand(repository, sports);
   const joinSession = new JoinSessionCommand(repository, eventEmitter, sports);
   const leaveSession = new LeaveSessionCommand(repository, eventEmitter, sports);

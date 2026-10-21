@@ -5,14 +5,17 @@ import { z } from "zod";
 import { identityConfigSchema } from "./core/identity/config";
 import { googleOauthConfigSchema } from "./core/google-oauth/config";
 import { roadmapConfigSchema } from "./core/roadmap/config";
+import { ablyConfigSchema } from "./infra/ably";
+import { prismaConfigSchema } from "./infra/prisma";
 
 const appConfigSchema = z.object({
   PORT: z.number().default(3000),
-  DATABASE_URL: z.string(),
   CORS_ORIGINS: z.array(z.string()),
 });
 
 export const configSchema = appConfigSchema
+  .extend(prismaConfigSchema.shape)
+  .extend(ablyConfigSchema.shape)
   .extend(identityConfigSchema.shape)
   .extend(googleOauthConfigSchema.shape)
   .extend(roadmapConfigSchema.shape);
@@ -104,6 +107,7 @@ export function getConfig(): Config {
       JWT_SECRET: process.env.JWT_SECRET,
       FRONTEND_URL: frontendUrl,
       CORS_ORIGINS: getCorsOrigins(frontendUrl, extraOrigins),
+      ABLY_API_KEY: process.env.ABLY_API_KEY?.trim() || undefined,
       ROADMAP_SHIP_SECRET: process.env.ROADMAP_SHIP_SECRET || undefined,
       ROADMAP_FROM_EMAIL: process.env.ROADMAP_FROM_EMAIL || undefined,
       RESEND_API_KEY: process.env.RESEND_API_KEY || undefined,

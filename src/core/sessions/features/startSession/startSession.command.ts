@@ -1,7 +1,7 @@
 import { randomUUID } from "crypto";
 
 import { SportRegistry } from "../../../../sports/registry";
-import { SessionValidationError } from "../../../../sports/session-plugin";
+import { SessionValidationError, sessionEventEnvelope } from "../../../../sports/session-plugin";
 import { NoopRealtimeClient, RealtimeClient } from "../../../realtime";
 import { EventEmitter } from "../../events";
 import { participantEventData } from "../../participant-event";
@@ -85,7 +85,7 @@ export class StartSessionCommand {
       createdBy: request.createdBy ?? null,
       participantId: creator.id,
     };
-    state = plugin.applyEvent(state, joined, {
+    state = plugin.applyEvent(state, sessionEventEnvelope(joined, events.length + 1), {
       config,
       participants: seatViews(participants),
     });
@@ -111,7 +111,7 @@ export class StartSessionCommand {
         participantId: participant.id,
       };
       participants.push(participant);
-      state = plugin.applyEvent(state, event, {
+      state = plugin.applyEvent(state, sessionEventEnvelope(event, events.length + 1), {
         config,
         participants: seatViews(participants),
       });

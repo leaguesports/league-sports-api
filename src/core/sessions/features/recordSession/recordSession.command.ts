@@ -1,5 +1,5 @@
 import { SportRegistry } from "../../../../sports/registry";
-import { SportSessionEvent } from "../../../../sports/session-plugin";
+import { SportEventContext, SportSessionEvent } from "../../../../sports/session-plugin";
 import { prepareSession } from "../../prepare-session";
 import { SessionRepository } from "../../repositories/session.repository";
 
@@ -9,6 +9,8 @@ export type RecordSessionCommandInput = {
   venueId?: string | null;
   createdBy?: string | null;
   events?: readonly SportSessionEvent[];
+  /** Seats the fold uses to derive the card. Omitted means an empty card beside the score log. */
+  participants?: SportEventContext["participants"];
 };
 
 export class RecordSessionCommand {
@@ -19,8 +21,14 @@ export class RecordSessionCommand {
 
   async execute(request: RecordSessionCommandInput) {
     const plugin = this.sports.require(request.sport);
-    const events = request.events ?? [];
-    const prepared = prepareSession(plugin, request.config, events);
+    const events = (request.events ?? []).map((event, index) => ({
+      type: event.type,
+      data: event.data ?? {},
+      seq: index + 1,
+      participantId: event.participantId ?? null,
+    }));
+    const participants = request.participants ?? [];
+    const prepared = prepareSession(plugin, request.config, events, participants);
 
     return this.sessions.recordSession({
       sport: plugin.id,
@@ -30,8 +38,9 @@ export class RecordSessionCommand {
       createdBy: request.createdBy ?? null,
       events: events.map((event) => ({
         type: event.type,
-        data: event.data ?? {},
+        data: event.data,
         createdBy: request.createdBy ?? null,
+        participantId: event.participantId,
       })),
     });
   }

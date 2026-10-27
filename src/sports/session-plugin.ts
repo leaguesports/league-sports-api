@@ -1,24 +1,30 @@
 export type SportSessionEvent = {
   type: string;
+  /** Client payload. The session core does not add the writer, seq, or clientEventId. */
   data?: unknown;
+  /** Server sequence, starting at 1. Present when the event is applied. */
+  seq?: number;
+  /** Seat that wrote the event. Null when a recorded log has no writer. */
+  participantId?: string | null;
 };
 
 /** Seats a plug-in may inspect while validating an event. No account ids. */
 export type SportEventValidationContext = {
   participants: readonly { id: string; status: string }[];
+  /** Seat posting the event. Sport rules that depend on who wrote it read this. */
+  writerId: string;
 };
 
 /**
- * Optional context for `applyEvent`. Live commands pass the validated config
- * and the current seats so a sport can derive a scoreboard. Replay through
- * `prepareSession` omits it.
+ * Context for `applyEvent`. Live commands, finish, and replay all pass the
+ * validated config and the current seats so a sport can derive its card.
  */
 export type SportEventContext = {
   config: unknown;
   participants: readonly { id: string; status: string; sportData?: unknown }[];
 };
 
-/** Written by the shared session layer. Every plug-in must accept these. */
+/** Written by the shared session layer. A plug-in must accept these and must not list them. */
 export const CORE_PARTICIPANT_EVENT_TYPES = [
   "participant.invited",
   "participant.claimed",
@@ -40,12 +46,15 @@ export type ParticipantCapacity = {
  * Each sport owns setup validation, who may take a seat, the opening state,
  * and how an event changes that state.
  *
+ * `acceptedEventTypes` lists sport events only. Participant events and
+ * `round.finished` belong to the session core.
+ *
  * `validateEvent` rejects a payload the sport will not apply. The session
  * core checks the writer's token and that the session is live; the plug-in
  * checks the sport payload, including whether a target seat is joined.
+ * `writerId` is available when a rule depends on who posted the event.
  * `applyEvent` must be pure: return the next state and do not mutate the
- * previous one. Replay builds state from the stored event alone, so anything
- * the next state needs (writer, seq) has to be on that event.
+ * previous one. The writer and seq live on the event envelope, not in `data`.
  */
 export interface SportSessionPlugin<
   TConfig = unknown,
@@ -66,7 +75,7 @@ export interface SportSessionPlugin<
     event: SportSessionEvent,
     context: SportEventValidationContext,
   ): void;
-  applyEvent(state: TState, event: SportSessionEvent, context?: SportEventContext): TState;
+  applyEvent(state: TState, event: SportSessionEvent, context: SportEventContext): TState;
 }
 
 /** Widened plug-in the session flow can call without naming a sport. */
@@ -84,7 +93,7 @@ export type SportSessionRuntime = {
     event: SportSessionEvent,
     context: SportEventValidationContext,
   ): void;
-  applyEvent(state: unknown, event: SportSessionEvent, context?: SportEventContext): unknown;
+  applyEvent(state: unknown, event: SportSessionEvent, context: SportEventContext): unknown;
 };
 
 export class SessionValidationError extends Error {
@@ -97,16 +106,34 @@ export class SessionValidationError extends Error {
   }
 }
 
-/** Sport events a client may post. Participant events stay on the join routes. */
+export function isCoreSessionEvent(type: string): boolean {
+  return (
+    (CORE_PARTICIPANT_EVENT_TYPES as readonly string[]).includes(type) ||
+    type === ROUND_FINISHED_EVENT
+  );
+}
+
+/** Sport events a client may post. Core events stay on their own routes. */
 export function isCapturableEventType(
   acceptedEventTypes: readonly string[],
   type: string,
 ): boolean {
-  return (
-    acceptedEventTypes.includes(type) &&
-    !(CORE_PARTICIPANT_EVENT_TYPES as readonly string[]).includes(type) &&
-    type !== ROUND_FINISHED_EVENT
-  );
+  return acceptedEventTypes.includes(type) && !isCoreSessionEvent(type);
+}
+
+/**
+ * The fold reads seq and the writer from the envelope. `data` stays the client payload.
+ */
+export function sessionEventEnvelope(
+  event: { type: string; data?: unknown; participantId?: string | null },
+  seq: number,
+): SportSessionEvent {
+  return {
+    type: event.type,
+    data: event.data,
+    seq,
+    participantId: event.participantId ?? null,
+  };
 }
 
 export function rejectUnknownEvent<TState>(
@@ -114,7 +141,7 @@ export function rejectUnknownEvent<TState>(
   state: TState,
   event: SportSessionEvent,
 ): TState {
-  if (plugin.acceptedEventTypes.includes(event.type)) {
+  if (isCoreSessionEvent(event.type) || plugin.acceptedEventTypes.includes(event.type)) {
     return state;
   }
 

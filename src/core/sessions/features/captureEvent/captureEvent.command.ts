@@ -2,9 +2,8 @@ import { SportRegistry } from "../../../../sports/registry";
 import { EventEmitter } from "../../events";
 import { emitCommittedSessionEvent } from "../../realtime/sessionEventCommitted.event";
 import {
-  CORE_PARTICIPANT_EVENT_TYPES,
   isCapturableEventType,
-  ROUND_FINISHED_EVENT,
+  isCoreSessionEvent,
   SessionValidationError,
 } from "../../../../sports/session-plugin";
 import {
@@ -55,10 +54,7 @@ export class CaptureSessionEventCommand {
       }
 
       const plugin = this.sports.require(snapshot.session.sport);
-      if (
-        (CORE_PARTICIPANT_EVENT_TYPES as readonly string[]).includes(request.type) ||
-        request.type === ROUND_FINISHED_EVENT
-      ) {
+      if (isCoreSessionEvent(request.type)) {
         throw new SessionValidationError("Event type cannot be captured", {
           sport: plugin.id,
           type: request.type,
@@ -75,10 +71,10 @@ export class CaptureSessionEventCommand {
         const prior = snapshot.events.find(
           (event) =>
             event.participantId === writer.id &&
-            clientEventIdOf(event.data) === request.clientEventId,
+            event.clientEventId === request.clientEventId,
         );
         if (prior) {
-          if (!sameSportPayload(prior, request.type, request.data)) {
+          if (!sameClientPayload(prior, request.type, request.data)) {
             throw new SessionConflictError("clientEventId was already used", {
               clientEventId: request.clientEventId,
               seq: prior.seq,
@@ -88,44 +84,39 @@ export class CaptureSessionEventCommand {
         }
       }
 
-      const event = { type: request.type, data: request.data };
-      plugin.validateEvent(snapshot.session.state, snapshot.session.config, event, {
+      const data = plainData(request.data);
+      const sportEvent = {
+        type: request.type,
+        data,
+        seq: snapshot.nextSeq,
+        participantId: writer.id,
+      };
+      plugin.validateEvent(snapshot.session.state, snapshot.session.config, sportEvent, {
         participants: snapshot.participants.map((participant) => ({
           id: participant.id,
           status: participant.status,
         })),
+        writerId: writer.id,
       });
 
-      const storedData = {
-        ...plainData(request.data),
-        scoredBy: writer.id,
-        seq: snapshot.nextSeq,
-        ...(request.clientEventId ? { clientEventId: request.clientEventId } : {}),
-      };
-      const state = plugin.applyEvent(
-        snapshot.session.state,
-        {
-          type: request.type,
-          data: storedData,
-        },
-        {
-          config: snapshot.session.config,
-          participants: snapshot.participants.map((participant) => ({
-            id: participant.id,
-            status: participant.status,
-            sportData: participant.sportData,
-          })),
-        },
-      );
+      const state = plugin.applyEvent(snapshot.session.state, sportEvent, {
+        config: snapshot.session.config,
+        participants: snapshot.participants.map((participant) => ({
+          id: participant.id,
+          status: participant.status,
+          sportData: participant.sportData,
+        })),
+      });
 
       return {
         action: "append" as const,
         state,
         event: {
           type: request.type,
-          data: storedData,
+          data,
           createdBy: writer.userId,
           participantId: writer.id,
+          clientEventId: request.clientEventId ?? null,
         },
       };
     });
@@ -155,15 +146,7 @@ function findByToken(participants: readonly ParticipantRecord[], token: string) 
   );
 }
 
-function clientEventIdOf(data: unknown): string | null {
-  if (!isRecord(data)) {
-    return null;
-  }
-  const value = data.clientEventId;
-  return typeof value === "string" ? value : null;
-}
-
-function sameSportPayload(
+function sameClientPayload(
   prior: SessionEventRecord,
   type: string,
   data: unknown,
@@ -171,23 +154,25 @@ function sameSportPayload(
   if (prior.type !== type) {
     return false;
   }
-  return JSON.stringify(sportPayload(prior.data)) === JSON.stringify(sportPayload(data));
+  return stableJson(prior.data) === stableJson(data ?? {});
 }
 
-/** Fields the client owns. Writer, seq, and clientEventId are stamped by the server. */
-function sportPayload(data: unknown): {
-  participantId: unknown;
-  hole: unknown;
-  strokes: unknown;
-} {
-  if (!isRecord(data)) {
-    return { participantId: null, hole: null, strokes: null };
+function stableJson(value: unknown): string {
+  return JSON.stringify(sortKeys(value));
+}
+
+function sortKeys(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(sortKeys);
   }
-  return {
-    participantId: data.participantId ?? null,
-    hole: data.hole ?? null,
-    strokes: Object.prototype.hasOwnProperty.call(data, "strokes") ? data.strokes : null,
-  };
+  if (typeof value === "object" && value !== null) {
+    return Object.fromEntries(
+      Object.keys(value)
+        .sort()
+        .map((key) => [key, sortKeys((value as Record<string, unknown>)[key])]),
+    );
+  }
+  return value;
 }
 
 function plainData(data: unknown): Record<string, unknown> {

@@ -1,5 +1,5 @@
-import { createSportRegistry } from "../../../../sports/registry";
 import { golfSessionPlugin } from "../../../../sports/golf/session";
+import { createSportRegistry } from "../../../../sports/registry";
 import {
   SessionValidationError,
   SportSessionPlugin,
@@ -98,5 +98,36 @@ describe("RecordSessionCommand", () => {
       }),
     ).rejects.toBeInstanceOf(SessionValidationError);
     expect(recordSession).not.toHaveBeenCalled();
+  });
+
+  test("derives the golf card when the recorded round includes seats", async () => {
+    const sessions = new InMemorySessionRepository();
+    const command = new RecordSessionCommand(
+      sessions,
+      createSportRegistry([golfSessionPlugin]),
+    );
+
+    const recorded = await command.execute({
+      sport: "golf",
+      config: { tees: [{ id: "white", name: "White" }] },
+      participants: [{ id: "p1", status: "joined", sportData: { teeId: "white" } }],
+      events: [
+        {
+          type: "hole.scored",
+          participantId: "p1",
+          data: { participantId: "p1", hole: 1, strokes: 4 },
+        },
+      ],
+    });
+
+    expect(recorded.session.state).toMatchObject({
+      scores: [{ participantId: "p1", hole: 1, strokes: 4, scoredBy: "p1", seq: 1 }],
+      players: [expect.objectContaining({ participantId: "p1", thru: 1, gross: 4 })],
+    });
+    expect(recorded.events[0]).toMatchObject({
+      seq: 1,
+      participantId: "p1",
+      data: { participantId: "p1", hole: 1, strokes: 4 },
+    });
   });
 });

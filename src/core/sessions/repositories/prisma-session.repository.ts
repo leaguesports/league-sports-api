@@ -73,6 +73,7 @@ type SessionEventRow = {
   data: Prisma.JsonValue;
   createdBy: string | null;
   participantId: string | null;
+  clientEventId: string | null;
   createdAt: Date;
 };
 
@@ -129,6 +130,7 @@ export class PrismaSessionRepository implements SessionRepository {
               data: asJson(event.data),
               createdBy: event.createdBy ?? null,
               participantId: event.participantId,
+              clientEventId: event.clientEventId ?? null,
             },
           });
           storedEvents.push(toSessionEventRecord(row));
@@ -169,6 +171,7 @@ export class PrismaSessionRepository implements SessionRepository {
             data: asJson(event.data),
             createdBy: event.createdBy ?? null,
             participantId: event.participantId,
+            clientEventId: event.clientEventId ?? null,
           },
         });
         events.push(toSessionEventRecord(row));
@@ -268,6 +271,7 @@ export class PrismaSessionRepository implements SessionRepository {
                 data: asJson(change.event.data),
                 createdBy: change.event.createdBy ?? null,
                 participantId: change.event.participantId ?? participant.id,
+                clientEventId: change.event.clientEventId ?? null,
               },
             }),
           );
@@ -340,6 +344,7 @@ export class PrismaSessionRepository implements SessionRepository {
               data: asJson(change.event.data),
               createdBy: change.event.createdBy ?? null,
               participantId: change.event.participantId ?? null,
+              clientEventId: change.event.clientEventId ?? null,
             },
           }),
         );
@@ -391,6 +396,7 @@ export class PrismaSessionRepository implements SessionRepository {
               data: asJson(change.event.data),
               createdBy: change.event.createdBy ?? null,
               participantId: change.event.participantId ?? null,
+              clientEventId: change.event.clientEventId ?? null,
             },
           }),
         );
@@ -557,14 +563,15 @@ function toSessionEventRecord(row: SessionEventRow): SessionEventRecord {
     data: row.data,
     createdBy: row.createdBy,
     participantId: row.participantId,
+    clientEventId: row.clientEventId ?? null,
     createdAt: row.createdAt,
   };
 }
 
 /**
  * Shared by seat changes and captured sport events. A unique (sessionId, seq)
- * collision retries the read-build-write. Anything else, including a name
- * clash, is returned to the caller.
+ * collision, or a unique clientEventId collision, retries the read-build-write.
+ * Anything else, including a name clash, is returned to the caller.
  */
 async function withSeqRetries<T>(operation: () => Promise<T>): Promise<T> {
   let lastError: unknown;
@@ -578,7 +585,7 @@ async function withSeqRetries<T>(operation: () => Promise<T>): Promise<T> {
           { field: "name" },
         );
       }
-      if (isSeqConflict(error) && attempt < MAX_SEQ_ATTEMPTS) {
+      if (isRetryableAppendConflict(error) && attempt < MAX_SEQ_ATTEMPTS) {
         lastError = error;
         continue;
       }
@@ -586,8 +593,8 @@ async function withSeqRetries<T>(operation: () => Promise<T>): Promise<T> {
     }
   }
 
-  throw new SessionConflictError("Could not assign an event sequence", {
-    cause: lastError instanceof Error ? lastError.message : "seq conflict",
+  throw new SessionConflictError("Could not append the event", {
+    cause: lastError instanceof Error ? lastError.message : "unique conflict",
   });
 }
 
@@ -595,8 +602,8 @@ function isNameConflict(error: unknown): boolean {
   return uniqueConflictIncludes(error, "name") && !uniqueConflictIncludes(error, "joincode");
 }
 
-function isSeqConflict(error: unknown): boolean {
-  return uniqueConflictIncludes(error, "seq");
+function isRetryableAppendConflict(error: unknown): boolean {
+  return uniqueConflictIncludes(error, "seq") || uniqueConflictIncludes(error, "clienteventid");
 }
 
 function uniqueConflictIncludes(error: unknown, fragment: string): boolean {

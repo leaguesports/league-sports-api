@@ -1,5 +1,5 @@
 import { SportRegistry } from "../../../../sports/registry";
-import { ROUND_FINISHED_EVENT } from "../../../../sports/session-plugin";
+import { ROUND_FINISHED_EVENT, sessionEventEnvelope } from "../../../../sports/session-plugin";
 import { EventEmitter } from "../../events";
 import { emitCommittedSessionEvent } from "../../realtime/sessionEventCommitted.event";
 import {
@@ -45,10 +45,15 @@ export class FinishSessionCommand {
       }
 
       const plugin = this.sports.require(snapshot.session.sport);
-      const data = { participantId: writer.id, seq: snapshot.nextSeq };
+      const event = {
+        type: ROUND_FINISHED_EVENT,
+        data: {},
+        createdBy: writer.userId,
+        participantId: writer.id,
+      };
       const state = plugin.applyEvent(
         snapshot.session.state,
-        { type: ROUND_FINISHED_EVENT, data },
+        sessionEventEnvelope(event, snapshot.nextSeq),
         {
           config: snapshot.session.config,
           participants: snapshot.participants.map((participant) => ({
@@ -59,15 +64,7 @@ export class FinishSessionCommand {
         },
       );
 
-      return {
-        state,
-        event: {
-          type: ROUND_FINISHED_EVENT,
-          data,
-          createdBy: writer.userId,
-          participantId: writer.id,
-        },
-      };
+      return { state, event };
     });
 
     await emitCommittedSessionEvent(this.eventEmitter, {

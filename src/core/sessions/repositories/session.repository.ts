@@ -45,6 +45,8 @@ export type SessionEventRecord = {
   data: unknown;
   createdBy: string | null;
   participantId: string | null;
+  /** Set when the client supplied a retry key. Null on core events and one-shot posts. */
+  clientEventId: string | null;
   createdAt: Date;
 };
 
@@ -53,6 +55,7 @@ export type NewSessionEvent = {
   data: unknown;
   createdBy?: string | null;
   participantId?: string | null;
+  clientEventId?: string | null;
 };
 
 export type NewParticipant = {

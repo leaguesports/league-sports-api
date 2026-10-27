@@ -1,11 +1,7 @@
 import { golfSessionPlugin } from "./golf/session";
 import { padelSessionPlugin } from "./padel/session";
 import { createSportRegistry, sportRegistry } from "./registry";
-import {
-  CORE_PARTICIPANT_EVENT_TYPES,
-  SessionValidationError,
-  SportSessionPlugin,
-} from "./session-plugin";
+import { SessionValidationError, SportSessionPlugin } from "./session-plugin";
 
 const golfConfig = { tees: [{ id: "white", name: "White" }, { id: "blue" }] };
 
@@ -14,27 +10,21 @@ describe("sport session plug-ins", () => {
     expect(padelSessionPlugin.participants).toEqual({ max: 4 });
     expect(golfSessionPlugin.participants).toEqual({ max: 4 });
     expect(padelSessionPlugin.publicSetup({})).toEqual({});
-    expect(padelSessionPlugin.acceptedEventTypes).toEqual([
-      ...CORE_PARTICIPANT_EVENT_TYPES,
-      "round.finished",
-    ]);
-    expect(golfSessionPlugin.acceptedEventTypes).toEqual([
-      ...CORE_PARTICIPANT_EVENT_TYPES,
-      "round.finished",
-      "hole.scored",
-      "hole.cleared",
-    ]);
+    expect(padelSessionPlugin.acceptedEventTypes).toEqual([]);
+    expect(golfSessionPlugin.acceptedEventTypes).toEqual(["hole.scored", "hole.cleared"]);
 
     const config = padelSessionPlugin.validateSetup({});
     expect(config).toEqual({});
     const state = Object.freeze(padelSessionPlugin.buildStartingState(config));
-    const next = padelSessionPlugin.applyEvent(state, {
-      type: "participant.joined",
-    });
-    expect(next).toBe(state);
-    expect(() => padelSessionPlugin.applyEvent(state, { type: "point" })).toThrow(
-      SessionValidationError,
+    const next = padelSessionPlugin.applyEvent(
+      state,
+      { type: "participant.joined" },
+      { config, participants: [] },
     );
+    expect(next).toBe(state);
+    expect(() =>
+      padelSessionPlugin.applyEvent(state, { type: "point" }, { config, participants: [] }),
+    ).toThrow(SessionValidationError);
   });
 
   test("golf setup requires tees and validateJoin checks handicap and tee", () => {
@@ -90,8 +80,12 @@ describe("sport session plug-ins", () => {
     const frozen = Object.freeze(state);
     expect(frozen).toEqual({ scores: [], players: [], standings: [] });
     expect(
-      golfSessionPlugin.applyEvent(frozen, { type: "participant.left" }),
-    ).toBe(frozen);
+      golfSessionPlugin.applyEvent(
+        frozen,
+        { type: "participant.left", seq: 1, participantId: "p1" },
+        { config, participants: [] },
+      ),
+    ).toEqual(frozen);
   });
 
   test("padel rejects a non-object setup and join payload", () => {
@@ -164,7 +158,7 @@ describe("sport registry", () => {
     const plugin = registry.require("custom");
     const config = plugin.validateSetup({ ready: false });
     const started = plugin.buildStartingState(config);
-    const next = plugin.applyEvent(started, { type: "tick" });
+    const next = plugin.applyEvent(started, { type: "tick" }, { config, participants: [] });
 
     expect(started).toEqual({ ready: false });
     expect(next).toEqual({ ready: true });

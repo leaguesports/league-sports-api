@@ -9,20 +9,20 @@ The product: one platform of tools for people with different relationships to sp
 _Avoid_: League racing, sim racing league (legacy readme wording)
 
 **Sport**:
-A playable vertical in the hub today: Padel, Golf, or Darts. Each Sport owns its Scorecard and sport-only play. Hub-wide features (identity, venues, lobby, teams) are not Sports.
-_Avoid_: Treating Scorecards, Organise, or Competition as owners of sport code
+A playable vertical in the hub: Padel, Golf, or Darts. Each sport is a session plug-in under `src/sports`. It validates setup and folds events into state. Hub-wide features (identity, venues, the session lobby) are not Sports.
+_Avoid_: Treating a sport as the owner of seats, tokens, or the round lifecycle
 
 **Padel**:
-The racket-sport vertical (`src/modules/padel`). Its Scorecard is still named Match in code and `/api/matches`.
+The racket-sport vertical. Its session plug-in is registered (`src/sports/padel`) and does not score yet.
 _Avoid_: Match as a generic word for other sports
 
 **Golf**:
-The golf vertical: golf Scorecard (round), handicap, and GolfTour.
-_Avoid_: Folding golf-only tour play into Tournament
+The golf vertical. Its session plug-in (`src/sports/golf`) owns the card: tees, hole scores, handicap, and stableford. See `src/sports/golf/readme.md`.
+_Avoid_: Folding golf scoring into the session core
 
 **Darts**:
-The darts vertical: darts Scorecard (501) and turns. Lobby can match darts; OrganisedGame cannot start darts yet.
-_Avoid_: Assuming Organise supports every Sport
+The darts vertical. It is not a session plug-in yet.
+_Avoid_: Assuming a darts scorecard module still exists beside sessions
 
 **Fan**:
 Someone engaging around sport without necessarily playing in a given activity (follow, discover, watch, support).
@@ -53,29 +53,33 @@ A named fact that something already happened in the domain, published for other 
 _Avoid_: Event (unqualified), callback, hook (those are mechanisms)
 
 **Scorecard**:
-A Sport-owned record of play that is live while in progress and locked when finished. Not a hub context — each Sport has its own Scorecard shape.
-_Avoid_: Match (ambiguous), game (ambiguous with OrganisedGame)
+The derived state of a session for one sport. Live while the session is `live`. Frozen on `state.result` when the session finishes. Not a hub context and not its own module.
+_Avoid_: Match (ambiguous), game (ambiguous with a scheduled game)
 
 **Match**:
-Legacy/code name for the **padel** Scorecard (`src/modules/padel`, `/api/matches`). Prefer saying Padel Scorecard in new language. The HTTP surface stays `/api/matches`.
+Do not use this for a round. A round is a session.
 _Avoid_: Using Match for golf, darts, team fixtures, or organised games
 
+**Session**:
+One round. The client publishes events. The sport plug-in folds each event into the next state. Seats, the join code, and finish belong to the session, not to the sport.
+_Avoid_: Scorecard module, a second lifecycle per sport
+
 **OrganisedGame**:
-A host-scheduled social game (padel or golf) that can be started into a live Scorecard. Distinct from Lobby matchmaking and from TeamMatch.
-_Avoid_: Event (unless we explicitly promote it into Discovery Event), booking
+A host-scheduled social game. Not a module in this API. A round that is being played is a Session.
+_Avoid_: Event (unless we explicitly promote it into Discovery Event), booking, using it as the name of the session
 
 **Lobby**:
-Matchmaking for seekers and hosts (Looking, open games, proposals). Not booking. Successful paths convert into an OrganisedGame.
+The join lobby on a live session: one join code, deleted when the session finishes. The older matchmaking lobby (Looking, open games, proposals) is not a module in this API.
 _Avoid_: Matchmaking service (generic), queue
 
 **TeamMatch**:
-A team-versus-team challenge that can attach a live Scorecard and complete when that Scorecard locks.
-_Avoid_: Match, OrganisedGame
+A team-versus-team challenge. Not a module in this API. Completing a round is finishing a Session.
+_Avoid_: Match, OrganisedGame, Session
 
 **Tournament**:
-A competition structure over TeamMatches (brackets/slots/registrations) — not a GolfTour.
-_Avoid_: Tour, league
+A competition structure over team challenges. Not a module in this API, and not a GolfTour.
+_Avoid_: Tour, league, Session
 
 **GolfTour**:
-Golf-specific multi-round competition structure (camps, fourballs) that reuses golf Scorecards — not a Tournament.
-_Avoid_: Tournament
+A golf-specific multi-round competition. Not a module in this API. A single round is a golf Session.
+_Avoid_: Tournament, Session

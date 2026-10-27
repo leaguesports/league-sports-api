@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto";
 
 import { SportRegistry } from "../../../../sports/registry";
+import { sessionEventEnvelope } from "../../../../sports/session-plugin";
 import { EventEmitter } from "../../events";
 import { participantEventData } from "../../participant-event";
 import { emitCommittedSessionEvent } from "../../realtime/sessionEventCommitted.event";
@@ -119,7 +120,7 @@ function claimSeat(
   };
 
   return {
-    state: plugin.applyEvent(snapshot.session.state, event, {
+    state: plugin.applyEvent(snapshot.session.state, sessionEventEnvelope(event, snapshot.nextSeq), {
       config: snapshot.session.config,
       participants: snapshot.participants.map((participant) =>
         participant.id === next.id
@@ -190,7 +191,7 @@ function addSeat(
       participantId: existing.id,
     };
     return {
-      state: plugin.applyEvent(snapshot.session.state, event, {
+      state: plugin.applyEvent(snapshot.session.state, sessionEventEnvelope(event, snapshot.nextSeq), {
         config: snapshot.session.config,
         participants: snapshot.participants.map((participant) =>
           participant.id === next.id
@@ -234,7 +235,7 @@ function addSeat(
   };
 
   return {
-    state: plugin.applyEvent(snapshot.session.state, event, {
+    state: plugin.applyEvent(snapshot.session.state, sessionEventEnvelope(event, snapshot.nextSeq), {
       config: snapshot.session.config,
       participants: [
         ...snapshot.participants.map((existing) => ({

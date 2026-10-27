@@ -9,28 +9,24 @@ const joined = [{ id: "p1", status: "joined" }, { id: "p2", status: "invited" }]
 
 describe("golf hole events", () => {
   test("keeps the latest score per player and hole, recording who wrote it", () => {
-    const first = apply(empty, "hole.scored", {
-      participantId: "p1",
-      hole: 1,
-      strokes: 4,
-      scoredBy: "p2",
-      seq: 3,
-    });
-    const again = apply(first, "hole.scored", {
-      participantId: "p1",
-      hole: 1,
-      strokes: 5,
-      scoredBy: "p1",
-      seq: 4,
-      clientEventId: "retry-1",
-    });
-    const otherHole = apply(again, "hole.scored", {
-      participantId: "p1",
-      hole: 2,
-      strokes: 3,
-      scoredBy: "p1",
-      seq: 5,
-    });
+    const first = apply(
+      empty,
+      "hole.scored",
+      { participantId: "p1", hole: 1, strokes: 4 },
+      { seq: 3, participantId: "p2" },
+    );
+    const again = apply(
+      first,
+      "hole.scored",
+      { participantId: "p1", hole: 1, strokes: 5 },
+      { seq: 4, participantId: "p1" },
+    );
+    const otherHole = apply(
+      again,
+      "hole.scored",
+      { participantId: "p1", hole: 2, strokes: 3 },
+      { seq: 5, participantId: "p1" },
+    );
 
     expect(first.scores).toEqual([
       { participantId: "p1", hole: 1, strokes: 4, scoredBy: "p2", seq: 3 },
@@ -47,26 +43,24 @@ describe("golf hole events", () => {
   });
 
   test("clears one hole and leaves the rest of the card", () => {
-    const scored = apply(empty, "hole.scored", {
-      participantId: "p1",
-      hole: 1,
-      strokes: 4,
-      scoredBy: "p1",
-      seq: 2,
-    });
-    const both = apply(scored, "hole.scored", {
-      participantId: "p1",
-      hole: 2,
-      strokes: 6,
-      scoredBy: "p1",
-      seq: 3,
-    });
-    const cleared = apply(both, "hole.cleared", {
-      participantId: "p1",
-      hole: 1,
-      scoredBy: "p1",
-      seq: 4,
-    });
+    const scored = apply(
+      empty,
+      "hole.scored",
+      { participantId: "p1", hole: 1, strokes: 4 },
+      { seq: 2, participantId: "p1" },
+    );
+    const both = apply(
+      scored,
+      "hole.scored",
+      { participantId: "p1", hole: 2, strokes: 6 },
+      { seq: 3, participantId: "p1" },
+    );
+    const cleared = apply(
+      both,
+      "hole.cleared",
+      { participantId: "p1", hole: 1 },
+      { seq: 4, participantId: "p1" },
+    );
 
     expect(cleared.scores).toEqual([
       { participantId: "p1", hole: 2, strokes: 6, scoredBy: "p1", seq: 3 },
@@ -80,7 +74,7 @@ describe("golf hole events", () => {
         empty,
         config,
         { type: "hole.scored", data: { participantId: "p2", hole: 1, strokes: 4 } },
-        { participants: joined },
+        { participants: joined, writerId: "p1" },
       ),
     ).toThrow(SessionValidationError);
 
@@ -89,7 +83,7 @@ describe("golf hole events", () => {
         empty,
         config,
         { type: "hole.scored", data: { participantId: "missing", hole: 1, strokes: 4 } },
-        { participants: joined },
+        { participants: joined, writerId: "p1" },
       );
     } catch (error) {
       expect(error).toBeInstanceOf(SessionValidationError);
@@ -103,7 +97,7 @@ describe("golf hole events", () => {
         empty,
         config,
         { type: "hole.scored", data: { participantId: "p1", hole: 19, strokes: 4 } },
-        { participants: joined },
+        { participants: joined, writerId: "p1" },
       ),
     ).toThrow(SessionValidationError);
 
@@ -112,7 +106,7 @@ describe("golf hole events", () => {
         empty,
         config,
         { type: "hole.scored", data: { participantId: "p1", hole: 1, strokes: 16 } },
-        { participants: joined },
+        { participants: joined, writerId: "p1" },
       ),
     ).toThrow(/Invalid golf score/);
 
@@ -124,7 +118,7 @@ describe("golf hole events", () => {
           type: "hole.scored",
           data: { participantId: "p1", hole: 1, strokes: 4, scoredBy: "p2" },
         },
-        { participants: joined },
+        { participants: joined, writerId: "p1" },
       ),
     ).toThrow(SessionValidationError);
 
@@ -133,7 +127,7 @@ describe("golf hole events", () => {
         empty,
         config,
         { type: "hole.cleared", data: { participantId: "p1", hole: 1 } },
-        { participants: joined },
+        { participants: joined, writerId: "p1" },
       ),
     ).not.toThrow();
   });
@@ -161,7 +155,7 @@ describe("golf hole events", () => {
         empty,
         front,
         { type: "hole.scored", data: { participantId: "p1", hole: 10, strokes: 4 } },
-        { participants: joined },
+        { participants: joined, writerId: "p1" },
       ),
     ).toThrow(/Hole is not in this round/);
 
@@ -189,9 +183,9 @@ describe("golf hole events", () => {
             participantId: "p1",
             hole,
             strokes: hole <= 13 ? 5 : 4,
-            scoredBy: "p1",
-            seq: hole,
           },
+          seq: hole,
+          participantId: "p1",
         },
         {
           config: setup,
@@ -227,7 +221,9 @@ describe("golf hole events", () => {
       golfSessionPlugin.buildStartingState(setup),
       {
         type: "hole.scored",
-        data: { participantId: "p1", hole: 1, strokes: 4, scoredBy: "p1", seq: 2 },
+        data: { participantId: "p1", hole: 1, strokes: 4 },
+        seq: 2,
+        participantId: "p1",
       },
       {
         config: setup,
@@ -238,7 +234,7 @@ describe("golf hole events", () => {
     );
     const finished = golfSessionPlugin.applyEvent(
       scored,
-      { type: "round.finished", data: { seq: 3 } },
+      { type: "round.finished", seq: 3, participantId: "p1" },
       {
         config: setup,
         participants: [
@@ -258,6 +254,15 @@ describe("golf hole events", () => {
   });
 });
 
-function apply(state: GolfState, type: string, data: unknown): GolfState {
-  return golfSessionPlugin.applyEvent(state, { type, data });
+function apply(
+  state: GolfState,
+  type: string,
+  data: unknown,
+  envelope: { seq: number; participantId: string },
+): GolfState {
+  return golfSessionPlugin.applyEvent(
+    state,
+    { type, data, seq: envelope.seq, participantId: envelope.participantId },
+    { config, participants: [] },
+  );
 }

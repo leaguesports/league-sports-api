@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import {
-  CORE_PARTICIPANT_EVENT_TYPES,
+  isCoreSessionEvent,
   ROUND_FINISHED_EVENT,
   rejectUnknownEvent,
   SessionValidationError,
@@ -108,11 +108,9 @@ const clearedFields = {
   participantId: z.string().trim().min(1),
   hole: holeSchema,
 };
-// Clients cannot sneak writer or seq. Stored events add those beside the payload.
+// Writer and seq live on the event envelope. Clients cannot send them in data.
 const scoredSchema = z.strictObject(scoredFields);
 const clearedSchema = z.strictObject(clearedFields);
-const storedScoredSchema = z.object(scoredFields);
-const storedClearedSchema = z.object(clearedFields);
 
 /**
  * Holes a score may name. A course snapshot wins. Otherwise the layout is
@@ -141,12 +139,7 @@ export const golfSessionPlugin: SportSessionPlugin<
   GolfJoin
 > = {
   id: GOLF_ID,
-  acceptedEventTypes: [
-    ...CORE_PARTICIPANT_EVENT_TYPES,
-    ROUND_FINISHED_EVENT,
-    GOLF_HOLE_SCORED,
-    GOLF_HOLE_CLEARED,
-  ],
+  acceptedEventTypes: [GOLF_HOLE_SCORED, GOLF_HOLE_CLEARED],
   participants: { max: 4 },
 
   validateSetup(config: unknown): GolfSetup {
@@ -223,10 +216,7 @@ export const golfSessionPlugin: SportSessionPlugin<
     event: SportSessionEvent,
     context: SportEventValidationContext,
   ): void {
-    if (
-      (CORE_PARTICIPANT_EVENT_TYPES as readonly string[]).includes(event.type) ||
-      event.type === ROUND_FINISHED_EVENT
-    ) {
+    if (isCoreSessionEvent(event.type)) {
       return;
     }
     if (event.type === GOLF_HOLE_SCORED) {
@@ -244,25 +234,24 @@ export const golfSessionPlugin: SportSessionPlugin<
     rejectUnknownEvent(this, {}, event);
   },
 
-  applyEvent(state: GolfState, event, context?: SportEventContext) {
+  applyEvent(state: GolfState, event, context: SportEventContext) {
     let next = state;
-    if (
-      (CORE_PARTICIPANT_EVENT_TYPES as readonly string[]).includes(event.type) ||
-      event.type === ROUND_FINISHED_EVENT
-    ) {
-      next = state;
-    } else if (event.type === GOLF_HOLE_SCORED) {
-      next = applyScore(state, event.data);
-    } else if (event.type === GOLF_HOLE_CLEARED) {
-      next = applyClear(state, event.data);
-    } else {
-      return rejectUnknownEvent(this, state, event);
+    switch (event.type) {
+      case GOLF_HOLE_SCORED:
+        next = applyScore(next, event);
+        break;
+      case GOLF_HOLE_CLEARED:
+        next = applyClear(next, event);
+        break;
+      default:
+        if (!isCoreSessionEvent(event.type)) {
+          rejectUnknownEvent(this, next, event);
+        }
+        break;
     }
 
-    if (context) {
-      const config = this.validateSetup(context.config);
-      next = projectState(next, config, context.participants);
-    }
+    const config = this.validateSetup(context.config);
+    next = projectState(next, config, context.participants);
     if (event.type === ROUND_FINISHED_EVENT) {
       return freezeResult(next, event);
     }
@@ -304,9 +293,9 @@ function assertJoinedTarget(context: SportEventValidationContext, participantId:
   }
 }
 
-function applyScore(state: GolfState, data: unknown): GolfState {
-  const parsed = parseEvent(storedScoredSchema, data, "Invalid golf score");
-  const writer = readWriter(data);
+function applyScore(state: GolfState, event: SportSessionEvent): GolfState {
+  const parsed = parseEvent(scoredSchema, event.data, "Invalid golf score");
+  const writer = readEnvelope(event);
   const scores = scoresOf(state).filter(
     (score) => !(score.participantId === parsed.participantId && score.hole === parsed.hole),
   );
@@ -325,9 +314,9 @@ function applyScore(state: GolfState, data: unknown): GolfState {
   };
 }
 
-function applyClear(state: GolfState, data: unknown): GolfState {
-  const parsed = parseEvent(storedClearedSchema, data, "Invalid golf score");
-  readWriter(data);
+function applyClear(state: GolfState, event: SportSessionEvent): GolfState {
+  const parsed = parseEvent(clearedSchema, event.data, "Invalid golf score");
+  readEnvelope(event);
   return {
     ...state,
     scores: scoresOf(state).filter(
@@ -341,7 +330,7 @@ function scoresOf(state: GolfState): GolfHoleScore[] {
 }
 
 function freezeResult(state: GolfState, event: SportSessionEvent): GolfState {
-  const seq = readSeq(event.data);
+  const seq = readEnvelope(event).seq;
   const standings = Array.isArray(state.standings) ? state.standings : [];
   return {
     ...state,
@@ -419,33 +408,15 @@ function normalizeHoles(
     .sort((left, right) => left.n - right.n);
 }
 
-/**
- * The capture route stamps the writer and the seq onto the stored event so a
- * replay of the log rebuilds the same card. Clients cannot send these.
- */
-function readSeq(data: unknown): number {
-  if (!data || typeof data !== "object" || Array.isArray(data)) {
-    throw new SessionValidationError("Golf event is missing seq", { sport: GOLF_ID });
-  }
-  const seq = (data as { seq?: unknown }).seq;
-  if (typeof seq !== "number" || !Number.isInteger(seq) || seq < 1) {
-    throw new SessionValidationError("Golf event is missing seq", { sport: GOLF_ID });
-  }
-  return seq;
-}
-
-function readWriter(data: unknown): { scoredBy: string; seq: number } {
-  if (!data || typeof data !== "object" || Array.isArray(data)) {
-    throw new SessionValidationError("Invalid golf score", { sport: GOLF_ID });
-  }
-  const record = data as { scoredBy?: unknown; seq?: unknown };
-  if (typeof record.scoredBy !== "string" || record.scoredBy.trim().length === 0) {
+/** Writer and seq come from the event envelope, which the session core assigns. */
+function readEnvelope(event: SportSessionEvent): { scoredBy: string; seq: number } {
+  if (typeof event.participantId !== "string" || event.participantId.trim().length === 0) {
     throw new SessionValidationError("Golf event is missing the writer", {
       sport: GOLF_ID,
     });
   }
-  if (typeof record.seq !== "number" || !Number.isInteger(record.seq) || record.seq < 1) {
+  if (typeof event.seq !== "number" || !Number.isInteger(event.seq) || event.seq < 1) {
     throw new SessionValidationError("Golf event is missing seq", { sport: GOLF_ID });
   }
-  return { scoredBy: record.scoredBy, seq: record.seq };
+  return { scoredBy: event.participantId, seq: event.seq };
 }

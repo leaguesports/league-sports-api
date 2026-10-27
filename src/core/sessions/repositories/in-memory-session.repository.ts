@@ -407,8 +407,23 @@ export class InMemorySessionRepository implements SessionRepository {
       data: event.data,
       createdBy: event.createdBy ?? null,
       participantId: event.participantId ?? null,
+      clientEventId: event.clientEventId ?? null,
       createdAt: now,
     };
+    if (row.clientEventId && row.participantId) {
+      const duplicate = this.events.some(
+        (existing) =>
+          existing.sessionId === sessionId &&
+          existing.participantId === row.participantId &&
+          existing.clientEventId === row.clientEventId,
+      );
+      if (duplicate) {
+        throw Object.assign(new Error("Unique constraint failed on clientEventId"), {
+          code: "P2002",
+          meta: { target: ["sessionId", "participantId", "clientEventId"] },
+        });
+      }
+    }
     this.events.push(row);
     return row;
   }

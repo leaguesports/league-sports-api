@@ -11,7 +11,7 @@ import { SessionStartedEvent } from "./sessionStarted.event";
 
 const counterPlugin: SportSessionPlugin<{ step: number }, { total: number }> = {
   id: "counter",
-  acceptedEventTypes: ["participant.joined", "participant.invited"],
+  acceptedEventTypes: [],
   participants: { max: 4 },
   validateSetup(config: unknown) {
     if (

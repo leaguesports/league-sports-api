@@ -1,8 +1,7 @@
 import { z } from "zod";
 
 import {
-  CORE_PARTICIPANT_EVENT_TYPES,
-  ROUND_FINISHED_EVENT,
+  isCoreSessionEvent,
   rejectUnknownEvent,
   SessionValidationError,
   SportSessionPlugin,
@@ -26,7 +25,7 @@ export const padelSessionPlugin: SportSessionPlugin<
   PadelJoin
 > = {
   id: PADEL_ID,
-  acceptedEventTypes: [...CORE_PARTICIPANT_EVENT_TYPES, ROUND_FINISHED_EVENT],
+  acceptedEventTypes: [],
   participants: PADEL_PARTICIPANT_CAPACITY,
 
   validateSetup(config: unknown): PadelSetup {
@@ -60,10 +59,16 @@ export const padelSessionPlugin: SportSessionPlugin<
   },
 
   validateEvent(_state, _config, event) {
+    if (isCoreSessionEvent(event.type)) {
+      return;
+    }
     rejectUnknownEvent(this, {}, event);
   },
 
   applyEvent(state: PadelState, event) {
+    if (isCoreSessionEvent(event.type)) {
+      return state;
+    }
     return rejectUnknownEvent(this, state, event);
   },
 };

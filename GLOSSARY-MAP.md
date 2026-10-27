@@ -2,27 +2,24 @@
 
 Per-context `GLOSSARY.md` files are created when terms move out of the root glossary. Until then, shared language lives in [GLOSSARY.md](./GLOSSARY.md).
 
-Sports are **top-level segments**. Hub contexts do **not** own sport scorecard modules.
+Sports are **top-level plug-ins**. The session core does not own their rules. See [ADR-0004](./docs/adr/0004-session-plugins.md).
 
 ## Sports
 
-- **Padel**: padel Scorecard (`match` today), pairings, padel rules
-- **Golf**: golf Scorecard (`golf-round`), handicap, GolfTour (`golf-tours`)
-- **Darts**: darts Scorecard (`darts`), turns
+- **Padel**: `src/sports/padel` — registered, no scoring yet
+- **Golf**: `src/sports/golf` — hole events, handicap, stableford (`readme.md` there)
+- **Darts**: not a plug-in yet
 
-## Hub contexts
+## Hub
 
-- **Identity**: accounts, sessions, profiles; includes `google-oauth` when touched
-- **Discovery**: venues, venue-leaderboards (projection of locked Scorecards), future Event
-- **Organise**: one Lobby; OrganisedGame that *starts* by calling into Padel or Golf (darts not organisable yet)
-- **Competition**: teams, TeamMatch, Tournament — sport is a parameter; start/complete call into the Sport
+- **Sessions**: `src/core/sessions` — one round, seats, lobby, capture, finish, realtime
+- **Identity**: accounts and profiles (`src/core/identity`, `src/core/google-oauth`)
+- **Venues**: `src/core/venue`
 - **Social**: friends, communities, notifications
-- **Platform**: parked — badges, preferences, integrations, roadmap, intents, openf1, pools, training
 
 ## Relationships
 
-- **Organise → Sport**: Starting an OrganisedGame asks Padel or Golf to create a live Scorecard
-- **Competition → Sport**: Starting a TeamMatch asks the Sport to create a live Scorecard; `ScorecardLocked` completes TeamMatch (and GolfTour fourballs)
-- **Lobby → OrganisedGame**: Filled open games / accepted proposals materialize as OrganisedGame (darts blocked until Organise supports it)
-- **Sport → Hub consumers**: `ScorecardLocked` is published on the hub Domain Event bus (leaderboards, TeamMatch, GolfTour)
-- **Discovery ↔ Organise / Competition**: Venue (and later Event) anchors where play is found and often where it is scheduled
+- **Client → Session**: The client posts facts. It does not send the next card.
+- **Session → Sport**: Start, join, capture, finish, and record call the sport registry. The plug-in returns the next state.
+- **Sport → Session**: `acceptedEventTypes` are sport events only. The core writes `participant.*` and `round.finished`.
+- **Replay**: The event log plus the seats fold through the same `applyEvent` as a live command. Stored `state` is the cache of that fold.

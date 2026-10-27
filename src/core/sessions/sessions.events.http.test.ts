@@ -196,6 +196,8 @@ describe("POST /api/sessions/:id/events", () => {
       type: "hole.scored",
       participantId: started.participant.id,
       createdBy: "user-host",
+      clientEventId: "offline-1",
+      data: { participantId: guest.participant.id, hole: 1, strokes: 4 },
     });
 
     const replay = await postEvent(server.url, started.session.id, started.token, {

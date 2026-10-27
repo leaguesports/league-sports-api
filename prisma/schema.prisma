@@ -344,10 +344,14 @@ model SessionEvent {
   participantId String?
   createdAt     DateTime @default(now())
 
+  // Client retry key. Unique per seat when set. Null on core events and one-shot posts.
+  clientEventId String?
+
   session     Session             @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   participant SessionParticipant? @relation(fields: [participantId], references: [id], onDelete: SetNull)
 
   @@unique([sessionId, seq])
+  @@unique([sessionId, participantId, clientEventId])
   @@index([createdAt])
 }
 

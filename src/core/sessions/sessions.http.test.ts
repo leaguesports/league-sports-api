@@ -104,8 +104,8 @@ describe("POST /api/sessions", () => {
 
     expect(body.session).toMatchObject({
       sport: "padel",
-      config: {},
-      state: {},
+      config: { format: "best_of_3", scoring: "advantage" },
+      state: { teams: null, sets: [], winner: null, setsWon: null },
       status: "live",
       venueId: "venue-1",
       createdBy: "user-1",
@@ -126,7 +126,12 @@ describe("POST /api/sessions", () => {
     expect(body.lobby.joinCode).toBe("AB12CD");
     expect(body.session.createdAt).toEqual(expect.any(String));
     expect(started).toEqual([body.session.id]);
-    expect(sessions.findSession(body.session.id)?.state).toEqual({});
+    expect(sessions.findSession(body.session.id)?.state).toEqual({
+      teams: null,
+      sets: [],
+      winner: null,
+      setsWon: null,
+    });
   });
 
   test("leaves createdBy empty for an anonymous or invalid cookie", async () => {

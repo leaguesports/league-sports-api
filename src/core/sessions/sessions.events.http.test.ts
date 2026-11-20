@@ -296,7 +296,7 @@ describe("POST /api/sessions/:id/events", () => {
     expect(missing.status).toBe(404);
   });
 
-  test("padel has no capturable events and a failed score does not write one", async () => {
+  test("padel rejects golf hole.scored and leaves the opening state unchanged", async () => {
     const started = await start(server.url, null, { sport: "padel", config: {} });
     const before = sessions.eventsFor(started.session.id).length;
     const response = await postEvent(server.url, started.session.id, started.token, {
@@ -306,7 +306,12 @@ describe("POST /api/sessions/:id/events", () => {
     expect(response.status).toBe(400);
     expect(await response.json()).toMatchObject({ error: "Unknown event type" });
     expect(sessions.eventsFor(started.session.id)).toHaveLength(before);
-    expect(sessions.findSession(started.session.id)?.state).toEqual({});
+    expect(sessions.findSession(started.session.id)?.state).toEqual({
+      teams: null,
+      sets: [],
+      winner: null,
+      setsWon: null,
+    });
   });
 
   test("an anonymous writer's event has no createdBy", async () => {

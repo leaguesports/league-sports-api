@@ -9,13 +9,22 @@ describe("sport session plug-ins", () => {
   test("padel accepts an empty setup and both sports pass core events through", () => {
     expect(padelSessionPlugin.participants).toEqual({ max: 4 });
     expect(golfSessionPlugin.participants).toEqual({ max: 4 });
-    expect(padelSessionPlugin.publicSetup({})).toEqual({});
-    expect(padelSessionPlugin.acceptedEventTypes).toEqual([]);
+    expect(padelSessionPlugin.acceptedEventTypes).toEqual(["match.recorded"]);
     expect(golfSessionPlugin.acceptedEventTypes).toEqual(["hole.scored", "hole.cleared"]);
 
     const config = padelSessionPlugin.validateSetup({});
-    expect(config).toEqual({});
+    expect(config).toEqual({ format: "best_of_3", scoring: "advantage" });
+    expect(padelSessionPlugin.publicSetup(config)).toEqual({
+      format: "best_of_3",
+      scoring: "advantage",
+    });
     const state = Object.freeze(padelSessionPlugin.buildStartingState(config));
+    expect(state).toEqual({
+      teams: null,
+      sets: [],
+      winner: null,
+      setsWon: null,
+    });
     const next = padelSessionPlugin.applyEvent(
       state,
       { type: "participant.joined" },
@@ -91,8 +100,10 @@ describe("sport session plug-ins", () => {
   test("padel rejects a non-object setup and join payload", () => {
     expect(() => padelSessionPlugin.validateSetup(null)).toThrow(SessionValidationError);
     expect(() => padelSessionPlugin.validateSetup([])).toThrow(SessionValidationError);
+    const setup = padelSessionPlugin.validateSetup({});
+    const state = padelSessionPlugin.buildStartingState(setup);
     expect(() =>
-      padelSessionPlugin.validateJoin({}, {}, { side: "left" }),
+      padelSessionPlugin.validateJoin(state, setup, { side: "left" }),
     ).toThrow(SessionValidationError);
   });
 });

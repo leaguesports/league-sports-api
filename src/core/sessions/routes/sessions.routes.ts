@@ -5,11 +5,13 @@ import { FinishSessionController } from "../features/finishSession/finishSession
 import { GetSessionController } from "../features/getSession/getSession.controller";
 import { JoinSessionController } from "../features/joinSession/joinSession.controller";
 import { LeaveSessionController } from "../features/leaveSession/leaveSession.controller";
+import { RecordSessionController } from "../features/recordSession/recordSession.controller";
 import { ReissueSeatTokenController } from "../features/reissueSeatToken/reissueSeatToken.controller";
 import { StartSessionController } from "../features/startSession/startSession.controller";
 
 export function createSessionRoutes(controllers: {
   start: StartSessionController;
+  record: RecordSessionController;
   join: JoinSessionController;
   leave: LeaveSessionController;
   capture: CaptureSessionEventController;
@@ -21,6 +23,10 @@ export function createSessionRoutes(controllers: {
 
   router.post("/api/sessions", (req, res) => {
     void controllers.start.handle(req, res);
+  });
+
+  router.post("/api/sessions/record", (req, res) => {
+    void controllers.record.handle(req, res);
   });
 
   router.get("/api/sessions/join/:code", (req, res) => {

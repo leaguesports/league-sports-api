@@ -6,7 +6,7 @@ Sports are **top-level plug-ins**. The session core does not own their rules. Se
 
 ## Sports
 
-- **Padel**: `src/sports/padel` — registered, no scoring yet
+- **Padel**: `src/sports/padel` — `match.recorded` set scores (`readme.md` there)
 - **Golf**: `src/sports/golf` — hole events, handicap, stableford (`readme.md` there)
 - **Darts**: not a plug-in yet
 

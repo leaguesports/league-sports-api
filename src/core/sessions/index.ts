@@ -16,6 +16,7 @@ import { JoinSessionController } from "./features/joinSession/joinSession.contro
 import { LeaveSessionCommand } from "./features/leaveSession/leaveSession.command";
 import { LeaveSessionController } from "./features/leaveSession/leaveSession.controller";
 import { RecordSessionCommand } from "./features/recordSession/recordSession.command";
+import { RecordSessionController } from "./features/recordSession/recordSession.controller";
 import { ReissueSeatTokenCommand } from "./features/reissueSeatToken/reissueSeatToken.command";
 import { ReissueSeatTokenController } from "./features/reissueSeatToken/reissueSeatToken.controller";
 import { StartSessionCommand } from "./features/startSession/startSession.command";
@@ -87,6 +88,11 @@ export function createSessionsModule({
     router: createSessionRoutes({
       start: new StartSessionController(
         startSession,
+        tryGetSessionUserId,
+        joinLookupRateLimiter,
+      ),
+      record: new RecordSessionController(
+        recordSession,
         tryGetSessionUserId,
         joinLookupRateLimiter,
       ),

@@ -15,4 +15,4 @@ A plug-in implements `SportSessionPlugin`:
 
 Core events still arrive at `applyEvent`. Accept them and leave sport facts unchanged, then derive the card again so a new or departed seat shows up.
 
-Golf rules: [golf/readme.md](./golf/readme.md). Padel is registered and has no scoring yet.
+Golf rules: [golf/readme.md](./golf/readme.md). Padel rules: [padel/readme.md](./padel/readme.md).

@@ -13,7 +13,7 @@ A playable vertical in the hub: Padel, Golf, or Darts. Each sport is a session p
 _Avoid_: Treating a sport as the owner of seats, tokens, or the round lifecycle
 
 **Padel**:
-The racket-sport vertical. Its session plug-in is registered (`src/sports/padel`) and does not score yet.
+The racket-sport vertical. Its session plug-in (`src/sports/padel`) records finished set scores via `match.recorded`. See `src/sports/padel/readme.md`.
 _Avoid_: Match as a generic word for other sports
 
 **Golf**:

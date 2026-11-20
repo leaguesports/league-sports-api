@@ -1,4 +1,5 @@
 import { golfSessionPlugin } from "../../../../sports/golf/session";
+import { padelSessionPlugin } from "../../../../sports/padel/session";
 import { createSportRegistry } from "../../../../sports/registry";
 import {
   SessionValidationError,
@@ -128,6 +129,53 @@ describe("RecordSessionCommand", () => {
       seq: 1,
       participantId: "p1",
       data: { participantId: "p1", hole: 1, strokes: 4 },
+    });
+  });
+
+  test("records a finished padel match into closed state with result", async () => {
+    const sessions = new InMemorySessionRepository();
+    const command = new RecordSessionCommand(
+      sessions,
+      createSportRegistry([padelSessionPlugin]),
+    );
+
+    const recorded = await command.execute({
+      sport: "padel",
+      config: { format: "best_of_3" },
+      createdBy: "user-padel",
+      events: [
+        {
+          type: "match.recorded",
+          data: {
+            teams: {
+              A: { players: [{ name: "Ada" }] },
+              B: { players: [{ name: "Bea" }] },
+            },
+            sets: [
+              { a: 6, b: 4 },
+              { a: 7, b: 5 },
+            ],
+          },
+        },
+      ],
+    });
+
+    expect(recorded.session).toMatchObject({
+      sport: "padel",
+      config: { format: "best_of_3", scoring: "advantage" },
+      status: "closed",
+      lobbyId: null,
+      createdBy: "user-padel",
+      state: {
+        winner: "A",
+        setsWon: { A: 2, B: 0 },
+        result: { seq: 1, winner: "A", setsWon: { A: 2, B: 0 } },
+      },
+    });
+    expect(recorded.events).toHaveLength(1);
+    expect(recorded.events[0]).toMatchObject({
+      seq: 1,
+      type: "match.recorded",
     });
   });
 });
